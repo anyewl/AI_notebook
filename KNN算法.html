@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 深入浅出 KNN 算法交互式高级笔记</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+    
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --text-color: #334155;
+            --primary-color: #4f46e5;
+            --primary-light: #e0e7ff;
+            --class-a: #ef4444;
+            --class-b: #06b6d4;
+            --test-point: #10b981;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.7;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        header h1 {
+            color: var(--primary-color);
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+        h2 {
+            color: #1e293b;
+            font-size: 1.5rem;
+            margin: 35px 0 15px 0;
+            padding-left: 12px;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        h3 {
+            color: #0f172a;
+            font-size: 1.25rem;
+            margin: 25px 0 10px 0;
+            background: #f1f5f9;
+            padding: 6px 12px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 1.05rem;
+        }
+
+        .highlight-box {
+            background-color: var(--primary-light);
+            border-left: 4px solid var(--primary-color);
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+        }
+
+        .step-list {
+            list-style: none;
+            counter-reset: steps;
+            margin: 20px 0;
+        }
+
+        .step-list li {
+            counter-increment: steps;
+            position: relative;
+            padding-left: 45px;
+            margin-bottom: 15px;
+            font-size: 1.05rem;
+        }
+
+        .step-list li::before {
+            content: counter(steps);
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 28px;
+            height: 28px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .card {
+            background: #f1f5f9;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.05);
+        }
+
+        .card h4 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .formula {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            margin: 10px 0;
+            border: 1px solid #e2e8f0;
+            overflow-x: auto;
+            font-size: 1.15rem;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.02);
+        }
+
+        .lab-section {
+            background: #fafafa;
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .lab-title {
+            text-align: center;
+            color: #0f172a;
+            margin-bottom: 20px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        select, input[type="range"] {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .canvas-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        canvas {
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            cursor: crosshair;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .status-panel {
+            width: 100%;
+            max-width: 550px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        .badge.a { background-color: var(--class-a); }
+        .badge.b { background-color: var(--class-b); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0 25px 0;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px 15px;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #1e293b;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        .scene-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .scene-title {
+            font-weight: bold;
+            color: #1e293b;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            font-family: 'Fira Code', Consolas, Monaco, monospace;
+            font-size: 0.92rem;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+
+        code {
+            font-family: inherit;
+        }
+
+        .code-keyword { color: #f472b6; }
+        .code-function { color: #38bdf8; }
+        .code-comment { color: #94a3b8; font-style: italic; }
+        .code-string { color: #34d399; }
+        .code-number { color: #fbbf24; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🤖 KNN 算法 (K-Nearest Neighbors) 高级学习笔记</h1>
+        <p>适合数学基础薄弱同学的直观交互式教程 • 从生活常识直击工程本质</p>
+    </header>
+
+    <h2>一、 核心概念：物以类聚，人以群分</h2>
+    <p><strong>核心精髓：</strong> “近朱者赤，近墨者黑”。要预测一个未知样本的结果，只需要看看在特征世界里，离它最近的已知样本都是什么样子的。</p>
+    
+    <div class="highlight-box">
+        <strong>💡 老师的大白话举例：</strong><br>
+        想预测你未来的薪资（未知样本），就找出你身边关系最密切的 5 个朋友（K=5）。如果他们全都是大厂大牛，那你大概率也差不到哪去！
+    </div>
+
+    <h3>KNN 算法三大步：</h3>
+    <ol class="step-list">
+        <li><strong>算距离：</strong> 求解当前【预测样本】和空间中【所有已知样本】的距离。</li>
+        <li><strong>圈邻居：</strong> 严格按照距离从小到大排序，取出距离最近的 \( K \) 个样本。</li>
+        <li><strong>做投票：</strong>
+            <br>• <strong>分类问题：</strong> 少数服从多数！看看这 \( K \) 个邻居里哪种类别最多，预测样本就属于哪一类。
+            <br>• <strong>回归问题：</strong> 齐心协力求平均！把这 \( K \) 个邻居的数值加起来求一个平均数，作为预测结果。
+        </li>
+    </ol>
+
+    <h2>二、 距离的奥秘：如何定义“远近”？</h2>
+    <p>数学公式只是把我们生活中的物理常识“符号化”了。别怕，我们一个一个来看：</p>
+
+    <div class="grid-container">
+        <div class="card">
+            <h4>1. 欧几里得距离</h4>
+            <p><strong>生活场景：</strong> 两点之间的<strong>直线距离</strong>。好比你有一架无人机，直接走两点连成的直线飞过去。</p>
+            <div class="formula">
+                \( d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2} \)
+            </div>
+            <p><small>* 勾股定理的延伸。如果有更多维度，就在根号里一直往后加平方项。</small></p>
+        </div>
+
+        <div class="card">
+            <h4>2. 曼哈顿距离</h4>
+            <p><strong>生活场景：</strong> 城市<strong>格子街道距离</strong>。你开着出租车，无法穿墙，只能老老实实沿街道横着走、竖着走。</p>
+            <div class="formula">
+                \( d = |x_2 - x_1| + |y_2 - y_1| \)
+            </div>
+            <p><small>* 也就是两点横向距离绝对值 + 纵向距离绝对值。</small></p>
+        </div>
+
+        <div class="card">
+            <h4>3. 切比雪夫距离</h4>
+            <p><strong>生活场景：</strong> 国际象棋中<strong>国王走的步数</strong>。国王可以横、竖、斜着走，走一步的物理距离虽然不同，但在棋盘上都算作1步。</p>
+            <div class="formula">
+                \( d = \max(|x_2-x_1|, |y_2-y_1|) \)
+            </div>
+            <p><small>* 距离取决于横向和纵向差值中，最大的那一个。</small></p>
+        </div>
+    </div>
+
+    <h3>🌌 闵可夫斯基距离：距离的“终极变形金刚”</h3>
+    <p>它不是一个新距离，而是一个通用的公式框架。通过调整参数 \( p \)，它可以自由切换成上面的任意一种距离：</p>
+    <div class="formula" style="font-size: 1.3rem; padding: 15px;">
+        \( d = \left( \sum_{i=1}^{n} |x_i - y_i|^p \right)^{1/p} \)
+    </div>
+    <ul>
+        <li>当 <strong>\( p = 1 \)</strong> 时 ➡️ 自动脱下外套，变成 <strong>曼哈顿距离</strong></li>
+        <li>当 <strong>\( p = 2 \)</strong> 时 ➡️ 摇身一变，变成 <strong>欧几里得距离</strong></li>
+        <li>当 <strong>\( p \to \infty \)</strong> 时 ➡️ 极限变形，变成 <strong>切比雪夫距离</strong></li>
+    </ul>
+
+    <div class="lab-section">
+        <div class="lab-title">🎮 互动实验室：亲自动手调一调 KNN</div>
+        <p style="text-align: center; font-size: 0.95rem; color: #64748b; margin-bottom: 15px;">
+            <b>玩法提示：</b> 1. 在下方白色画布上<b>任意点击</b>，放置一个绿色预测样本。<br>
+            2. 调整顶部的 <b>K值</b> 和 <b>距离度量方式</b>，实时观察邻居连线和预测结果的变化！
+        </p>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="kSelect">选择 K 值 (奇数):</label>
+                <input type="range" id="kSelect" min="1" max="9" step="2" value="3">
+                <span id="kValue" style="font-weight: bold; color: var(--primary-color);">3</span>
+            </div>
+            <div class="control-group">
+                <label for="metricSelect">距离度量方式:</label>
+                <select id="metricSelect">
+                    <option value="euclidean">欧几里得距离 (直线)</option>
+                    <option value="manhattan">曼哈顿距离 (直角)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="knnCanvas" width="600" height="350"></canvas>
+            <div class="status-panel">
+                <span id="resultText">请在画布上点击任意位置放置预测样本</span>
+            </div>
+        </div>
+    </div>
+
+    <h2>三、 问题分类：分类 vs 回归</h2>
+    <p>许多初学者容易把这两个概念搞混。记住：核心区别在于你想要预测的<b>目标结果的类型</b>：</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>任务类型</th>
+                <th>目标值性质</th>
+                <th>大白话解释</th>
+                <th>经典案例</th>
+                <th>KNN在此时的决策</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>分类问题</strong><br>(Classification)</td>
+                <td>离散变量</td>
+                <td>结果是有限个互不相交的“标签/类别”。</td>
+                <td>预测明天是[晴天/雨天/阴天]<br>判断邮件是否为[垃圾邮件]</td>
+                <td><strong>少数服从多数</strong>：看看邻居里哪个类别最多。</td>
+            </tr>
+            <tr>
+                <td><strong>回归问题</strong><br>(Regression)</td>
+                <td>连续变量</td>
+                <td>结果是一个具体的、无限可能的“数字”。</td>
+                <td>预测明天的[最高温度: 23.5℃]<br>预测某套房子的[价格: 450万]</td>
+                <td><strong>齐心协力求平均</strong>：把邻居的数值加起来求平均。</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>四、 K 值的选择：为什么推荐奇数？</h2>
+    <p>K值的选择就像是照相机的焦距，太小或太大都会让画面模糊：</p>
+    <ul>
+        <li><strong>为什么要选奇数？</strong> 为了防止“平局”。如果是偶数（例如K=4），投票时可能会出现 2比2 的尴尬死局。奇数能保证总有一方胜出。</li>
+        <li><strong>K 选得太小（比如 K=1）：</strong> 模型会过于敏感。如果最近的那个样本刚好是个异常噪声，模型就会直接被带偏。这在机器学习里叫<strong>过拟合（Overfitting）</strong>。</li>
+        <li><strong>K 选得太大（比如 K=100）：</strong> 模型会变得极其迟钝。如果K大到和所有样本总量一样，那无论你点哪里，预测结果永远都是拥有样本数最多的那个类，失去了分类的意义。这叫<strong>欠拟合（Underfitting）</strong>。</li>
+    </ul>
+
+    <h2>五、 代码实战：在真实业务场景中应用 KNN</h2>
+    <p>Scikit-Learn (sklearn) 是 Python 中极其流行的机器学习库，它把复杂的底层距离计算全封装好了。我们结合两个真实的工程场景来感受一下：</p>
+
+    <h3>1. KNN 解决“分类问题”</h3>
+    <div class="scene-container">
+        <div class="scene-title">🎯 业务场景：在线学习平台“考证通过率”预测</div>
+        <p>某在线教育平台想要预测新注册的用户能否通过最终的职业资格认证考试。平台分析发现，<b>“每周自主在线学习时长”</b>是决定能否通过的最关键核心特征。</p>
+        <p><b>数据严谨含义：</b><br>
+        • <b>特征值 \(X\)（连续变量）：</b>用户每周在平台的有效听课与做题时长（单位：小时）。<br>
+        • <b>目标值 \(y\)（离散标签）：</b>历史用户的真实考试结果。<code>0</code> 代表“未通过”，<code>1</code> 代表“顺利通过”。
+        </p>
+        
+        <p><b>历史训练数据集：</b></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>历史学生 ID</th>
+                    <th>特征：每周学习时长 \(X\)（小时）</th>
+                    <th>目标：考试结果 \(y\)（标签）</th>
+                    <th>业务实际状态描述</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>学生 A</td><td><code>0.5</code></td><td><code>0</code></td><td>极少上线，考试不及格（未通过）</td></tr>
+                <tr><td>学生 B</td><td><code>1.5</code></td><td><code>0</code></td><td>偶尔看看，考试不及格（未通过）</td></tr>
+                <tr><td>学生 C</td><td><code>2.8</code></td><td><code>1</code></td><td>学习较为认真，顺利通过考试</td></tr>
+                <tr><td>学生 D</td><td><code>3.8</code></td><td><code>1</code></td><td>非常刻苦，高分通过考试</td></tr>
+            </tbody>
+        </table>
+        <p><b>预测目标：</b>新来了一位小明同学，他每周在平台学习 <code>4.2</code> 小时，预测小明最终能否通过考试？</p>
+    </div>
+
+    <pre><code><span class="code-keyword">from</span> sklearn.neighbors <span class="code-keyword">import</span> KNeighborsClassifier
+
+<span class="code-keyword">def</span> <span class="code-function">knn_classifier_demo</span>():
+    <span class="code-comment"># 1. 实例化 KNN 分类器</span>
+    <span class="code-comment"># 设置 n_neighbors=3，表示让算法寻找距离小明最近的 3 个历史学生样本</span>
+    estimator = <span class="code-function">KNeighborsClassifier</span>(n_neighbors=<span class="code-number">3</span>)
+    
+    <span class="code-comment"># 2. 准备特征数据 X </span>
+    <span class="code-comment"># 注意：sklearn 要求特征数据必须是二维矩阵（即行和列），所以每个时长都用方括号包裹</span>
+    X = [
+        [<span class="code-number">0.5</span>],  <span class="code-comment"># 学生 A</span>
+        [<span class="code-number">1.5</span>],  <span class="code-comment"># 学生 B</span>
+        [<span class="code-number">2.8</span>],  <span class="code-comment"># 学生 C</span>
+        [<span class="code-number">3.8</span>]   <span class="code-comment"># 学生 D</span>
+    ] 
+    
+    <span class="code-comment"># 3. 准备目标标签 y (一维数组，与 X 的行一一对应)</span>
+    y = [<span class="code-number">0</span>, <span class="code-number">0</span>, <span class="code-number">1</span>, <span class="code-number">1</span>] 
+    
+    <span class="code-comment"># 4. 训练模型（让模型把历史数据读入内存，并在特征空间中排布好）</span>
+    estimator.<span class="code-function">fit</span>(X, y)
+    
+    <span class="code-comment"># 5. 业务预测：预测新学生（小明，每周学习 4.2 小时）的考试结果</span>
+    <span class="code-comment"># 同样，输入的待预测特征也必须是二维矩阵形式 [[4.2]]</span>
+    target_student = [[<span class="code-number">4.2</span>]]
+    prediction = estimator.<span class="code-function">predict</span>(target_student)
+    
+    print(<span class="code-string">"--- 📊 分类业务预测结果 ---"</span>)
+    print(<span class="code-string">"小明的预测标签结果为 ->"</span>, prediction) 
+    
+    <span class="code-comment"># 算法决策逻辑解读：离 4.2 最近的三个历史点是 3.8(1), 2.8(1), 1.5(0)。</span>
+    <span class="code-comment"># 投票结果为 1票未通过，2票通过。少数服从多数，最终输出 [1]</span>
+    <span class="code-keyword">if</span> prediction[<span class="code-number">0</span>] == <span class="code-number">1</span>:
+        print(<span class="code-string">"💡 业务结论：该用户大概率能够【通过】考试。"</span>)
+    <span class="code-keyword">else</span>:
+        print(<span class="code-string">"💡 业务结论：该用户存在挂科风险，系统将自动触发提醒。"</span>)
+
+<span class="code-function">knn_classifier_demo</span>()</code></pre>
+
+    <h3>2. KNN 解决“回归问题”</h3>
+    <div class="scene-container">
+        <div class="scene-title">🏢 业务场景：二手房交易平台“精准房价”估算</div>
+        <p>房产中介平台需要上线一个自动估价系统。一套二手房的价格不仅受到卧室数量的影响，还和它所在的楼层、房屋的面积密切相关。我们需要根据这三个特征预测一个<b>连续的金额数值</b>。</p>
+        <p><b>数据严谨含义：</b><br>
+        • <b>特征值 \(X\)（多维特征空间）：</b>包含3个特征维度，即 <code>[卧室数量(个), 房屋所在楼层(层), 房屋面积(十平方米)]</code>。<br>
+        • <b>目标值 \(y\)（连续变量）：</b>该二手房在市场的真实成交价格（单位：百万元）。
+        </p>
+        
+        <p><b>历史挂牌数据集：</b></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>历史房源 ID</th>
+                    <th>特征1：卧室数（个）</th>
+                    <th>特征2：所在楼层（层）</th>
+                    <th>特征3：面积（十㎡）</th>
+                    <th>完整特征向量 \(X\)</th>
+                    <th>目标值 \(y\)：房价（百万元）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>房源 1</td><td>1</td><td>2</td><td>3</td><td><code>[1, 2, 3]</code></td><td><code>1.50</code> (150万)</td></tr>
+                <tr><td>房源 2</td><td>2</td><td>5</td><td>6</td><td><code>[2, 5, 6]</code></td><td><code>2.80</code> (280万)</td></tr>
+                <tr><td>房源 3</td><td>3</td><td>12</td><td>9</td><td><code>[3, 12, 9]</code></td><td><code>4.50</code> (450万)</td></tr>
+                <tr><td>房源 4</td><td>4</td><td>18</td><td>12</td><td><code>[4, 18, 12]</code></td><td><code>6.20</code> (620万)</td></tr>
+            </tbody>
+        </table>
+        <p><b>预测目标：</b>新录入了一套房源特征为：<code>3个卧室</code>、位于<code>11层</code>、面积为<code>100平米（10个十平米）</code>，对应特征向量为 <code>[3, 11, 10]</code>。请为这套新房源估算一个合理的挂牌售价。</p>
+    </div>
+
+    <pre><code><span class="code-keyword">from</span> sklearn.neighbors <span class="code-import">import</span> KNeighborsRegressor
+
+<span class="code-keyword">def</span> <span class="code-function">knn_regression_demo</span>():
+    <span class="code-comment"># 1. 实例化 KNN 回归器</span>
+    <span class="code-comment"># 设置 n_neighbors=2，代表寻找与新房源特征最相似的 2 套历史房源</span>
+    estimator = <span class="code-function">KNeighborsRegressor</span>(n_neighbors=<span class="code-number">2</span>)
+    
+    <span class="code-comment"># 2. 准备多维特征矩阵 X（每行代表一套房子的三个属性）</span>
+    X = [
+        [<span class="code-number">1</span>, <span class="code-number">2</span>, <span class="code-number">3</span>],    <span class="code-comment"># 房源 1</span>
+        [<span class="code-number">2</span>, <span class="code-number">5</span>, <span class="code-number">6</span>],    <span class="code-comment"># 房源 2</span>
+        [<span class="code-number">3</span>, <span class="code-number">12</span>, <span class="code-number">9</span>],   <span class="code-comment"># 房源 3</span>
+        [<span class="code-number">4</span>, <span class="code-number">18</span>, <span class="code-number">12</span>]   <span class="code-comment"># 房源 4</span>
+    ]
+    
+    <span class="code-comment"># 3. 准备目标连续变量 y（每套房子对应的真实成交价）</span>
+    y = [<span class="code-number">1.5</span>, <span class="code-number">2.8</span>, <span class="code-number">4.5</span>, <span class="code-number">6.2</span>] 
+    
+    <span class="code-comment"># 4. 训练回归模型</span>
+    estimator.<span class="code-function">fit</span>(X, y) 
+    
+    <span class="code-comment"># 5. 业务预测：估算新房源 [3室, 11层, 100㎡] 的市场合理售价</span>
+    new_house = [[<span class="code-number">3</span>, <span class="code-number">11</span>, <span class="code-number">10</span>]]
+    predicted_price = estimator.<span class="code-function">predict</span>(new_house)
+    
+    print(<span class="code-string">"--- 🏢 回归业务预测结果 ---"</span>)
+    print(f<span class="code-string">"新房源的估算价格为 -> {predicted_price[0]:.2f} 百万元"</span>)
+    
+    <span class="code-comment"># 算法决策逻辑解读：计算发现新房源与 房源3[3,12,9] 和 房源4[4,18,12] 的空间距离最近。</span>
+    <span class="code-comment"># 于是回归算法直接把这两个最相似房源的价格求平均值：(4.5 + 6.2) / 2 = 5.35</span>
+    print(f<span class="code-string">"💡 业务结论：该新房源推荐挂牌价为 {predicted_price[0] * 100:.0f} 万元。"</span>)
+
+<span class="code-function">knn_regression_demo</span>()</code></pre>
+
+</div>
+
+<script>
+    // 预设的已知样本点数据集 (A类红色，B类青色)
+    const dataset = [
+        // A集群 (左上方)
+        {x: 120, y: 100, label: 'A'}, {x: 160, y: 80, label: 'A'}, {x: 140, y: 140, label: 'A'},
+        {x: 90, y: 130, label: 'A'}, {x: 180, y: 110, label: 'A'}, {x: 110, y: 70, label: 'A'},
+        {x: 210, y: 120, label: 'A'}, {x: 150, y: 170, label: 'A'}, {x: 80, y: 90, label: 'A'},
+        
+        // B集群 (右下方)
+        {x: 450, y: 250, label: 'B'}, {x: 480, y: 220, label: 'B'}, {x: 420, y: 280, label: 'B'},
+        {x: 500, y: 270, label: 'B'}, {x: 390, y: 230, label: 'B'}, {x: 460, y: 190, label: 'B'},
+        {x: 410, y: 300, label: 'B'}, {x: 520, y: 210, label: 'B'}, {x: 360, y: 260, label: 'B'},
+        
+        // 边界模糊地带 (中间部分)
+        {x: 270, y: 160, label: 'A'}, {x: 290, y: 220, label: 'B'}, {x: 320, y: 150, label: 'A'},
+        {x: 260, y: 240, label: 'B'}, {x: 330, y: 210, label: 'B'}, {x: 240, y: 190, label: 'A'},
+        {x: 300, y: 180, label: 'A'}, {x: 350, y: 170, label: 'B'}
+    ];
+
+    let testPoint = null; 
+
+    const canvas = document.getElementById('knnCanvas');
+    const ctx = canvas.getContext('2d');
+    const kSelect = document.getElementById('kSelect');
+    const kValueDisplay = document.getElementById('kValue');
+    const metricSelect = document.getElementById('metricSelect');
+    const resultText = document.getElementById('resultText');
+
+    kSelect.addEventListener('input', (e) => {
+        kValueDisplay.textContent = e.target.value;
+        updateVisualization();
+    });
+    metricSelect.addEventListener('change', updateVisualization);
+
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        testPoint = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+        updateVisualization();
+    });
+
+    function getDistance(p1, p2, metric) {
+        if (metric === 'euclidean') {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        } else if (metric === 'manhattan') {
+            return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
+        }
+        return 0;
+    }
+
+    function updateVisualization() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const k = parseInt(kSelect.value);
+        const metric = metricSelect.value;
+
+        let nearestNeighbors = [];
+        if (testPoint) {
+            const distances = dataset.map((pt, index) => {
+                return {
+                    index: index,
+                    point: pt,
+                    dist: getDistance(testPoint, pt, metric)
+                };
+            });
+
+            distances.sort((a, b) => a.dist - b.dist);
+            nearestNeighbors = distances.slice(0, k);
+
+            let countA = 0;
+            let countB = 0;
+            nearestNeighbors.forEach(n => {
+                if (n.point.label === 'A') countA++;
+                else countB++;
+            });
+
+            const finalLabel = countA > countB ? '类别 A' : '类别 B';
+            const badgeClass = countA > countB ? 'a' : 'b';
+            
+            resultText.innerHTML = `🔮 预测结果：该点属于 <span class="badge ${badgeClass}">${finalLabel}</span> （最近的 ${k} 个邻居中：A类占 ${countA} 个，B类占 ${countB} 个）`;
+
+            nearestNeighbors.forEach(n => {
+                ctx.beginPath();
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]); 
+                
+                if (metric === 'euclidean') {
+                    ctx.moveTo(testPoint.x, testPoint.y);
+                    ctx.lineTo(n.point.x, n.point.y);
+                } else if (metric === 'manhattan') {
+                    ctx.moveTo(testPoint.x, testPoint.y);
+                    ctx.lineTo(n.point.x, testPoint.y);
+                    ctx.lineTo(n.point.x, n.point.y);
+                }
+                ctx.stroke();
+            });
+            ctx.setLineDash([]); 
+        }
+
+        dataset.forEach(pt => {
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 7, 0, 2 * Math.PI);
+            ctx.fillStyle = pt.label === 'A' ? '#ef4444' : '#06b6d4';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        });
+
+        nearestNeighbors.forEach(n => {
+            ctx.beginPath();
+            ctx.arc(n.point.x, n.point.y, 13, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        if (testPoint) {
+            ctx.beginPath();
+            ctx.arc(testPoint.x, testPoint.y, 9, 0, 2 * Math.PI);
+            ctx.fillStyle = '#10b981'; 
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(testPoint.x, testPoint.y, 16, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+
+    updateVisualization();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目简介与使用教程 - 李滋芸的人工智能笔记</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #e8e8e8;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        h2 {
+            color: #1890ff;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        a {
+            color: #1890ff;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover {
+            color: #40a9ff;
+            text-decoration: underline;
+        }
+        .contact-card {
+            background-color: #f0f7ff;
+            border-left: 4px solid #1890ff;
+            padding: 15px 20px;
+            border-radius: 0 6px 6px 0;
+            margin: 25px 0;
+        }
+        .contact-card ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 15px 0;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+            display: block;
+        }
+        blockquote {
+            background-color: #fffbe6;
+            border-left: 4px solid #faad14;
+            margin: 20px 0;
+            padding: 15px 20px;
+            color: #8a6d3b;
+            font-weight: bold;
+            border-radius: 0 6px 6px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>简介</h1>
+        <p>欢迎来到 <strong>李滋芸，人工智能！</strong></p>
+        <p>这是一个纯前端、无后端的轻量级 HTML 笔记网站。作者将会在这里分享自己的人工智能学习笔记。本项目完全开源，支持灵活的<strong>目录管理</strong>，您可以非常方便地将自己的学习笔记（HTML 文件）上传并挂载到这套左侧树形目录中，打造属于您自己的知识库。</p>
+
+        <div class="contact-card">
+            <p style="margin-top: 0; font-weight: bold; color: #2c3e50;">📬 作者联系与开源信息：</p>
+            <ul>
+                <li><strong>微信：</strong> liziyun_2000</li>
+                <li><strong>Bilibili：</strong> <a href="https://space.bilibili.com/474732440" target="_blank">点击访问作者 B 站主页</a></li>
+                <li><strong>GitHub 开源地址：</strong> <a href="http://xxx.com" target="_blank">xxx.com</a></li>
+				<li><strong>在线访问：</strong> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">https://www.axureshow.com/project/3V4X1wfF/</a></li>
+            </ul>
+        </div>
+
+        <h1>使用教程</h1>
+        
+        <h2>新增目录</h2>
+        <p>当您写好了一篇新的 HTML 笔记（例如 <code>正则化.html</code>），想要将其添加到左侧导航栏时，请按照以下步骤操作：</p>
+
+        <ul>
+            <li>
+                <strong>第一步：打开目录管理</strong><br>
+                点击页面右上角的“目录管理”按钮。在弹出的窗口中，依次填入 <strong>显示标题</strong> 和对应的 <strong>html文件名</strong>，然后点击“新增主节点”。<br>
+                <img src="image-20260529160408359.png" alt="填写标题和文件名">
+            </li>
+            
+            <li>
+                <strong>第二步：覆盖 config.js 文件</strong><br>
+                点击保存后，浏览器会弹出“另存为”或文件下载窗口。此时，请务必找到您项目所在的文件夹，<strong>选中原有的 <code>config.js</code> 文件并点击保存进行替换</strong>。<br>
+                <img src="image-20260529160516357.png" alt="覆盖 config.js 文件">
+                
+                <blockquote>
+                    ⚠️ 注意：如果不覆盖原文件（比如存成了 config(1).js），则目录变动将不会生效！
+                </blockquote>
+            </li>
+        </ul>
+        
+        <p style="color: #888; font-size: 14px; margin-top: 40px; text-align: center;">
+            刷新页面，即可看到最新添加的笔记目录啦！🎉
+        </p>
+    </div>
+
+</body>
+</html>

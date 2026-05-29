@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>李滋芸，人工智能！</title>
+    <script src="config.js" onerror="console.warn('未检测到 config.js，将使用默认配置')"></script>
+    <style>
+        /* --- 基础样式 --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; flex-direction: column; height: 100vh; background-color: #f0f2f5; }
+
+        /* --- 顶部 Header --- */
+        .header {
+            height: 60px; background-color: #2c3e50; color: white; display: flex;
+            justify-content: space-between; align-items: center; padding: 0 20px; z-index: 10;
+        }
+        .header h1 { font-size: 20px; font-weight: normal; }
+        .admin-btn { background-color: #1890ff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: 0.3s; }
+        .admin-btn:hover { background-color: #40a9ff; }
+
+        /* --- 左侧导航栏 (递归树形样式) --- */
+        .main-container { display: flex; flex-grow: 1; overflow: hidden; }
+        .sidebar { width: 260px; background-color: #fff; border-right: 1px solid #e8e8e8; overflow-y: auto; padding: 15px 10px; }
+        
+        .nav-tree { list-style: none; padding-left: 15px; }
+        .nav-tree-root { padding-left: 0; }
+        .nav-item-wrap {
+            display: flex; align-items: center; padding: 10px; cursor: pointer; 
+            color: #333; font-size: 15px; border-radius: 4px; transition: 0.2s; margin-bottom: 2px;
+        }
+        .nav-item-wrap:hover { background-color: #f0f7ff; color: #1890ff; }
+        .nav-arrow {
+            width: 20px; display: inline-block; text-align: center; font-size: 12px; color: #999; transition: transform 0.2s;
+        }
+        .nav-arrow.expanded { transform: rotate(90deg); }
+        .nav-title-text { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* 右侧内容区 */
+        .content { flex-grow: 1; background-color: #fff; }
+        iframe { width: 100%; height: 100%; border: none; display: block; }
+
+        /* --- 弹窗样式 --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center;
+        }
+        .modal-box { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); position: relative; }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 20px; cursor: pointer; color: #999; }
+        .close-btn:hover { color: #333; }
+        .form-group { margin-bottom: 15px; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
+        .form-group input:focus { border-color: #1890ff; }
+        .btn-primary { width: 100%; padding: 10px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary:hover { background: #40a9ff; }
+
+        /* --- 后台拖拽树样式 --- */
+        .admin-tree-container { max-height: 400px; overflow-y: auto; margin-top: 15px; padding: 5px; border: 1px solid #eee; border-radius: 4px; background: #fafafa;}
+        .admin-tree { list-style: none; padding-left: 20px; }
+        .admin-tree-root { padding-left: 0; }
+        
+        .tree-node-content {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 10px; border: 1px solid #ddd; margin: 4px 0; border-radius: 4px; 
+            background: #fff; cursor: grab; position: relative; transition: all 0.2s;
+        }
+        .tree-node-content:active { cursor: grabbing; }
+        .drag-handle { color: #999; margin-right: 10px; cursor: grab; }
+        
+        .node-info { flex-grow: 1; display: flex; flex-direction: column; }
+        .node-title { font-weight: bold; font-size: 14px; color: #333; }
+        .node-url { font-size: 12px; color: #888; }
+        .btn-danger { background: #ff4d4f; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+        /* 拖拽视觉提示线 */
+        .drop-before { border-top: 3px solid #1890ff !important; }
+        .drop-after { border-bottom: 3px solid #1890ff !important; }
+        .drop-child { background-color: #e6f7ff !important; border-color: #1890ff !important; }
+        .dragging { opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <h1 id="display-title">系统加载中...</h1>
+        <button class="admin-btn" onclick="openAdminModal()">目录管理</button>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar" id="sidebar-nav"></div>
+        <div class="content"><iframe id="content-frame" src="about:blank"></iframe></div>
+    </div>
+
+    <div class="modal-overlay" id="admin-modal">
+        <div class="modal-box" style="width: 600px;">
+            <span class="close-btn" onclick="closeModals()">×</span>
+            <h2 style="margin-bottom: 15px; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 10px;">导航结构管理</h2>
+            
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="new-title" placeholder="显示标题" style="flex:1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="text" id="new-url" placeholder="链接地址" style="flex:1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <button class="btn-primary" style="width: auto; padding: 0 20px;" onclick="addConfigItem()">新增主节点</button>
+            </div>
+
+            <div class="admin-tree-container">
+                <div style="font-size: 12px; color: #888; margin-bottom: 10px; padding: 0 5px;">
+                    💡 提示：按住左侧 <b>☰</b> 拖动。<br>
+                    悬停在目标<b>上方</b> = 插入前面；悬停<b>下方</b> = 插入后面；悬停<b>中间</b> = 设为子菜单。<br>
+                    <span style="color:#1890ff">保存时，如果弹出文件选择框，请直接点击并覆盖原有的 <b>config.js</b> 文件。</span>
+                </div>
+                <div id="admin-list-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const generateId = () => 'id_' + Math.random().toString(36).substr(2, 9);
+
+        const DEFAULT_CONFIG = {
+            systemTitle: "李滋芸，人工智能！",
+            links: []
+        };
+
+        let appConfig = null;
+        let draggedNodeId = null; 
+
+        function initSystem() {
+            if (typeof window.APP_CONFIG !== 'undefined') {
+                appConfig = JSON.parse(JSON.stringify(window.APP_CONFIG));
+            } else {
+                appConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+            }
+            
+            const migrate = (nodes) => {
+                nodes.forEach(n => {
+                    if(!n.id) n.id = generateId();
+                    if(!n.children) n.children = [];
+                    migrate(n.children);
+                });
+            };
+            migrate(appConfig.links);
+            
+            renderApp();
+        }
+
+        function renderApp() {
+            document.getElementById('display-title').textContent = appConfig.systemTitle;
+            const sidebar = document.getElementById('sidebar-nav');
+            sidebar.innerHTML = '';
+            
+            function createNavTree(nodes, container) {
+                const ul = document.createElement('ul');
+                ul.className = container === sidebar ? 'nav-tree nav-tree-root' : 'nav-tree';
+                
+                nodes.forEach(item => {
+                    const li = document.createElement('li');
+                    const wrap = document.createElement('div');
+                    wrap.className = 'nav-item-wrap';
+                    
+                    const hasChildren = item.children && item.children.length > 0;
+                    
+                    const arrow = document.createElement('span');
+                    arrow.className = 'nav-arrow';
+                    arrow.innerHTML = hasChildren ? '▶' : '•';
+                    
+                    const text = document.createElement('span');
+                    text.className = 'nav-title-text';
+                    text.textContent = item.title;
+
+                    wrap.appendChild(arrow);
+                    wrap.appendChild(text);
+                    li.appendChild(wrap);
+
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.style.display = 'none';
+
+                    wrap.onclick = (e) => {
+                        if (item.url) document.getElementById('content-frame').src = item.url;
+                        if (hasChildren) {
+                            const isHidden = childrenContainer.style.display === 'none';
+                            childrenContainer.style.display = isHidden ? 'block' : 'none';
+                            arrow.classList.toggle('expanded', isHidden);
+                        }
+                    };
+
+                    if (hasChildren) {
+                        createNavTree(item.children, childrenContainer);
+                        li.appendChild(childrenContainer);
+                    }
+                    ul.appendChild(li);
+                });
+                container.appendChild(ul);
+            }
+            createNavTree(appConfig.links, sidebar);
+        }
+
+        function renderAdminList() {
+            const container = document.getElementById('admin-list-container');
+            container.innerHTML = '';
+
+            function createAdminTree(nodes, parentEl) {
+                const ul = document.createElement('ul');
+                ul.className = parentEl === container ? 'admin-tree admin-tree-root' : 'admin-tree';
+
+                nodes.forEach(item => {
+                    const li = document.createElement('li');
+                    
+                    const content = document.createElement('div');
+                    content.className = 'tree-node-content';
+                    content.draggable = true; 
+                    
+                    content.ondragstart = (e) => handleDragStart(e, item.id, content);
+                    content.ondragover = (e) => handleDragOver(e, item.id, content);
+                    content.ondragleave = (e) => handleDragLeave(e, content);
+                    content.ondrop = (e) => handleDrop(e, item.id, content);
+                    content.ondragend = (e) => content.classList.remove('dragging');
+
+                    content.innerHTML = `
+                        <span class="drag-handle">☰</span>
+                        <div class="node-info">
+                            <span class="node-title">${item.title}</span>
+                            <span class="node-url">${item.url || '无链接'}</span>
+                        </div>
+                        <button class="btn-danger" onclick="deleteNode('${item.id}')">删除</button>
+                    `;
+                    li.appendChild(content);
+
+                    if (item.children && item.children.length > 0) {
+                        createAdminTree(item.children, li);
+                    }
+                    ul.appendChild(li);
+                });
+                parentEl.appendChild(ul);
+            }
+            createAdminTree(appConfig.links, container);
+        }
+
+        function handleDragStart(e, id, el) {
+            draggedNodeId = id;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', id); 
+            setTimeout(() => el.classList.add('dragging'), 0);
+        }
+
+        function handleDragOver(e, targetId, el) {
+            e.preventDefault(); 
+            e.stopPropagation(); 
+
+            if (draggedNodeId === targetId) return; 
+
+            const rect = el.getBoundingClientRect();
+            const y = e.clientY - rect.top; 
+            const height = rect.height;
+
+            el.classList.remove('drop-before', 'drop-after', 'drop-child');
+
+            if (y < height * 0.25) {
+                el.classList.add('drop-before'); 
+                el.dataset.dropAction = 'before';
+            } else if (y > height * 0.75) {
+                el.classList.add('drop-after');  
+                el.dataset.dropAction = 'after';
+            } else {
+                el.classList.add('drop-child');  
+                el.dataset.dropAction = 'child';
+            }
+        }
+
+        function handleDragLeave(e, el) {
+            el.classList.remove('drop-before', 'drop-after', 'drop-child');
+        }
+
+        function handleDrop(e, targetId, el) {
+            e.preventDefault();
+            e.stopPropagation();
+            el.classList.remove('drop-before', 'drop-after', 'drop-child');
+
+            if (!draggedNodeId || draggedNodeId === targetId) return;
+
+            const action = el.dataset.dropAction;
+            moveNode(draggedNodeId, targetId, action);
+        }
+
+        function findNodeInfo(nodes, id) {
+            for (let i = 0; i < nodes.length; i++) {
+                if (nodes[i].id === id) return { node: nodes[i], parentArray: nodes, index: i };
+                if (nodes[i].children) {
+                    const result = findNodeInfo(nodes[i].children, id);
+                    if (result) return result;
+                }
+            }
+            return null;
+        }
+
+        function isDescendant(parentId, childId) {
+            const parentInfo = findNodeInfo(appConfig.links, parentId);
+            if (!parentInfo) return false;
+            let found = false;
+            function check(nodes) {
+                for (let n of nodes) {
+                    if (n.id === childId) found = true;
+                    if (n.children && !found) check(n.children);
+                }
+            }
+            check(parentInfo.node.children || []);
+            return found;
+        }
+
+        function moveNode(dragId, targetId, action) {
+            if (isDescendant(dragId, targetId)) {
+                alert("非法操作：不能建立循环嵌套结构");
+                return;
+            }
+
+            const dragInfo = findNodeInfo(appConfig.links, dragId);
+            if (!dragInfo) return;
+
+            const nodeToMove = dragInfo.node;
+            dragInfo.parentArray.splice(dragInfo.index, 1);
+
+            const targetInfo = findNodeInfo(appConfig.links, targetId);
+            
+            if (action === 'child') {
+                targetInfo.node.children = targetInfo.node.children || [];
+                targetInfo.node.children.push(nodeToMove);
+            } else if (action === 'before') {
+                targetInfo.parentArray.splice(targetInfo.index, 0, nodeToMove);
+            } else if (action === 'after') {
+                targetInfo.parentArray.splice(targetInfo.index + 1, 0, nodeToMove);
+            }
+
+            saveConfig();
+        }
+
+        function addConfigItem() {
+            const title = document.getElementById('new-title').value.trim();
+            const url = document.getElementById('new-url').value.trim();
+            if (!title) { alert("节点名称不能为空"); return; }
+
+            appConfig.links.push({ id: generateId(), title: title, url: url, children: [] });
+            saveConfig();
+            document.getElementById('new-title').value = '';
+            document.getElementById('new-url').value = '';
+        }
+
+        function deleteNode(id) {
+            if (confirm("确定要删除该节点吗？")) {
+                const info = findNodeInfo(appConfig.links, id);
+                if (info) {
+                    info.parentArray.splice(info.index, 1);
+                    saveConfig();
+                }
+            }
+        }
+
+        async function saveConfig() {
+            renderApp();
+            renderAdminList();
+
+            const fileContent = "window.APP_CONFIG = " + JSON.stringify(appConfig, null, 4) + ";";
+
+            try {
+                if (window.showSaveFilePicker) {
+                    const fileHandle = await window.showSaveFilePicker({
+                        suggestedName: 'config.js',
+                        types: [{
+                            description: 'JavaScript 文件',
+                            accept: { 'text/javascript': ['.js'] },
+                        }],
+                    });
+                    
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(fileContent);
+                    await writable.close();
+                    
+                    alert("✅ 配置已成功保存并覆盖原文件！刷新页面即可看到最新效果。");
+                } else {
+                    fallbackDownload(fileContent);
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn('文件系统 API 写入失败，降级为传统下载:', err);
+                    fallbackDownload(fileContent);
+                }
+            }
+        }
+
+        function fallbackDownload(content) {
+            const dataStr = "data:text/javascript;charset=utf-8," + encodeURIComponent(content);
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "config.js");
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            dlAnchorElem.remove();
+            alert("配置已生成！\n请将下载得到的 [config.js] 放入同目录进行替换即可永久生效。");
+        }
+
+        // 直接打开管理弹窗
+        function openAdminModal() {
+            document.getElementById('admin-modal').style.display = 'flex';
+            renderAdminList();
+        }
+        
+        // 仅保留关闭管理弹窗的功能
+        function closeModals() { 
+            document.getElementById('admin-modal').style.display = 'none'; 
+        }
+
+        window.onload = initSystem;
+    </script>
+</body>
+</html>
