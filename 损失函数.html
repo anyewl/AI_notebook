@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>线性回归专题学习笔记</title>
+    
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 纯白极简现代风格 */
+        :root {
+            --primary-color: #1a1a1a;       /* 极深灰，增强标题对比度 */
+            --secondary-color: #374151;     /* 深灰，用于二级标题 */
+            --accent-color: #2563eb;        /* 明亮科技蓝 */
+            --accent-warn: #ef4444;         /* 警告红 */
+            --bg-color: #f3f4f6;            /* 外层页面浅灰，衬托纯白卡片 */
+            --card-bg: #ffffff;             /* 纯白内容卡片 */
+            --text-color: #333333;          /* 正文深灰，舒适阅读 */
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;        /* 极浅柔和边框 */
+            --quote-bg: #f8fafc;
+            --box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.8;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 50px 60px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: var(--box-shadow);
+            border: 1px solid #ffffff;
+        }
+
+        /* 标题排版样式 */
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 45px;
+            font-size: 26pt;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        h2 {
+            color: var(--primary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 15px;
+            margin-top: 50px;
+            margin-bottom: 25px;
+            font-size: 18pt;
+            font-weight: 700;
+        }
+
+        h3 {
+            color: var(--secondary-color);
+            font-size: 14pt;
+            margin-top: 35px;
+            font-weight: 600;
+        }
+
+        p, li {
+            font-size: 11.5pt;
+            margin-bottom: 1.6em;
+            text-align: justify;
+        }
+
+        ul {
+            padding-left: 25px;
+        }
+
+        /* 引用块样式 */
+        blockquote {
+            background-color: var(--quote-bg);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent-color);
+            margin: 25px 0;
+            padding: 18px 20px;
+            border-radius: 8px;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+        }
+
+        blockquote p {
+            margin: 0;
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        /* 强调重点卡片 */
+        .callout {
+            background-color: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-left: 4px solid #10b981; /* 绿 */
+            padding: 20px 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+        }
+        
+        .callout-title {
+            font-weight: bold;
+            color: #059669;
+            margin-bottom: 8px;
+            font-size: 12pt;
+        }
+
+        .callout.warn {
+            background-color: #fef2f2;
+            border-left: 4px solid var(--accent-warn);
+        }
+        .callout.warn .callout-title {
+            color: var(--accent-warn);
+        }
+
+        /* 数学公式与代码块 */
+        .math-block {
+            overflow-x: auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f8fafc;
+            border-radius: 10px;
+            margin: 25px 0;
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+        }
+
+        .math-display {
+            background-color: #ffffff;
+            padding: 30px 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-family: "Georgia", "Times New Roman", serif;
+            font-size: 1.6em;
+            font-style: italic;
+            margin: 20px 0 40px 0;
+            border: 1px solid var(--border-color);
+            color: var(--primary-color);
+            overflow-x: auto;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .math-display .fraction {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 0.3em;
+            text-align: center;
+            font-size: 0.75em;
+            line-height: 1.3;
+        }
+        .math-display .fraction > span { display: block; }
+        .math-display .numerator { border-bottom: 1.5px solid var(--primary-color); padding: 0 0.4em; }
+        .math-display .denominator { padding: 0 0.4em; }
+        .math-display .radicand {
+            border-top: 1.5px solid var(--primary-color);
+            padding-top: 3px;
+            padding-left: 3px;
+            display: inline-block;
+        }
+        .math-inline {
+            font-family: "Times New Roman", Times, serif;
+            font-style: italic;
+            font-weight: bold;
+            color: var(--accent-warn);
+            padding: 2px 4px;
+            background: #fef2f2;
+            border-radius: 4px;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 25px 0;
+            font-size: 11pt;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            padding: 14px 16px;
+            text-align: center;
+        }
+        
+        th:last-child, td:last-child {
+            border-right: none;
+        }
+        
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        th {
+            background-color: #f9fafb;
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+
+        tr:hover { background-color: #f8fafc; }
+
+        /* 互动组件样式 */
+        .interactive-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 40px 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .visualizer-title {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .live-score {
+            background-color: #eff6ff;
+            color: var(--accent-color);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 11pt;
+            font-weight: bold;
+            border: 1px solid #bfdbfe;
+        }
+        
+        .live-score.warn {
+            background-color: #fef2f2;
+            color: var(--accent-warn);
+            border-color: #fecaca;
+        }
+
+        .layout-grid { display: block; }
+
+        @media (min-width: 600px) {
+            .layout-grid { display: table; width: 100%; }
+            .grid-left, .grid-right { display: table-cell; vertical-align: top; }
+            .grid-left { width: 60%; padding-right: 25px; }
+            .grid-right { width: 40%; }
+        }
+
+        .controls {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+        }
+
+        .control-group { margin-bottom: 20px; }
+        .control-group label {
+            display: block;
+            font-size: 10.5pt;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        .control-group input[type="range"] { 
+            width: 100%; 
+            margin: 0; 
+            accent-color: var(--accent-color);
+        }
+        
+        .control-value {
+            float: right;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        svg {
+            background: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 100%;
+            height: auto;
+        }
+        
+        /* 响应式图片处理 (防御性代码) */
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📐 线性回归专题学习笔记</h1>
+
+    <h2>二、 核心概念：损失函数到底是干嘛的？</h2>
+    <p>想象一下你正在闭着眼睛练习投篮。你看不见篮筐，但旁边坐着一位极其严格的教练。</p>
+    <ul>
+        <li><strong>你的目标（真实值 <span class="math-inline">y</span>）：</strong> 把球精准投进篮筐中心（坐标设为 100）。</li>
+        <li><strong>你的尝试（预测值 <span class="math-inline">ŷ</span>）：</strong> 你把球投到了左边（坐标成了 70）。</li>
+        <li><strong>教练的反馈（损失函数 Loss）：</strong> “你偏左了 30 公分！重来！”</li>
+    </ul>
+    <p>在机器学习里，<strong>模型</strong>就是那个闭眼投篮的盲人，而<strong>损失函数（Loss Function）</strong>就是那个大吼大叫的教练。损失函数的作用，就是用数学公式精确计算出<strong>“模型的预测结果”与“现实世界真实结果”之间到底差了多少</strong>。</p>
+    
+    <div class="callout">
+        <div class="callout-title">💡 核心金句</div>
+        误差越大，损失函数算出来的数值（Loss）就越高，模型就知道自己错得越离谱；反之，Loss 越接近 0，说明模型学得越精妙。模型的终极任务，就是想尽办法把 Loss 降到最低。
+    </div>
+
+    <h2>三、 回归问题：常用的距离衡量工具</h2>
+    <p><strong>适用场景：</strong> 当你需要模型预测一个<strong>具体的连续数值</strong>时。例如：预测明天的气温、明年的房价、或者股票的价格。</p>
+
+    <h3>1. 回归问题的三大经典公式：MSE、MAE 与 RMSE</h3>
+    <p>在回归问题中，我们最常遇到的是以下三个公式。别怕，它们其实就像一家人，核心都在计算“真实值”和“预测值”的差距：</p>
+    
+    <p><strong>① 均方误差 (MSE - Mean Squared Error)</strong></p>
+    <div class="math-display">
+        MSE = 
+        <span class="fraction">
+            <span class="numerator">1</span>
+            <span class="denominator">n</span>
+        </span>
+        &Sigma;<sub>i=1</sub><sup>n</sup> (y<sub>i</sub> - ŷ<sub>i</sub>)<sup>2</sup>
+    </div>
+    
+    <p><strong>② 平均绝对误差 (MAE - Mean Absolute Error)</strong></p>
+    <div class="math-display">
+        MAE = 
+        <span class="fraction">
+            <span class="numerator">1</span>
+            <span class="denominator">n</span>
+        </span>
+        &Sigma;<sub>i=1</sub><sup>n</sup> |y<sub>i</sub> - ŷ<sub>i</sub>|
+    </div>
+    
+    <p><strong>③ 均方根误差 (RMSE - Root Mean Squared Error)</strong></p>
+    <div class="math-display">
+        RMSE = &radic;<span class="radicand">MSE</span> = 
+        &radic;<span class="radicand">
+            <span class="fraction">
+                <span class="numerator">1</span>
+                <span class="denominator">n</span>
+            </span>
+            &Sigma;<sub>i=1</sub><sup>n</sup> (y<sub>i</sub> - ŷ<sub>i</sub>)<sup>2</sup>
+        </span>
+    </div>
+
+    <p><strong>公式通用符号大拆解：</strong></p>
+    <ul>
+        <li><span class="math-inline">n</span>：代表你手头上测试的数据总个数（比如你拿 3 套房子来测试模型，n就是3）。</li>
+        <li><span class="math-inline">&Sigma; (Sigma)</span>：求和符号。意思是从第 1 个数据到第 n 个数据，把后面的计算结果统统加起来。</li>
+        <li><span class="math-inline">y<sub>i</sub></span>：第 <span class="math-inline">i</span> 个数据的<strong>真实值</strong>（比如真实的房价）。</li>
+        <li><span class="math-inline">ŷ<sub>i</sub></span>（读作 y-hat）：模型预测出的第 <span class="math-inline">i</span> 个数据的<strong>预测值</strong>。</li>
+        <li><span class="math-inline">(y<sub>i</sub> - ŷ<sub>i</sub>)</span> 或 <span class="math-inline">|y<sub>i</sub> - ŷ<sub>i</sub>|</span>：真实值与预测值之间的<strong>单纯误差</strong>或<strong>绝对误差</strong>。</li>
+    </ul>
+
+    <div class="callout">
+        <div class="callout-title">🔍 这三者到底有什么区别？</div>
+        <ul>
+            <li><strong>MSE（均方误差）：</strong> 使用了“平方”，因此会<strong>严厉惩罚大错</strong>（比如误差为10，惩罚就是100）。缺点是计算后单位变了（例如“房价的平方”），现实中不好解释。</li>
+            <li><strong>MAE（平均绝对误差）：</strong> 不做平方，直接取绝对值相加。它属于<strong>线性惩罚</strong>，对偶尔出现的极端异常点比较宽容，像个佛系的教练。</li>
+            <li><strong>RMSE（均方根误差）：</strong> 在 MSE 的基础上加了一个<strong>开根号（&radic;）</strong>。既保留了MSE“惩罚大错”的特性，又把单位还原了回去（比如房价平方再开根号，又变回了房价的单位），这让业务人员更好理解。</li>
+        </ul>
+    </div>
+
+    <h3>2. 数据案例验证（以 MSE 为例）</h3>
+    <p>假设我们让模型预测 3 套房子的价格，具体数据如下表所示：</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>房屋编号</th>
+                <th>真实房价 (y)</th>
+                <th>预测房价 (ŷ)</th>
+                <th>单纯误差 (y - ŷ)</th>
+                <th>误差平方 (y - ŷ)<sup>2</sup></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1 号房</td>
+                <td>100 万</td>
+                <td>90 万</td>
+                <td>10 万</td>
+                <td>100</td>
+            </tr>
+            <tr>
+                <td>2 号房</td>
+                <td>150 万</td>
+                <td>160 万</td>
+                <td>-10 万</td>
+                <td>100</td>
+            </tr>
+            <tr>
+                <td>3 号房</td>
+                <td>200 万</td>
+                <td>150 万</td>
+                <td>50 万</td>
+                <td>2500</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p><strong>计算最终 MSE：</strong><br>
+    首先把所有误差平方加起来：<span class="math-inline">100 + 100 + 2500 = 2700</span><br>
+    然后求平均值：<span class="math-inline">2700 &divide; 3 = 900</span><br>
+    当前这个模型的 <strong>MSE 损失值就是 900</strong>。3号房那高达 50 万的差距贡献了绝大部分的损失，模型接下来会重点调整参数来迎合3号房。
+    </p>
+
+    <div class="interactive-container">
+        <div class="visualizer-title">
+            <span>🎮 实验一：手动拟合直线与 MSE 实时演练</span>
+            <span class="live-score" id="mse-score">当前总 MSE: 计算中...</span>
+        </div>
+        <p style="font-size: 9.5pt; color: var(--text-muted); margin-top:-10px;">
+            提示：下方图表中有 5 个固定的真实数据点。拖动滑块改变直线的斜率和截距（模拟模型调整参数）。虚线代表误差，<strong>有色方块代表误差的平方空间</strong>。尝试调整滑块，让总方块面积（MSE）降到最低！
+        </p>
+        
+        <div class="layout-grid">
+            <div class="grid-left">
+                <svg id="mse-svg" viewBox="0 0 500 350"></svg>
+            </div>
+            <div class="grid-right">
+                <div class="controls">
+                    <div class="control-group">
+                        <label>调节斜率 (Slope - w): <span class="control-value" id="w-val">0.5</span></label>
+                        <input type="range" id="param-w" min="0" max="2" step="0.05" value="0.5">
+                    </div>
+                    <div class="control-group">
+                        <label>调节截距 (Y-Intercept - b): <span class="control-value" id="b-val">1.0</span></label>
+                        <input type="range" id="param-b" min="0" max="5" step="0.1" value="1.0">
+                    </div>
+                    <div style="font-size: 9.5pt; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 15px;">
+                        当前直线方程:<br><strong id="formula-str" style="color:var(--accent-color); font-size: 11pt;">y = 0.50x + 1.00</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==================== EXPERIMENT 1: MSE CODE ====================
+    // 更新为浅色白主题配色方案
+    const colorGrid = "#f3f4f6";
+    const colorText = "#6b7280";
+    const colorAxis = "#d1d5db";
+    const colorPoint = "#ef4444";     /* 亮红 */
+    const colorLine = "#2563eb";      /* 亮蓝 */
+    const colorSquare = "#2563eb";    /* 亮蓝 */
+    const colorDash = "#9ca3af";      /* 浅灰 */
+
+    const points = [
+        {x: 1, y: 2.0},
+        {x: 2, y: 3.5},
+        {x: 3, y: 3.0},
+        {x: 4, y: 5.5},
+        {x: 5, y: 5.0}
+    ];
+
+    const svg = document.getElementById('mse-svg');
+    const width = 500;
+    const height = 350;
+    const padding = 40;
+
+    // Coordinate mapping functions
+    function mapX(x) {
+        return padding + (x / 6) * (width - 2 * padding);
+    }
+    function mapY(y) {
+        return height - padding - (y / 7) * (height - 2 * padding);
+    }
+
+    // Initialize/Render Static Elements (Axes, Grid, Data Points)
+    function initMseChart() {
+        let html = '';
+        
+        // Draw grid lines & labels
+        for(let i=0; i<=6; i++) {
+            html += `<line x1="${mapX(i)}" y1="${mapY(0)}" x2="${mapX(i)}" y2="${mapY(7)}" stroke="${colorGrid}" stroke-width="1" />`;
+            html += `<text x="${mapX(i)}" y="${height-15}" font-size="10" text-anchor="middle" fill="${colorText}">${i}</text>`;
+        }
+        for(let j=0; j<=7; j++) {
+            html += `<line x1="${mapX(0)}" y1="${mapY(j)}" x2="${mapX(6)}" y2="${mapY(j)}" stroke="${colorGrid}" stroke-width="1" />`;
+            html += `<text x="${padding-15}" y="${mapY(j)+4}" font-size="10" text-anchor="end" fill="${colorText}">${j}</text>`;
+        }
+
+        // Draw Main Axes
+        html += `<line x1="${padding}" y1="${height-padding}" x2="${width-padding}" y2="${height-padding}" stroke="${colorAxis}" stroke-width="2" />`;
+        html += `<line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding}" stroke="${colorAxis}" stroke-width="2" />`;
+        
+        // Dynamic elements container
+        html += `<g id="dynamic-lines"></g>`;
+        html += `<g id="dynamic-squares"></g>`;
+
+        // Draw fixed data points
+        points.forEach(p => {
+            html += `<circle cx="${mapX(p.x)}" cy="${mapY(p.y)}" r="6" fill="${colorPoint}" stroke="#ffffff" stroke-width="2" />`;
+        });
+
+        svg.innerHTML = html;
+    }
+
+    function updateMse() {
+        const w = parseFloat(document.getElementById('param-w').value);
+        const b = parseFloat(document.getElementById('param-b').value);
+        
+        document.getElementById('w-val').innerText = w.toFixed(2);
+        document.getElementById('b-val').innerText = b.toFixed(2);
+        document.getElementById('formula-str').innerText = `y = ${w.toFixed(2)}x + ${b.toFixed(2)}`;
+
+        const dynamicLinesWin = document.getElementById('dynamic-lines');
+        const dynamicSquaresWin = document.getElementById('dynamic-squares');
+        
+        let linesHtml = '';
+        let squaresHtml = '';
+        let totalSe = 0;
+
+        // Regression line path
+        const x1 = 0, y1 = b;
+        const x2 = 5.5, y2 = w * x2 + b;
+        linesHtml += `<line x1="${mapX(x1)}" y1="${mapY(y1)}" x2="${mapX(x2)}" y2="${mapY(y2)}" stroke="${colorLine}" stroke-width="3" />`;
+
+        points.forEach(p => {
+            const predY = w * p.x + b;
+            const error = p.y - predY;
+            totalSe += error * error;
+
+            const px = mapX(p.x);
+            const pyReal = mapY(p.y);
+            const pyPred = mapY(predY);
+
+            // Error residual dashed line
+            linesHtml += `<line x1="${px}" y1="${pyReal}" x2="${px}" y2="${pyPred}" stroke="${colorDash}" stroke-dasharray="4,4" stroke-width="2" />`;
+            
+            // Visual Error Square Representation
+            const sideLen = Math.abs(pyReal - pyPred);
+            const rx = px;
+            const ry = Math.min(pyReal, pyPred);
+            
+            squaresHtml += `<rect x="${rx}" y="${ry}" width="${sideLen}" height="${sideLen}" fill="${colorSquare}" fill-opacity="0.1" stroke="${colorSquare}" stroke-width="1" stroke-opacity="0.5" />`;
+        });
+
+        const mse = totalSe / points.length;
+        const scoreBox = document.getElementById('mse-score');
+        scoreBox.innerText = `当前总 MSE: ${mse.toFixed(3)}`;
+        
+        // 动态状态样式更新 (浅色主题)
+        if(mse < 0.5) {
+            scoreBox.className = 'live-score';
+        } else {
+            scoreBox.className = 'live-score warn';
+        }
+
+        dynamicLinesWin.innerHTML = linesHtml;
+        dynamicSquaresWin.innerHTML = squaresHtml;
+    }
+
+    // Event Listeners Setup
+    document.getElementById('param-w').addEventListener('input', updateMse);
+    document.getElementById('param-b').addEventListener('input', updateMse);
+
+    // Initial Trigger
+    initMseChart();
+    updateMse();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器学习调参圣经：数值预测任务</title>
+    <style>
+        :root {
+            --primary-blue: #2b6cb0;
+            --light-blue: #ebf8ff;
+            --success-green: #2f855a;
+            --danger-red: #9b2c2c;
+            --bg-gray: #f7fafc;
+            --text-dark: #2d3748;
+        }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-gray);
+            color: var(--text-dark);
+            line-height: 1.8;
+            padding: 40px 20px;
+            margin: 0;
+        }
+        .wrapper {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        h1 {
+            color: #1a365d;
+            text-align: center;
+            border-bottom: 3px solid var(--primary-blue);
+            padding-bottom: 15px;
+            margin-bottom: 35px;
+        }
+        h2 {
+            color: var(--primary-blue);
+            border-left: 5px solid var(--primary-blue);
+            padding-left: 12px;
+            margin-top: 40px;
+            font-size: 22px;
+        }
+        h3 {
+            color: #2c5282;
+            margin-top: 25px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            font-size: 15px;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 12px 14px;
+            text-align: left;
+        }
+        th {
+            background-color: #edf2f7;
+            font-weight: bold;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .badge-fix { background-color: #c6f6d5; color: #22543d; }
+        .badge-cause { background-color: #fed7d7; color: #742a2a; }
+        .math-block {
+            background-color: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 16px;
+            margin: 15px 0;
+            border-left: 3px solid #cbd5e0;
+        }
+        .tip-box {
+            background-color: var(--light-blue);
+            border: 1px dashed var(--primary-blue);
+            padding: 18px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+    </style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+<div class="wrapper">
+    <h1>📈 数值预测任务（回归问题）调参大字典</h1>
+    <p style="text-align: center; color: #718096;">用最直观的逻辑，掌控模型在“笨拙”与“偏执”之间的动态平衡</p>
+
+    <h2>一、 核心武器对决矩阵</h2>
+    <p>当下边的方法被<strong>调大/启用</strong>时，它对模型状态的直接影响如下表：</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>方法 (Method)</th>
+                <th>英文名</th>
+                <th>对 欠拟合 (Underfitting) 的影响</th>
+                <th>对 过拟合 (Overfitting) 的影响</th>
+                <th>一句话底层大白话</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>增加特征数量</b></td>
+                <td>More Features</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（给模型提供更多破案线索）</td>
+                <td><span class="badge badge-cause">⚠️ 易引发</span>（线索太杂模型容易瞎猜）</td>
+                <td>从只看“房屋面积”到连“窗户朝向”一起看。</td>
+            </tr>
+            <tr>
+                <td><b>增加模型复杂度</b></td>
+                <td>More Complex Model</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（让智商上线，能画弯曲的线）</td>
+                <td><span class="badge badge-cause">⚠️ 易引发</span>（智商太高开始钻牛角尖）</td>
+                <td>从直线方程 $y=wx+b$ 升级到高次曲线或多层神经网络。</td>
+            </tr>
+            <tr>
+                <td><b>增加训练周期</b></td>
+                <td>More Epochs</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（给够时间，让参数走到最优解）</td>
+                <td><span class="badge badge-cause">⚠️ 易引发</span>（学太久，把书本印刷瑕疵都背下来）</td>
+                <td>反复多刷几遍同样的练习题。</td>
+            </tr>
+            <tr>
+                <td><b>使用早停</b></td>
+                <td>Early Stopping</td>
+                <td><span class="badge badge-cause">⚠️ 易引发</span>（停太早模型还没开窍）</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（在开始死记硬背前强行收卷）</td>
+                <td>一看到考试（验证集）成绩退步，立刻停止复习。</td>
+            </tr>
+            <tr>
+                <td><b>增加训练数据</b></td>
+                <td>More Training Data</td>
+                <td>➖ 无明显影响</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（见多识广，死记硬背失效）</td>
+                <td>直接去多看 10000 道不同的真实新题。</td>
+            </tr>
+            <tr>
+                <td><b>数据增强</b></td>
+                <td>Data Augmentation</td>
+                <td>➖ 无明显影响</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（人造出花式变体，打破死板思维）</td>
+                <td>把白天的照片调暗、加噪声，当成夜景题给模型做。</td>
+            </tr>
+            <tr>
+                <td><b>正则化</b></td>
+                <td>Regularization</td>
+                <td><span class="badge badge-cause">⚠️ 易引发</span>（用力过猛，把模型罚成傻子）</td>
+                <td><span class="badge badge-fix">🛠️ 能解决</span>（收参数的“大变动税”，让曲线平滑）</td>
+                <td>逼着所有权重参数限制在很小的范围，别瞎起舞。</td>
+            </tr>
+        </tbody>
+    </table>
+
+
+</div>
+
+</body>
+</html>

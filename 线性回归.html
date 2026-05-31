@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>线性回归专题学习笔记</title>
+    
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 统一变量定义，采用纯白极简风格 */
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;     /* 采用原 Part 1 的蓝色为主强调色 */
+            --accent-warn: #e74c3c;
+            --bg-color: #ffffff;         /* 统一白色背景 */
+            --card-bg: #ffffff;          /* 统一白色卡片 */
+            --text-color: #333333;
+            --border-color: #e2e8f0;
+            --code-bg: #f8f8f8;
+            --quote-bg: #e8f4fd;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.7;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 40px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* 保留柔和的阴影 */
+            border: 1px solid var(--border-color);
+        }
+
+        /* 标题排版样式 */
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 15px;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 12px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            font-size: 16pt;
+        }
+
+        h3 {
+            color: var(--accent-color);
+            font-size: 13pt;
+            margin-top: 25px;
+        }
+
+        p, li {
+            font-size: 11pt;
+            margin-bottom: 1.5em;
+            text-align: justify;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        /* 引用块样式 */
+        blockquote {
+            background-color: var(--quote-bg);
+            border-left: 4px solid var(--accent-color);
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        blockquote p {
+            margin: 0;
+            color: #2980b9;
+            font-weight: 500;
+        }
+
+        /* 强调重点卡片 (来自 Part 2) */
+        .callout {
+            background-color: #f0f7f4;
+            border-left: 4px solid #16a085;
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+        }
+        
+        .callout-title {
+            font-weight: bold;
+            color: #16a085;
+            margin-bottom: 5px;
+        }
+
+        .callout.warn {
+            background-color: #fdf2f2;
+            border-left: 4px solid var(--accent-warn);
+        }
+        .callout.warn .callout-title {
+            color: var(--accent-warn);
+        }
+
+        /* 数学公式与代码块 */
+        .math-block {
+            overflow-x: auto;
+            padding: 15px;
+            text-align: center;
+            background-color: #f4f8fb;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .math-display {
+            background-color: #f4f8fb;
+            padding: 25px 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-family: "Georgia", "Times New Roman", serif;
+            font-size: 1.5em;
+            font-style: italic;
+            margin: 15px 0 35px 0;
+            border: 1px solid #dce4ec;
+            color: #2c3e50;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .math-display .fraction {
+            display: inline-block;
+            vertical-align: middle;
+            margin: 0 0.2em;
+            text-align: center;
+            font-size: 0.75em;
+            line-height: 1.2;
+        }
+        .math-display .fraction > span { display: block; }
+        .math-display .numerator { border-bottom: 1.5px solid #2c3e50; padding: 0 0.3em; }
+        .math-display .denominator { padding: 0 0.3em; }
+        .math-display .radicand {
+            border-top: 1.5px solid #2c3e50;
+            padding-top: 2px;
+            padding-left: 2px;
+            display: inline-block;
+        }
+        .math-inline {
+            font-family: "Times New Roman", Times, serif;
+            font-style: italic;
+            font-weight: bold;
+            color: #c0392b;
+            padding: 0 2px;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 10.5pt;
+            background: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px 15px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) { background-color: #f8fafc; }
+
+        /* 互动组件样式 */
+        .interactive-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .visualizer-title {
+            font-size: 13pt;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .live-score {
+            background-color: #e8f8f5;
+            color: #16a085;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11pt;
+            font-weight: bold;
+        }
+
+        .layout-grid { display: block; }
+
+        @media (min-width: 600px) {
+            .layout-grid { display: table; width: 100%; }
+            .grid-left, .grid-right { display: table-cell; vertical-align: top; }
+            .grid-left { width: 60%; padding-right: 20px; }
+            .grid-right { width: 40%; }
+        }
+
+        .controls {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .control-group { margin-bottom: 15px; }
+        .control-group label {
+            display: block;
+            font-size: 10pt;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        .control-group input[type="range"] { width: 100%; margin: 0; }
+        
+        .control-value {
+            float: right;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        svg {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📐 线性回归专题学习笔记</h1>
+
+    <h2>一、 核心概念：什么是线性回归？</h2>
+    <p><strong>大白话定义：</strong>寻找一条最合适的直线，用来描述“原因”（特征值）和“结果”（目标值）之间的关系。</p>
+    <ul>
+        <li><strong>特征值 (X)：</strong> 导致结果产生的原因（可以有多个，例如：房屋面积 \(x_1\)，楼层 \(x_2\)）。</li>
+        <li><strong>目标值 (Y/H)：</strong> 你想要预测的结果（只能有一个，例如：房屋价格 \(h_{(w)}\)）。</li>
+    </ul>
+
+    <h3>1. 数学公式的本质</h3>
+    <p>不要被复杂的符号吓到，这其实就是初中直线方程 <code>y = kx + b</code> 的升级版：</p>
+    <div class="math-block">
+        $$ h_{(w)} = w_1x_1 + w_2x_2 + b $$
+    </div>
+    <ul>
+        <li><strong>\(w\) (权重/斜率)：</strong> 代表这个特征有多重要。</li>
+        <li><strong>\(b\) (偏置/截距)：</strong> 代表基础值（比如没有面积的“地皮底价”）。</li>
+    </ul>
+
+    <h3>2. 矩阵运算（打包计算）</h3>
+    <p>当特征很多时，用矩阵表示会更简洁：</p>
+    <div class="math-block">
+        $$ W = \begin{pmatrix} b\\ w_1\\ w_2 \end{pmatrix}, \quad X = \begin{pmatrix} 1\\ x_1\\ x_2 \end{pmatrix} $$
+    </div>
+    <div class="math-block">
+        $$ h_{(w)} = W^TX = w_1x_1 + w_2x_2 + b $$
+    </div>
+
+    <hr style="border: 0; height: 1px; background-color: var(--border-color); margin: 40px 0;">
+
+    
+</div>
+
+<script>
+    // ==================== EXPERIMENT 1: MSE CODE ====================
+    const points = [
+        {x: 1, y: 2.0},
+        {x: 2, y: 3.5},
+        {x: 3, y: 3.0},
+        {x: 4, y: 5.5},
+        {x: 5, y: 5.0}
+    ];
+
+    const svg = document.getElementById('mse-svg');
+    const width = 500;
+    const height = 350;
+    const padding = 40;
+
+    // Coordinate mapping functions
+    function mapX(x) {
+        return padding + (x / 6) * (width - 2 * padding);
+    }
+    function mapY(y) {
+        return height - padding - (y / 7) * (height - 2 * padding);
+    }
+
+    // Initialize/Render Static Elements (Axes, Grid, Data Points)
+    function initMseChart() {
+        let html = '';
+        
+        // Draw grid lines & labels
+        for(let i=0; i<=6; i++) {
+            html += `<line x1="${mapX(i)}" y1="${mapY(0)}" x2="${mapX(i)}" y2="${mapY(7)}" stroke="#f1f5f9" stroke-width="1" />`;
+            html += `<text x="${mapX(i)}" y="${height-15}" font-size="10" text-anchor="middle" fill="#94a3b8">${i}</text>`;
+        }
+        for(let j=0; j<=7; j++) {
+            html += `<line x1="${mapX(0)}" y1="${mapY(j)}" x2="${mapX(6)}" y2="${mapY(j)}" stroke="#f1f5f9" stroke-width="1" />`;
+            html += `<text x="${padding-15}" y="${mapY(j)+4}" font-size="10" text-anchor="end" fill="#94a3b8">${j}</text>`;
+        }
+
+        // Draw Main Axes
+        html += `<line x1="${padding}" y1="${height-padding}" x2="${width-padding}" y2="${height-padding}" stroke="#94a3b8" stroke-width="2" />`;
+        html += `<line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height-padding}" stroke="#94a3b8" stroke-width="2" />`;
+        
+        // Dynamic elements container
+        html += `<g id="dynamic-lines"></g>`;
+        html += `<g id="dynamic-squares"></g>`;
+
+        // Draw fixed data points
+        points.forEach(p => {
+            html += `<circle cx="${mapX(p.x)}" cy="${mapY(p.y)}" r="6" fill="#e74c3c" stroke="#ffffff" stroke-width="2" />`;
+        });
+
+        svg.innerHTML = html;
+    }
+
+    function updateMse() {
+        const w = parseFloat(document.getElementById('param-w').value);
+        const b = parseFloat(document.getElementById('param-b').value);
+        
+        document.getElementById('w-val').innerText = w.toFixed(2);
+        document.getElementById('b-val').innerText = b.toFixed(2);
+        document.getElementById('formula-str').innerText = `y = ${w.toFixed(2)}x + ${b.toFixed(2)}`;
+
+        const dynamicLinesWin = document.getElementById('dynamic-lines');
+        const dynamicSquaresWin = document.getElementById('dynamic-squares');
+        
+        let linesHtml = '';
+        let squaresHtml = '';
+        let totalSe = 0;
+
+        // Regression line path
+        const x1 = 0, y1 = b;
+        const x2 = 5.5, y2 = w * x2 + b;
+        linesHtml += `<line x1="${mapX(x1)}" y1="${mapY(y1)}" x2="${mapX(x2)}" y2="${mapY(y2)}" stroke="#16a085" stroke-width="3" />`;
+
+        points.forEach(p => {
+            const predY = w * p.x + b;
+            const error = p.y - predY;
+            totalSe += error * error;
+
+            const px = mapX(p.x);
+            const pyReal = mapY(p.y);
+            const pyPred = mapY(predY);
+
+            // Error residual dashed line
+            linesHtml += `<line x1="${px}" y1="${pyReal}" x2="${px}" y2="${pyPred}" stroke="#7f8c8d" stroke-dasharray="4,4" stroke-width="2" />`;
+            
+            // Visual Error Square Representation
+            const sideLen = Math.abs(pyReal - pyPred);
+            const rx = px;
+            const ry = Math.min(pyReal, pyPred);
+            
+            squaresHtml += `<rect x="${rx}" y="${ry}" width="${sideLen}" height="${sideLen}" fill="#16a085" fill-opacity="0.15" stroke="#16a085" stroke-width="1" stroke-opacity="0.4" />`;
+        });
+
+        const mse = totalSe / points.length;
+        const scoreBox = document.getElementById('mse-score');
+        scoreBox.innerText = `当前总 MSE: ${mse.toFixed(3)}`;
+        
+        if(mse < 0.5) {
+            scoreBox.style.backgroundColor = '#e8f8f5';
+            scoreBox.style.color = '#16a085';
+        } else {
+            scoreBox.style.backgroundColor = '#fde8e8';
+            scoreBox.style.color = '#e74c3c';
+        }
+
+        dynamicLinesWin.innerHTML = linesHtml;
+        dynamicSquaresWin.innerHTML = squaresHtml;
+    }
+
+    // Event Listeners Setup
+    document.getElementById('param-w').addEventListener('input', updateMse);
+    document.getElementById('param-b').addEventListener('input', updateMse);
+
+    // Initial Trigger
+    initMseChart();
+    updateMse();
+</script>
+
+</body>
+</html>

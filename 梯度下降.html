@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>线性回归专题：梯度下降法与多维白盒推导</title>
+    
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --accent-warn: #e74c3c;
+            --accent-success: #2ecc71;
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #e2e8f0;
+            --bg-light: #f8fafc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f1f5f9;
+            color: var(--text-color);
+            line-height: 1.7;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            padding: 40px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 12px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 16pt;
+        }
+
+        h3 {
+            color: var(--accent-color);
+            font-size: 13pt;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        /* 优化了段落和列表的全局间距，使其更紧凑 */
+        p {
+            font-size: 11pt;
+            margin-bottom: 0.8em;
+            text-align: justify;
+        }
+
+        li {
+            font-size: 11pt;
+            margin-bottom: 0.5em;
+            text-align: justify;
+        }
+
+        ul { 
+            padding-left: 20px; 
+            margin-top: 5px;
+        }
+
+        .math-block {
+            overflow-x: auto;
+            padding: 12px;
+            text-align: center;
+            background-color: #f4f8fb;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid var(--border-color);
+            font-size: 1.2em;
+        }
+
+        /* ==================== 2D 模拟器专属样式 ==================== */
+        .info-bar {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        /* 锁定两个动态图在同一行内 */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            min-height: 380px; 
+            width: 100%;
+        }
+
+        .chart-box {
+            background: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .chart-box h3 {
+            margin: 0 0 15px 0;
+            color: var(--primary-color);
+            font-size: 16px;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            display: block;
+        }
+        
+        #fit-line, #loss-point, #loss-tangent, #loss-text {
+            transition: all 0.4s ease-out;
+        }
+
+        .controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-light);
+            padding: 15px 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .slider-group {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .control-item label {
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            color: var(--secondary-color);
+            min-width: 120px;
+        }
+        
+        input[type="range"] { flex: 1; margin: 0; }
+
+        .btn-group-2d {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-group-2d button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            color: white;
+            white-space: nowrap;
+        }
+        
+        .btn-group-2d button:hover { opacity: 0.8; }
+        .btn-step-2d { background-color: var(--accent-color); }
+        .btn-auto-2d { background-color: var(--accent-success); }
+        .btn-reset-2d { background-color: #95a5a6; }
+
+        .math-panel {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+            min-height: 250px;
+            margin-top: 10px;
+        }
+
+        .math-step {
+            background: var(--bg-light);
+            border-top: 4px solid var(--accent-color);
+            padding: 12px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .math-step .desc {
+            font-size: 14px;
+            color: var(--primary-color);
+            font-weight: bold;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 6px;
+            margin-bottom: 4px;
+        }
+
+        .sub-block { font-size: 13px; }
+        .sub-title { font-weight: 600; color: #475569; }
+        .formula-text {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-size: 14px;
+            color: #0369a1;
+            font-weight: bold;
+            display: block;
+            margin: 4px 0;
+        }
+        .sub-content {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            background: #ffffff;
+            padding: 8px;
+            border: 1px dashed var(--border-color);
+            border-radius: 4px;
+            margin-top: 4px;
+            line-height: 1.5;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .val {
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 3px;
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+        .val.result { background: #fef08a; color: #854d0e; }
+        .val.danger { background: #fee2e2; color: #b91c1c; }
+        .val.success { background: #dcfce7; color: #15803d; }
+
+        .data-badge {
+            display: inline-block;
+            background: var(--primary-color);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: bold;
+            margin: 0 5px;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 1024px) {
+            .math-panel { grid-template-columns: repeat(2, 1fr); }
+            .math-step:last-child { grid-column: span 2; }
+        }
+        @media (max-width: 768px) {
+            .math-panel { grid-template-columns: 1fr; }
+            .math-step:last-child { grid-column: span 1; }
+            .slider-group { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📐 线性回归专题：梯度下降与数学推导</h1>
+
+    <h2>一、 梯度下降法：瞎子如何摸索下山？</h2>
+    <p>在前面，我们把损失函数（Loss）比作了大吼大叫的教练，模型需要想办法把 Loss 降到最低。在数学的世界里，山顶代表“误差最大”，山谷（最低点）代表“误差最小、模型最准”。</p>
+    <p>梯度下降法（Gradient Descent），就是一种<strong>寻找山谷最低点的算法思想</strong>。想象一下，你被蒙上双眼，放在了一座大山的某个随机位置。你的目标是走到山谷底：</p>
+    <ul style="margin-bottom: 10px;">
+        <li><strong>梯度：</strong> 就是你脚下感受到的<strong>最陡峭的坡度方向</strong>。</li>
+        <li><strong>梯度下降：</strong> 就是你每次朝着那个<strong>最陡峭的下坡方向</strong>迈出一步。只要不断重复，就一定会慢慢走到山谷底。</li>
+    </ul>
+
+    <h3 style="margin-top: 15px;">核心公式剥洋葱式拆解</h3>
+    <div class="math-block" style="margin: 10px 0; padding: 10px;">
+        $$ \theta_{i+1} = \theta_i - \alpha \frac{\partial}{\partial \theta_i} J(\theta) $$
+    </div>
+    <ul>
+        <li>\(\theta_i\)：<strong>你当前站立的位置</strong>（当前模型的系数）。</li>
+        <li>\(\theta_{i+1}\)：<strong>你下一步将要站的位置</strong>（更新后的新系数）。</li>
+        <li>\(\frac{\partial}{\partial \theta_i} J(\theta)\)（偏导数/梯度）：<strong>你脚下坡度的陡峭程度和方向</strong>。它告诉你往哪个方向走山坡最陡。</li>
+        <li>\(\alpha\)（学习率/步长）：<strong>你这一步迈得有多大</strong>。这是一个由开发者手动调节的“超级参数”（通常在 0.001 ~ 0.01 之间）。</li>
+        <li>\(-\)（负号）：<strong>核心灵魂！</strong>导数指向的是“上山”的方向。我们要下山，就必须强行加上负号扭转方向，确保我们永远在往下走。</li>
+    </ul>
+
+    <h2 style="margin-top: 30px;">二、 二维梯度下降：\(y = a \cdot x + b\) 完整白盒数学推导模拟器</h2>
+    
+    <div class="info-bar">
+        <span class="data-badge" style="background: #e74c3c;">5组数据点: (1,3), (2,5), (3,7), (4,9), (5,11)</span>
+        <span class="data-badge" style="background: #8e44ad;">目标真实模型: y = 2x + 1</span>
+    </div>
+
+    <div class="charts-row">
+        <div class="chart-box">
+            <h3>📊 数据空间线性拟合状态</h3>
+            <svg id="gd-svg-2d" viewBox="0 0 500 350" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="chart-box">
+            <h3>📉 损失函数 J(a) 梯度下降动态轨迹</h3>
+            <svg id="loss-svg-2d" viewBox="0 0 500 350" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+    </div>
+
+    <div class="controls-row">
+        <div class="slider-group">
+            <div class="control-item">
+                <label>学习率 (\(\alpha\)): <span id="alpha-val-2d" class="val">0.05</span></label>
+                <input type="range" id="param-alpha-2d" min="0.01" max="0.15" step="0.01" value="0.05">
+            </div>
+            <div class="control-item">
+                <label>初始权重 (a₀): <span id="a0-val" class="val">0.50</span></label>
+                <input type="range" id="param-a0" min="-1" max="4" step="0.1" value="0.5">
+            </div>
+            <div class="control-item">
+                <label>初始偏置 (b₀): <span id="b0-val" class="val">3.50</span></label>
+                <input type="range" id="param-b0" min="-1" max="5" step="0.1" value="3.5">
+            </div>
+        </div>
+        <div class="btn-group-2d">
+            <button class="btn-step-2d" id="btn-step-2d">👣 单步迭代</button>
+            <button class="btn-auto-2d" id="btn-auto-2d">▶️ 自动轮询</button>
+            <button class="btn-reset-2d" id="btn-reset-2d">🔄 重置参数</button>
+        </div>
+    </div>
+
+    <div class="math-panel">
+        <div class="math-step">
+            <div class="desc">1: 预测值 (ŷ)</div>
+            <div class="sub-block"><span class="sub-title">当前：</span>a = <span id="s1-a" class="val"></span>, b = <span id="s1-b" class="val"></span></div>
+            <div class="sub-block"><span class="formula-text">ŷᵢ = a·xᵢ + b</span></div>
+            <div class="sub-block">
+                <div id="s1-sub" class="sub-content"></div>
+            </div>
+        </div>
+
+        <div class="math-step" style="border-top-color: #9b59b6;">
+            <div class="desc">2: 计算总平均损失 J</div>
+            <div class="sub-block"><span class="sub-title">变量：</span>残差(ŷ-y)平方</div>
+            <div class="sub-block"><span class="formula-text">J = 1/(2N)∑(ŷᵢ - yᵢ)²</span></div>
+            <div class="sub-block">
+                <div id="s2-sub" class="sub-content"></div>
+            </div>
+        </div>
+
+        <div class="math-step" style="border-top-color: #e74c3c;">
+            <div class="desc">3: 参数 a 的梯度 ∂J/∂a</div>
+            <div class="sub-block"><span class="sub-title">变量：</span>残差 × 特征值 x</div>
+            <div class="sub-block"><span class="formula-text">∂J/∂a = 1/N∑(ŷᵢ-yᵢ)xᵢ</span></div>
+            <div class="sub-block">
+                <div id="s3-sub" class="sub-content"></div>
+            </div>
+        </div>
+
+        <div class="math-step" style="border-top-color: #e67e22;">
+            <div class="desc">4: 参数 b 的梯度 ∂J/∂b</div>
+            <div class="sub-block"><span class="sub-title">变量：</span>各样本预测残差</div>
+            <div class="sub-block"><span class="formula-text">∂J/∂b = 1/N∑(ŷᵢ-yᵢ)</span></div>
+            <div class="sub-block">
+                <div id="s4-sub" class="sub-content"></div>
+            </div>
+        </div>
+
+        <div class="math-step" style="border-top-color: #2ecc71; background: #f0fdf4;">
+            <div class="desc">5: 更新 a 和 b</div>
+            <div class="sub-block"><span class="sub-title">变量：</span>α=<span id="s5-alpha" class="val"></span></div>
+            <div class="sub-block"><span class="formula-text">W_new = W - α·∇</span></div>
+            <div class="sub-block">
+                <span class="sub-title">∂J/∂a:</span> <span id="s5-da" class="val danger"></span><br>
+                <span class="sub-title">∂J/∂b:</span> <span id="s5-db" class="val danger"></span>
+                <div id="s5-sub" class="sub-content" style="margin-top: 5px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const DATA = [
+            {x: 1, y: 3}, {x: 2, y: 5}, {x: 3, y: 7}, {x: 4, y: 9}, {x: 5, y: 11}
+        ];
+
+        const svg = document.getElementById('gd-svg-2d');
+        const width = 500, height = 350, padding = 45;
+        const xMin = 0, xMax = 6;
+        const yMin = 0, yMax = 14;
+
+        function mapX(x) { return padding + ((x - xMin) / (xMax - xMin)) * (width - 2 * padding); }
+        function mapY(y) { return height - padding - ((y - yMin) / (yMax - yMin)) * (height - 2 * padding); }
+
+        const DEFAULT_A = 0.5;
+        const DEFAULT_B = 3.5;
+        const DEFAULT_ALPHA = 0.05;
+
+        let currentA = DEFAULT_A;
+        let currentB = DEFAULT_B;
+        let alpha = DEFAULT_ALPHA;
+        let playInterval = null;
+        let isPlaying = false;
+
+        function drawStatic() {
+            let html = '';
+            // 画坐标网格
+            for(let i = xMin; i <= xMax; i++) {
+                html += `<line x1="${mapX(i)}" y1="${mapY(yMin)}" x2="${mapX(i)}" y2="${mapY(yMax)}" stroke="#e2e8f0" stroke-width="1" />`;
+                html += `<text x="${mapX(i)}" y="${mapY(0)+15}" font-size="11" text-anchor="middle" fill="#64748b">${i}</text>`;
+            }
+            for(let j = yMin; j <= yMax; j+=2) {
+                html += `<line x1="${mapX(xMin)}" y1="${mapY(j)}" x2="${mapX(xMax)}" y2="${mapY(j)}" stroke="#e2e8f0" stroke-width="1" />`;
+                html += `<text x="${mapX(xMin)-8}" y="${mapY(j)+4}" font-size="11" text-anchor="end" fill="#64748b">${j}</text>`;
+            }
+            // 坐标轴线
+            html += `<line x1="${mapX(xMin)}" y1="${mapY(0)}" x2="${mapX(xMax)}" y2="${mapY(0)}" stroke="#94a3b8" stroke-width="2" />`;
+            html += `<line x1="${mapX(0)}" y1="${mapY(yMin)}" x2="${mapX(0)}" y2="${mapY(yMax)}" stroke="#94a3b8" stroke-width="2" />`;
+            html += `<text x="${mapX(xMax)-12}" y="${mapY(0)-6}" font-size="11" font-weight="bold" fill="#475569">x</text>`;
+            html += `<text x="${mapX(0)+8}" y="${mapY(yMax)+14}" font-size="11" font-weight="bold" fill="#475569">y</text>`;
+
+            // 数据散点
+            DATA.forEach((pt) => {
+                html += `<circle cx="${mapX(pt.x)}" cy="${mapY(pt.y)}" r="6" fill="#e74c3c" stroke="#ffffff" stroke-width="2" />`;
+            });
+            
+            // 拟合直线
+            html += `<line id="fit-line" stroke="#3498db" stroke-width="3" />`;
+            svg.innerHTML = html;
+
+            // 初始化 Loss SVG 结构
+            const lSvg = document.getElementById('loss-svg-2d');
+            let lossHtml = '';
+            lossHtml += `<g id="loss-background"></g>`; 
+            lossHtml += `<line id="loss-tangent" stroke="#e67e22" stroke-width="2" stroke-dasharray="5,5" />`; 
+            lossHtml += `<circle id="loss-point" r="6" fill="#e74c3c" stroke="#ffffff" stroke-width="2" />`; 
+            lossHtml += `<text id="loss-text" font-size="11" font-weight="bold" text-anchor="middle" fill="#c0392b"></text>`;
+            lSvg.innerHTML = lossHtml;
+        }
+        
+        function drawLossCurve(a_val, b_val, gradA_val, currentJ) {
+            const lSvg = document.getElementById('loss-svg-2d');
+            if (!lSvg) return;
+            const w = 500, h = 350, pad = 45;
+            const aMin = -1, aMax = 4;
+
+            let pts = [];
+            let maxJ = 0;
+            for(let a = aMin; a <= aMax; a += 0.1) {
+                let j = 0;
+                DATA.forEach(pt => {
+                    let err = (a * pt.x + b_val) - pt.y;
+                    j += err * err;
+                });
+                j /= (2 * DATA.length);
+                pts.push({a: a, j: j});
+                if(j > maxJ) maxJ = j;
+            }
+            maxJ = Math.max(maxJ, 10); 
+
+            let mapA = (a) => pad + ((a - aMin) / (aMax - aMin)) * (w - 2 * pad);
+            let mapJ = (j) => h - pad - (j / maxJ) * (h - 2 * pad);
+
+            const bgGroup = document.getElementById('loss-background');
+            if (bgGroup) {
+                let bgHtml = '';
+                bgHtml += `<line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#94a3b8" stroke-width="2" />`;
+                bgHtml += `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}" stroke="#94a3b8" stroke-width="2" />`;
+                bgHtml += `<text x="${w-pad+10}" y="${h-pad+4}" font-size="12" font-style="italic" font-weight="bold" fill="#475569">a</text>`;
+                bgHtml += `<text x="${pad}" y="${pad-10}" font-size="12" font-style="italic" font-weight="bold" text-anchor="middle" fill="#475569">J</text>`;
+                let polyPts = pts.map(p => `${mapA(p.a)},${mapJ(p.j)}`).join(' ');
+                bgHtml += `<polyline points="${polyPts}" fill="none" stroke="#8e44ad" stroke-width="3" style="transition: all 0.4s ease-out;" />`;
+                bgGroup.innerHTML = bgHtml;
+            }
+
+            const tangentLine = document.getElementById('loss-tangent');
+            if (tangentLine) {
+                let t_len = 0.6; 
+                let a1 = a_val - t_len;
+                let a2 = a_val + t_len;
+                let j1 = currentJ - gradA_val * t_len;
+                let j2 = currentJ + gradA_val * t_len;
+                tangentLine.setAttribute('x1', mapA(a1));
+                tangentLine.setAttribute('y1', mapJ(j1));
+                tangentLine.setAttribute('x2', mapA(a2));
+                tangentLine.setAttribute('y2', mapJ(j2));
+            }
+
+            let cx = mapA(a_val);
+            let cy = mapJ(currentJ);
+            
+            const ptCircle = document.getElementById('loss-point');
+            if (ptCircle) {
+                ptCircle.setAttribute('cx', cx);
+                ptCircle.setAttribute('cy', cy);
+            }
+            
+            const txtText = document.getElementById('loss-text');
+            if (txtText) {
+                txtText.setAttribute('x', cx);
+                txtText.setAttribute('y', cy - 15);
+                txtText.textContent = `J=${currentJ.toFixed(2)}`;
+            }
+        }
+
+        function updateVisuals(a, b, alphaVal) {
+            document.getElementById('s1-a').innerText = a.toFixed(2);
+            document.getElementById('s1-b').innerText = b.toFixed(2);
+            let s1Html = '';
+            let y_hats = [];
+            DATA.forEach((pt, i) => {
+                let yh = a * pt.x + b;
+                y_hats.push(yh);
+                s1Html += `ŷ<sub>${i+1}</sub>=<span class="val result">${yh.toFixed(2)}</span><br>`;
+            });
+            document.getElementById('s1-sub').innerHTML = s1Html;
+
+            let s2Html = 'J = 1/10·[<br>';
+            let sqLossSum = 0;
+            DATA.forEach((pt, i) => {
+                let diff = y_hats[i] - pt.y;
+                sqLossSum += diff * diff;
+                s2Html += `(${diff.toFixed(2)})²`;
+                if(i < DATA.length - 1) s2Html += ' +<br>';
+            });
+            let totalLoss = sqLossSum / (2 * DATA.length);
+            s2Html += ` ]<br><span class="val danger">Loss=${totalLoss.toFixed(3)}</span>`;
+            document.getElementById('s2-sub').innerHTML = s2Html;
+
+            let s3Html = '∂a = 1/5·[<br>';
+            let gradASum = 0;
+            DATA.forEach((pt, i) => {
+                let diff = y_hats[i] - pt.y;
+                let partial = diff * pt.x;
+                gradASum += partial;
+                s3Html += `${partial.toFixed(2)}`;
+                if(i < DATA.length - 1) s3Html += ' +<br>';
+            });
+            let gradA = gradASum / DATA.length;
+            s3Html += ` ]<br><span class="val danger">∂a=${gradA.toFixed(3)}</span>`;
+            document.getElementById('s3-sub').innerHTML = s3Html;
+
+            let s4Html = '∂b = 1/5·[<br>';
+            let gradBSum = 0;
+            DATA.forEach((pt, i) => {
+                let diff = y_hats[i] - pt.y;
+                gradBSum += diff;
+                s4Html += `${diff.toFixed(2)}`;
+                if(i < DATA.length - 1) s4Html += ' +<br>';
+            });
+            let gradB = gradBSum / DATA.length;
+            s4Html += ` ]<br><span class="val danger">∂b=${gradB.toFixed(3)}</span>`;
+            document.getElementById('s4-sub').innerHTML = s4Html;
+
+            document.getElementById('s5-alpha').innerText = alphaVal.toFixed(2);
+            document.getElementById('s5-da').innerText = gradA.toFixed(3);
+            document.getElementById('s5-db').innerText = gradB.toFixed(3);
+            let a_new = a - alphaVal * gradA;
+            let b_new = b - alphaVal * gradB;
+            let s5Html = `a_new = <br><span class="val success">${a_new.toFixed(3)}</span><br><br>`;
+            s5Html += `b_new = <br><span class="val success">${b_new.toFixed(3)}</span>`;
+            document.getElementById('s5-sub').innerHTML = s5Html;
+
+            const fitLine = document.getElementById('fit-line');
+            if (fitLine) {
+                let x1 = xMin, x2 = xMax;
+                let y1 = a * x1 + b;
+                let y2 = a * x2 + b;
+                fitLine.setAttribute('x1', mapX(x1));
+                fitLine.setAttribute('y1', mapY(y1));
+                fitLine.setAttribute('x2', mapX(x2));
+                fitLine.setAttribute('y2', mapY(y2));
+            }
+
+            drawLossCurve(a, b, gradA, totalLoss);
+
+            return {a_next: a_new, b_next: b_new};
+        }
+
+        function doStep() {
+            let res = updateVisuals(currentA, currentB, alpha);
+            currentA = res.a_next;
+            currentB = res.b_next;
+            
+            document.getElementById('a0-val').innerText = currentA.toFixed(2);
+            document.getElementById('b0-val').innerText = currentB.toFixed(2);
+            document.getElementById('param-a0').value = currentA;
+            document.getElementById('param-b0').value = currentB;
+
+            const pred_errors = DATA.map(pt => currentA * pt.x + currentB - pt.y);
+            const max_err = Math.max(...pred_errors.map(Math.abs));
+            if(max_err < 0.001 && isPlaying) {
+                togglePlay();
+            }
+        }
+
+        function resetSim() {
+            if(isPlaying) togglePlay();
+            
+            currentA = DEFAULT_A;
+            currentB = DEFAULT_B;
+            alpha = DEFAULT_ALPHA;
+            
+            document.getElementById('param-a0').value = currentA;
+            document.getElementById('param-b0').value = currentB;
+            document.getElementById('param-alpha-2d').value = alpha;
+            
+            document.getElementById('a0-val').innerText = currentA.toFixed(2);
+            document.getElementById('b0-val').innerText = currentB.toFixed(2);
+            document.getElementById('alpha-val-2d').innerText = alpha.toFixed(2);
+
+            updateVisuals(currentA, currentB, alpha);
+        }
+
+        function togglePlay() {
+            const btn = document.getElementById('btn-auto-2d');
+            if (isPlaying) {
+                isPlaying = false;
+                clearInterval(playInterval);
+                btn.innerText = "▶️ 自动轮询";
+                btn.classList.replace('btn-reset-2d', 'btn-auto-2d');
+            } else {
+                isPlaying = true;
+                btn.innerText = "⏸️ 暂停轮询";
+                btn.classList.replace('btn-auto-2d', 'btn-reset-2d');
+                playInterval = setInterval(doStep, 600);
+            }
+        }
+
+        document.getElementById('param-alpha-2d').addEventListener('input', function(e) {
+            alpha = parseFloat(e.target.value);
+            document.getElementById('alpha-val-2d').innerText = alpha.toFixed(2);
+            updateVisuals(currentA, currentB, alpha);
+        });
+
+        document.getElementById('param-a0').addEventListener('input', function(e) {
+            currentA = parseFloat(e.target.value);
+            document.getElementById('a0-val').innerText = currentA.toFixed(2);
+            updateVisuals(currentA, currentB, alpha);
+        });
+        
+        document.getElementById('param-b0').addEventListener('input', function(e) {
+            currentB = parseFloat(e.target.value);
+            document.getElementById('b0-val').innerText = currentB.toFixed(2);
+            updateVisuals(currentA, currentB, alpha);
+        });
+
+        document.getElementById('btn-step-2d').addEventListener('click', doStep);
+        document.getElementById('btn-auto-2d').addEventListener('click', togglePlay);
+        document.getElementById('btn-reset-2d').addEventListener('click', resetSim);
+
+        // 初始化运行
+        drawStatic();
+        updateVisuals(currentA, currentB, alpha);
+    })();
+</script>
+</body>
+</html>
