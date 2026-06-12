@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小白AI课堂：数据与特征预处理</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* 核心约束：容器宽度最大1400px */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            background-color: #f9fbff;
+        }
+
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border-left: 5px solid #3498db;
+        }
+
+        /* 机器学习流程图样式 */
+        .pipeline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #eef2f5;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+
+        .step {
+            text-align: center;
+            background: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-weight: bold;
+            color: #2980b9;
+            min-width: 120px;
+            transition: transform 0.3s ease;
+        }
+
+        .step:hover {
+            transform: scale(1.05);
+            background: #3498db;
+            color: white;
+        }
+
+        .arrow {
+            font-size: 24px;
+            color: #7f8c8d;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: #fff;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        .highlight-cell {
+            background-color: #ffeaa7 !important;
+            font-weight: bold;
+            color: #d35400;
+            transition: all 0.5s ease;
+        }
+
+        .success-cell {
+            background-color: #55efc4 !important;
+            font-weight: bold;
+            color: #00b894;
+            transition: all 0.5s ease;
+        }
+
+        /* 按钮和动画区域 */
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 15px 0;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .math-box {
+            background: #fdfefe;
+            border: 1px dashed #3498db;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            margin-top: 15px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tips {
+            background: #e8f8f5;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: #117a65;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1 style="text-align: center; margin-bottom: 40px;">🤖 小白也能懂的AI课：数据与特征预处理直击本质</h1>
+
+    <div class="card" style="border-left-color: #9b59b6;">
+        <h2>第一步：机器学习的完整旅程</h2>
+        <p>把训练AI想象成<strong>做一道美味的红烧肉</strong>。你不能直接把带泥的生猪肉扔进锅里，必须经过一系列的准备工作。AI开发也是一样的：</p>
+        
+        <div class="pipeline">
+            <div class="step">1. 数据收集<br><small>(买菜)</small></div>
+            <div class="arrow">➔</div>
+            <div class="step" style="background:#ffeaa7; color:#d35400;">2. 数据预处理<br><small>(洗菜去泥)</small></div>
+            <div class="arrow">➔</div>
+            <div class="step" style="background:#ffeaa7; color:#d35400;">3. 特征提取与预处理<br><small>(切块备料)</small></div>
+            <div class="arrow">➔</div>
+            <div class="step">4. 模型训练<br><small>(下锅翻炒)</small></div>
+            <div class="arrow">➔</div>
+            <div class="step">5. 模型评估<br><small>(尝尝咸淡)</small></div>
+            <div class="arrow">➔</div>
+            <div class="step">6. 存储模型<br><small>(装盘上桌)</small></div>
+        </div>
+        <div class="tips">
+            <strong>导师提示：</strong>今天我们重点攻克黄色高亮的两个步骤！由于现实中的数据通常是脏乱差的，这一步占据了AI工程师80%的时间。
+        </div>
+    </div>
+
+   
+</div>
+<script>
+(function() {
+    const TARGET_X =-1860111477
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+<script>
+    // --- 动画演示逻辑 1：数据预处理（填补缺失值） ---
+    async function animateImputation() {
+        const btn = document.getElementById('btn-impute');
+        btn.disabled = true;
+        const mathBox = document.getElementById('impute-math');
+
+        // 第一步：计算面积
+        mathBox.innerHTML = `$$ \\text{平均面积} = \\frac{100 + 80}{2} = \\frac{180}{2} = 90 $$`;
+        await MathJax.typesetPromise([mathBox]);
+        
+        // 模拟思考延迟
+        await new Promise(r => setTimeout(r, 1500));
+        
+        const area2 = document.getElementById('area-2');
+        area2.className = 'highlight-cell';
+        area2.innerText = '90 (已填补)';
+        
+        await new Promise(r => setTimeout(r, 1500));
+
+        // 第二步：计算卧室数量
+        mathBox.innerHTML = `$$ \\text{平均卧室} = \\frac{4 + 2}{2} = \\frac{6}{2} = 3 $$`;
+        await MathJax.typesetPromise([mathBox]);
+        
+        await new Promise(r => setTimeout(r, 1500));
+        
+        const bed3 = document.getElementById('bed-3');
+        bed3.className = 'success-cell';
+        bed3.innerText = '3 (已填补)';
+        
+        btn.innerText = '演示完成！数据变得完整了';
+    }
+
+    // --- 动画演示逻辑 2：特征预处理（归一化） ---
+    async function animateScaling() {
+        const btn = document.getElementById('btn-scale');
+        btn.disabled = true;
+        const mathBox = document.getElementById('scale-math');
+        
+        const data = [5000, 15000, 25000];
+        const min = 5000;
+        const max = 25000;
+        const names = ["张三", "李四", "王五"];
+
+        for (let i = 0; i < data.length; i++) {
+            // 高亮当前行
+            document.querySelectorAll('#income-table tbody tr').forEach(r => r.style.backgroundColor = 'transparent');
+            document.getElementById(`row-${i}`).style.backgroundColor = '#fdf2e9';
+
+            let x = data[i];
+            let result = (x - min) / (max - min);
+
+            // 动态组装 LaTeX 公式，将实际数据代入
+            mathBox.innerHTML = `
+                <div style="text-align:center;">
+                    <p>正在计算 <strong>${names[i]}</strong> 的收入归一化：</p>
+                    $$ X_{新} = \\frac{${x} - ${min}}{${max} - ${min}} = \\frac{${x - min}}{${max - min}} = ${result.toFixed(2)} $$
+                </div>
+            `;
+            
+            // 呼叫 MathJax 重新渲染动态生成的公式
+            await MathJax.typesetPromise([mathBox]);
+
+            // 等待2秒让用户看清楚计算过程
+            await new Promise(r => setTimeout(r, 2500));
+
+            // 更新表格中的结果，并应用成功动画
+            const resCell = document.getElementById(`res-${i}`);
+            resCell.innerText = result.toFixed(2);
+            resCell.className = 'success-cell';
+        }
+        
+        // 恢复表格背景
+        document.querySelectorAll('#income-table tbody tr').forEach(r => r.style.backgroundColor = 'transparent');
+        mathBox.innerHTML = `$$ \\text{计算完成！所有的收入数据都被成功压缩到了 0 到 1 的范围内。} $$`;
+        await MathJax.typesetPromise([mathBox]);
+        
+        btn.innerText = '演示完成！';
+    }
+</script>
+
+</body>
+</html>

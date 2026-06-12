@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XGBoost核心推演与直观对比</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* ================= 基础与第三章样式 ================= */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #2c3e50;
+            line-height: 1.8;
+            background-color: #f8fafc;
+        }
+        h1, h2, h3 {
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+            color: #2980b9;
+            margin-top: 40px;
+        }
+        p { font-size: 16px; }
+        .highlight { background-color: #f1c40f; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .box { background-color: #f8f9fa; border-left: 5px solid #2980b9; padding: 20px; margin: 20px 0; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .anim-container { position: relative; height: 150px; background: #ecf0f1; border-radius: 8px; margin: 20px 0; overflow: hidden; border: 1px solid #bdc3c7; }
+        .track { position: absolute; top: 50px; left: 50px; right: 50px; height: 4px; background: #95a5a6; }
+        .target { position: absolute; top: 25px; right: 50px; width: 4px; height: 50px; background: #e74c3c; }
+        .target-label { position: absolute; top: 80px; right: 35px; color: #e74c3c; font-weight: bold; }
+        .runner { position: absolute; top: 35px; left: 50px; width: 30px; height: 30px; border-radius: 50%; color: white; text-align: center; line-height: 30px; font-size: 12px; transition: left 1s ease-in-out; }
+        .runner.gbdt { background: #3498db; top: 15px; }
+        .runner.xgb { background: #27ae60; top: 55px; }
+
+        .old-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
+        .old-table th, .old-table td { border: 1px solid #bdc3c7; padding: 12px; text-align: center; }
+        .old-table th { background-color: #34495e; color: white; }
+        
+        .btn-old { background-color: #2980b9; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 5px; cursor: pointer; margin-bottom: 10px; }
+        .btn-old:hover { background-color: #3498db; }
+        .slider-container { margin: 20px 0; } input[type="range"] { width: 300px; }
+
+        /* ================= 第四章追加：左图右文 & 卡片式交互样式 ================= */
+        :root {
+            --primary-blue: #1e3a8a; --light-blue: #eff6ff; --accent-green: #10b981; 
+            --accent-orange: #f59e0b; --accent-purple: #8b5cf6;
+            --text-main: #1f2937; --border-light: #e5e7eb;
+            --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .interactive-panel { background: white; border: 1px solid var(--border-light); border-radius: 12px; padding: 24px; margin: 24px 0; box-shadow: var(--shadow-md); }
+        
+        .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; background: white;}
+        .data-table th, .data-table td { border: 1px solid var(--border-light); padding: 8px; font-size: 15px; } 
+        .data-table th { background-color: var(--light-blue); color: var(--primary-blue); }
+        .data-table td.math-font { font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #d35400;}
+
+        /* 新版左右布局：左侧可视化，右侧操作卡片 */
+        .layout-grid-new { display: grid; grid-template-columns: 1fr 500px; gap: 24px; align-items: stretch; margin-bottom: 20px; }
+        
+        .visual-area { background: var(--bg-gray); border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 350px; position: relative;}
+        
+        /* 选项卡容器与按钮 */
+        .steps-container { display: flex; flex-direction: column; }
+        .step-tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border-light); margin-bottom: 15px; }
+        .tab-btn { background: transparent; border: none; padding: 10px 16px; font-size: 15px; font-weight: bold; color: #64748b; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s ease; margin-bottom: -2px; }
+        .tab-btn:hover:not(:disabled) { color: var(--primary-blue); }
+        .tab-btn.active { color: var(--primary-blue); border-bottom: 3px solid var(--primary-blue); }
+        .tab-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+        /* 卡片内容区 */
+        .tab-content { display: none; background: white; border: 1px solid var(--border-light); border-radius: 8px; padding: 20px; box-shadow: var(--shadow-sm); animation: fadeIn 0.3s ease; flex-grow: 1; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .status-card { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-size: 14px;}
+        
+        .btn-action { background-color: var(--primary-blue); color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 15px; cursor: pointer; transition: all 0.2s ease; font-weight: bold; width: 100%; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2); }
+        .btn-action:hover { background-color: #1e40af; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(30, 58, 138, 0.3); }
+        
+        /* 优化的决策树样式（完美对齐连线） */
+        .node-tree { display: flex; flex-direction: column; align-items: center; animation: popIn 0.5s ease forwards; width: 100%; }
+        .node-circle { width: 80px; height: 80px; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 14px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 2; position: relative;}
+        .node-root { background-color: #34495e; width: auto; padding: 0 20px; height: 50px; border-radius: 8px; margin-bottom: 0;}
+        .node-leaf { background-color: var(--accent-purple); }
+        
+        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        
+        .math-dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #1e293b; color: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .math-cell { background: #0f172a; padding: 15px 10px; border-radius: 6px; border: 1px solid #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.3s ease; }
+        .math-highlight { animation: glow 0.8s ease-out; }
+        .cell-title { font-size: 12px; color: #94a3b8; margin-bottom: 8px; }
+        @keyframes glow { 0% { box-shadow: 0 0 0px rgba(59, 130, 246, 0); } 50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.8); border-color: #3b82f6;} 100% { box-shadow: 0 0 0px rgba(59, 130, 246, 0); } }
+
+        .log-box { font-size: 14px; color: #334155; background: #f8fafc; padding: 15px; border-radius: 6px; border-left: 4px solid var(--accent-purple); }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>第三章：用大白话看懂 XGBoost 对 GBDT 的两大改进</h1>
+    <p>想象你在打高尔夫球。GBDT 就像是一个<strong>蒙着眼睛的初学者</strong>，每次击球只能凭借感觉（一阶导数）往前推进一点；而 XGBoost 就像是一个<strong>带了测距仪的职业选手</strong>，不仅看方向（一阶导数），还能精确计算地形的弧度（二阶导数），并且挥杆时懂得控制力度（参数管制），防止用力过猛把球打飞。</p>
+
+    <h2>改进一：引入二阶导数（更精准的步伐）</h2>
+    
+    <div class="box">
+        <p><strong>直观理解：</strong></p>
+        <p>假设我们要预测一个人的年龄，真实年龄是 $y=30$ 岁。上一轮我们猜的是 $\hat{y}=20$ 岁。误差（残差）是 $10$ 岁。</p>
+        <ul>
+            <li><strong>GBDT的做法：</strong>只看一阶导数（梯度）。它发现方向是差了 $10$ 岁，于是它决定朝着 $10$ 岁的方向走，但它不知道该走多大步，往往需要很多棵树慢慢逼近。</li>
+            <li><strong>XGBoost的做法：</strong>同时看一阶导数（$g$）和二阶导数（$h$）。二阶导数相当于告诉它“地形的弯曲程度”。它能直接算出一步跨到谷底的最佳距离，也就是著名的牛顿法。</li>
+        </ul>
+    </div>
+
+    <h3>动画演示：GBDT vs XGBoost 的逼近速度</h3>
+    <button class="btn-old" onclick="playAnimation()">▶ 点击播放动画：向目标逼近</button>
+    <div class="anim-container">
+        <div class="track"></div>
+        <div class="target"></div>
+        <div class="target-label">目标:30岁</div>
+        <div class="runner gbdt" id="gbdt-dot">GBDT</div>
+        <div class="runner xgb" id="xgb-dot">XGB</div>
+    </div>
+    <p><em>解读：GBDT 需要多次迭代才能靠近目标，而 XGBoost 借助二阶导数，单次迭代就能极其精准地定位。</em></p>
+
+    <h3>动态数据推导</h3>
+    <p>我们把刚才的例子代入真实的数据计算（假设损失函数为均方误差）：</p>
+    <table class="old-table" id="math-table1">
+        <tr>
+            <th>真实值 ($y$)</th>
+            <th>当前预测值 ($\hat{y}$)</th>
+            <th>一阶导数 ($g = \hat{y} - y$)</th>
+            <th>二阶导数 ($h = 1$)</th>
+            <th>XGBoost计算的最佳步长 ($-g/h$)</th>
+        </tr>
+        <tr>
+            <td>30</td>
+            <td>20</td>
+            <td>-10</td>
+            <td>1</td>
+            <td><strong>直接跨越 10 !</strong></td>
+        </tr>
+    </table>
+
+    <hr style="border: 1px dashed #bdc3c7; margin: 40px 0;">
+
+    <h2>改进二：引入参数管制（防止过拟合的刹车）</h2>
+
+    <div class="box">
+        <p><strong>直观理解：</strong></p>
+        <p>有时候，我们的数据里有“噪音”（比如有人谎报年龄）。如果模型太聪明，它会把噪音也学进去，导致在训练集上表现好，但在新数据上表现极差，这就是<strong>过拟合</strong>。</p>
+        <p>XGBoost 引入了正则化参数（$\lambda$），相当于给模型安装了“刹车”。即使公式计算出应该跨越很大的步子，$\lambda$ 也会把它强行压小一点，让模型不要太自信。</p>
+        <p>叶子节点最终输出权重 $w$ 的计算公式为：</p>
+        $$w = -\frac{\sum g}{\sum h + \lambda}$$
+    </div>
+
+    <h3>交互案例：调节 $\lambda$ 观察“刹车”效果</h3>
+    <p>假设我们计算出总梯度 $\sum g = -10$，总二阶导数 $\sum h = 1$。现在请拖动滑块，增加正则化参数 $\lambda$，看看叶子的输出权重 $w$ 是如何变化的：</p>
+
+    <div class="slider-container">
+        <label for="lambda-slider"><strong>拖动调节正则化参数 $\lambda$：</strong></label>
+        <input type="range" id="lambda-slider" min="0" max="10" step="1" value="0" oninput="updateRegularization()">
+        <span id="lambda-val" class="highlight">0</span>
+    </div>
+
+    <table class="old-table" id="math-table2">
+        <tr>
+            <th>总梯度 ($\sum g$)</th>
+            <th>总二阶导数 ($\sum h$)</th>
+            <th>正则化惩罚 ($\lambda$)</th>
+            <th>动态公式计算过程与最终权重 ($w$)</th>
+        </tr>
+        <tr>
+            <td>-10</td>
+            <td>1</td>
+            <td id="td-lambda">0</td>
+            <td id="td-formula">
+                $$w = -\frac{-10}{1 + 0} = 10.00$$
+            </td>
+        </tr>
+    </table>
+
+    <h1 style="color: var(--accent-purple); border-bottom: 3px solid var(--accent-purple);">🚀 第四章：XGBoost 核心推演实战 (期末成绩预测)</h1>
+    
+    <div style="background: #f5f3ff; padding: 20px; border-left: 5px solid #8b5cf6; margin-bottom: 20px; border-radius: 8px;">
+        <p>前面的直观对比只是热身。要想真正吃透 XGBoost，我们必须啃下这块“代入真实数据验算”的硬骨头。其实一点也不难！我们抛开复杂的学术定义，用你熟悉的<strong>期末成绩预测</strong>数据，亲自走一遍 XGBoost 中最核心的 $g_i$（一阶导数）、$h_i$（二阶导数）和叶子权重 $w^*$ 的计算过程。</p>
+        <p><strong>注意：</strong> 为了符合你的阅读习惯，我们在这里使用 $b$ 来代表学习率系数（Shrinkage），正则化惩罚系数设为 $\lambda = 1$。</p>
+    </div>
+
+    <div class="interactive-panel">
+        <p>我们抽取了 3 位同学的数据。我们要根据“学习时长”来预测“期末真实分数”。</p>
+        <table class="data-table" id="xgb-data-table">
+            <tr>
+                <th>样本 ID</th>
+                <th>学习时长 ($x$)</th>
+                <th>真实分数 ($y$)</th>
+                <th>当前基准预测 ($F_0$)</th>
+                <th>一阶导数 ($g_i$)</th>
+                <th>二阶导数 ($h_i$)</th>
+            </tr>
+            <tr id="x-row-1"><td>S1</td><td>10 小时</td><td>80 分</td><td>-</td><td>-</td><td>-</td></tr>
+            <tr id="x-row-2"><td>S2</td><td>2 小时</td><td>40 分</td><td>-</td><td>-</td><td>-</td></tr>
+            <tr id="x-row-3"><td>S3</td><td>5 小时</td><td>60 分</td><td>-</td><td>-</td><td>-</td></tr>
+        </table>
+
+        <div class="layout-grid-new">
+            <div class="visual-area" id="xgb-arena">
+                <span style="color: #94a3b8; font-size: 15px; font-weight: bold;">在右侧面板点击执行步骤...</span>
+            </div>
+
+            <div class="steps-container">
+                <div class="step-tabs">
+                    <button class="tab-btn active" id="tab-btn-1" onclick="switchStep(1)">1️⃣ 基准点计算</button>
+                    <button class="tab-btn" id="tab-btn-2" onclick="switchStep(2)" disabled>2️⃣ 梯度计算</button>
+                    <button class="tab-btn" id="tab-btn-3" onclick="switchStep(3)" disabled>3️⃣ 建树与权重</button>
+                </div>
+                
+                <div class="tab-content active" id="step-content-1">
+                    <div class="status-card">
+                        <strong>全局参数设定：</strong>
+                        <ul style="margin: 5px 0 0 0; padding-left: 20px;">
+                            <li>损失函数：均方误差 MSE</li>
+                            <li>正则化项：$\lambda = 1$</li>
+                            <li>学习率系数：$b = 0.8$</li>
+                        </ul>
+                    </div>
+                    <button id="btn-xgb-1" class="btn-action" onclick="runStep1()">▶ 执行：计算初始基准预测值 $F_0$</button>
+                    <div id="log-step-1" style="display: none;" class="log-box">
+                        <p>在没有任何特征分类前，模型最聪明的做法就是猜所有人的平均分。</p>
+                        $$ F_0 = \frac{80 + 40 + 60}{3} = 60 $$
+                        <p style="color:var(--accent-green); font-weight:bold; margin-bottom: 0;">✓ 步骤1完成！已解锁顶部“梯度计算”卡片。</p>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="step-content-2">
+                    <p>利用刚才算出的基准值 $F_0$，以及每位同学的真实成绩 $y$，我们可以计算出残差和导数。</p>
+                    <button id="btn-xgb-2" class="btn-action" onclick="runStep2()">▶ 执行：计算一阶与二阶导数 ($g_i, h_i$)</button>
+                    <div id="log-step-2" style="display: none;" class="log-box">
+                        <p>由于我们使用均方误差 (MSE)，导数的计算非常极其简单：</p>
+                        <ul style="padding-left: 15px; margin-top: 5px;">
+                            <li><strong>一阶导数 $g_i = \hat{y} - y$：</strong> 预测值减真实值（反向残差）。</li>
+                            <li><strong>二阶导数 $h_i = 1$：</strong> MSE 的二阶曲率恒定为 1。</li>
+                        </ul>
+                        <p style="margin-bottom: 5px;">验算 S1 同学：</p>
+                        $$g_1 = 60 - 80 = -20 \quad h_1 = 1$$
+                        <p style="color:var(--accent-green); font-weight:bold; margin-bottom: 0;">✓ 表格数据已更新！已解锁“建树与权重”。</p>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="step-content-3">
+                    <p>让算法根据特征（学习时长）自动划分数据，并计算带正则化的叶子节点输出权重。</p>
+                    <button id="btn-xgb-3" class="btn-action" onclick="runStep3()">▶ 执行：生成纠错树并计算叶子权重</button>
+                    <div id="log-step-3" style="display: none;" class="log-box">
+                        <p>假设算法选择以“<strong>学习时间 $\le$ 5 小时</strong>”为条件分拨。核心公式：$w^* = -\frac{\sum g}{\sum h + \lambda}$</p>
+                        <hr style="border: 1px dashed #cbd5e1; margin: 10px 0;">
+                        <p style="margin: 5px 0;"><strong>左叶子 (S2, S3)：</strong> $\sum g = 20, \sum h = 2$</p>
+                        $$w_L^* = -\frac{20}{2 + 1} = -6.67$$ 
+                        <p style="margin: 5px 0;"><strong>右叶子 (S1)：</strong> $\sum g = -20, \sum h = 1$</p>
+                        $$w_R^* = -\frac{-20}{1 + 1} = 10.00$$
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="math-dashboard">
+            <div class="math-cell" id="xgb-cell-f0">
+                <span class="cell-title">基准预测 ($F_0$)</span>
+                <span id="xgb-math-f0">$$F_0 = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="xgb-cell-wl">
+                <span class="cell-title">树1: 左叶子权重 ($w_L^*$)</span>
+                <span id="xgb-math-wl">$$w_L^* = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="xgb-cell-wr">
+                <span class="cell-title">树1: 右叶子权重 ($w_R^*$)</span>
+                <span id="xgb-math-wr">$$w_R^* = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="xgb-cell-lr">
+                <span class="cell-title">学习率系数</span>
+                <span>$$b = 0.8$$</span>
+            </div>
+            <div style="grid-column: span 4; text-align: center; padding: 15px; border-top: 1px dashed #334155; margin-top: 5px;">
+                <span style="font-size: 0.85em; color:#94a3b8; display:block; margin-bottom:8px;">以 S1 同学为例，XGBoost 模型迭代后的最终预测公式：</span>
+                <span id="xgb-math-final" style="font-size: 1.2em; color: #60a5fa; font-weight: bold;">$$\text{预测分数} = F_0 + b \times w_R^* = \text{?}$$</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ================= 第三章动画与交互逻辑 ================= */
+    let clickCount = 0;
+    function playAnimation() {
+        const gbdtDot = document.getElementById('gbdt-dot');
+        const xgbDot = document.getElementById('xgb-dot');
+        clickCount++;
+        if (clickCount === 1) {
+            gbdtDot.style.left = '30%'; xgbDot.style.left = '85%';
+        } else if (clickCount === 2) {
+            gbdtDot.style.left = '55%';
+        } else if (clickCount === 3) {
+            gbdtDot.style.left = '80%';
+            setTimeout(() => {
+                alert("动画演示结束！你可以看到 XGBoost 仅用一步就达到了 GBDT 三步的效果。点击确定重置。");
+                gbdtDot.style.left = '50px'; xgbDot.style.left = '50px'; clickCount = 0;
+            }, 1200);
+        }
+    }
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+    function updateRegularization() {
+        const lambda = parseFloat(document.getElementById('lambda-slider').value);
+        document.getElementById('lambda-val').innerText = lambda;
+        document.getElementById('td-lambda').innerText = lambda;
+        const sumG = -10, sumH = 1;
+        const w = (-sumG / (sumH + lambda)).toFixed(2);
+        const newFormula = `$$w = -\\frac{${sumG}}{${sumH} + ${lambda}} = ${w}$$`;
+        const formulaContainer = document.getElementById('td-formula');
+        formulaContainer.innerHTML = newFormula;
+        if (window.MathJax) {
+            MathJax.typesetPromise([formulaContainer]).catch(err => console.log(err));
+        }
+    }
+    window.onload = function() { updateRegularization(); }
+
+    /* ================= 第四章：卡片式交互逻辑 ================= */
+    const xgbDataList = [
+        { id: 'S1', x: 10, y: 80 },
+        { id: 'S2', x: 2, y: 40 },
+        { id: 'S3', x: 5, y: 60 }
+    ];
+    const b_learning_rate = 0.8;
+    const lambda_reg = 1;
+    let f0_val = 0;
+
+    // 切换卡片显示
+    function switchStep(stepNum) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        document.getElementById(`tab-btn-${stepNum}`).classList.add('active');
+        document.getElementById(`step-content-${stepNum}`).classList.add('active');
+    }
+
+    function triggerMathGlow(elementId) {
+        let el = document.getElementById(elementId);
+        el.classList.remove('math-highlight');
+        void el.offsetWidth; // 触发回流以重新播放动画
+        el.classList.add('math-highlight');
+    }
+
+    // 步骤 1：计算基准值
+    function runStep1() {
+        document.getElementById('btn-xgb-1').disabled = true;
+        document.getElementById('btn-xgb-1').innerText = "✅ 步骤 1 已完成";
+        document.getElementById('log-step-1').style.display = 'block';
+        
+        // 计算均值
+        let sum = 0;
+        xgbDataList.forEach(item => sum += item.y);
+        f0_val = sum / xgbDataList.length; // 60
+        
+        // 更新表格
+        xgbDataList.forEach((item, index) => {
+            const tr = document.getElementById(`x-row-${index+1}`);
+            tr.cells[3].innerHTML = `<strong>${f0_val}</strong>`;
+            tr.cells[3].classList.add('math-font');
+        });
+
+        // 渲染左侧黑板
+        const arena = document.getElementById('xgb-arena');
+        arena.innerHTML = `
+            <div class="node-tree">
+                <span style="color:#64748b; font-size:12px; margin-bottom:10px;">模型初始化阶段</span>
+                <div class="node-circle node-root">基准点预测 $F_0$<br>所有人 = ${f0_val} 分</div>
+            </div>`;
+
+        // 仪表盘高亮
+        document.getElementById('xgb-math-f0').innerHTML = `$$F_0 = ${f0_val}$$`;
+        triggerMathGlow('xgb-cell-f0');
+
+        // 解锁并跳跃到第二步
+        document.getElementById('tab-btn-2').disabled = false;
+        
+        if (window.MathJax) MathJax.typesetPromise([arena, document.getElementById('log-step-1'), document.getElementById('xgb-cell-f0')]);
+    }
+
+    // 步骤 2：计算一阶和二阶导数
+    function runStep2() {
+        document.getElementById('btn-xgb-2').disabled = true;
+        document.getElementById('btn-xgb-2').innerText = "✅ 步骤 2 已完成";
+        document.getElementById('log-step-2').style.display = 'block';
+        
+        xgbDataList.forEach((item, index) => {
+            item.g = f0_val - item.y; 
+            item.h = 1;
+            const tr = document.getElementById(`x-row-${index+1}`);
+            tr.cells[4].innerHTML = `${item.g}`;
+            tr.cells[5].innerHTML = `${item.h}`;
+            tr.cells[4].classList.add('math-font');
+            tr.cells[5].classList.add('math-font');
+        });
+
+        const arena = document.getElementById('xgb-arena');
+        arena.innerHTML = `
+            <div class="node-tree">
+                <span style="color:#64748b; font-size:12px; margin-bottom:10px;">每个样本带着梯度信息进入下一轮</span>
+                <div style="display:flex; gap: 15px; margin-top: 10px;">
+                    <div class="node-circle" style="background:#f39c12;">S1<br>g: -20, h: 1</div>
+                    <div class="node-circle" style="background:#3498db;">S2<br>g: 20, h: 1</div>
+                    <div class="node-circle" style="background:#9b59b6;">S3<br>g: 0, h: 1</div>
+                </div>
+            </div>`;
+
+        document.getElementById('tab-btn-3').disabled = false;
+        
+        if (window.MathJax) MathJax.typesetPromise([arena, document.getElementById('log-step-2')]);
+    }
+
+    // 步骤 3：构建树与权重（全新连线结构）
+    function runStep3() {
+        document.getElementById('btn-xgb-3').disabled = true;
+        document.getElementById('btn-xgb-3').innerText = "✅ 步骤 3 已完成";
+        document.getElementById('log-step-3').style.display = 'block';
+        
+        const w_L = -6.67; 
+        const w_R = 10.00;
+
+        // 渲染左侧黑板：完美的架构图连线
+        const arena = document.getElementById('xgb-arena');
+        arena.innerHTML = `
+            <div class="node-tree">
+                <div class="node-circle node-root" style="background:#34495e; padding:0 20px; z-index:2;">学习时间 $\\le$ 5小时 ?</div>
+                
+                <div style="width: 2px; height: 18px; background: #94a3b8;"></div>
+                <div style="width: 200px; height: 18px; border-top: 2px solid #94a3b8; border-left: 2px solid #94a3b8; border-right: 2px solid #94a3b8; border-radius: 4px 4px 0 0;"></div>
+                
+                <div style="display: flex; justify-content: space-between; width: 200px; margin-top: -2px;">
+                    <div style="display: flex; flex-direction: column; align-items: center; position: relative; left: -40px;">
+                        <span style="font-size:12px; color:#64748b; font-weight:bold; margin-bottom: 8px;">是 (S2, S3)</span>
+                        <div class="node-circle node-leaf" style="box-shadow: 0 4px 10px rgba(139, 92, 246, 0.4);">左叶子<br>$w_L^* = ${w_L.toFixed(2)}$</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center; position: relative; right: -40px;">
+                        <span style="font-size:12px; color:#64748b; font-weight:bold; margin-bottom: 8px;">否 (S1)</span>
+                        <div class="node-circle node-leaf" style="background:var(--accent-orange); box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);">右叶子<br>$w_R^* = ${w_R.toFixed(2)}$</div>
+                    </div>
+                </div>
+            </div>`;
+
+        // 更新仪表盘与最终预测
+        document.getElementById('xgb-math-wl').innerHTML = `$$w_L^* = ${w_L.toFixed(2)}$$`;
+        document.getElementById('xgb-math-wr').innerHTML = `$$w_R^* = ${w_R.toFixed(2)}$$`;
+        
+        const final_s1 = f0_val + b_learning_rate * w_R;
+        document.getElementById('xgb-math-final').innerHTML = `$$\\text{预测分数} = 60 + 0.8 \\times 10.00 = ${final_s1.toFixed(2)} \\text{ 分}$$`;
+        
+        triggerMathGlow('xgb-cell-wl');
+        triggerMathGlow('xgb-cell-wr');
+
+        if (window.MathJax) MathJax.typesetPromise([arena, document.getElementById('log-step-3'), document.getElementById('xgb-cell-wl'), document.getElementById('xgb-cell-wr'), document.getElementById('xgb-math-final')]);
+    }
+</script>
+
+</body>
+</html>

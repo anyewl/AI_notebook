@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>彻底搞懂逻辑回归：从小白到入门</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* 核心约束：容器宽度要求 max-width: 1400px */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+            color: #333;
+            line-height: 1.8;
+            background-color: #fafbfc;
+        }
+
+        h1, h2, h3 { color: #2c3e50; }
+        h1 { text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-left: 5px solid #3498db;
+        }
+
+        .highlight-text { color: #e74c3c; font-weight: bold; }
+        
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: #fff;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            text-align: center;
+        }
+        th { background-color: #3498db; color: #fff; }
+        
+        /* 动画过渡与高亮 */
+        .row-default { transition: background-color 0.4s ease; }
+        .row-active { background-color: #ffeaa7 !important; transform: scale(1.01); box-shadow: 0 0 10px rgba(241, 196, 15, 0.5); }
+        
+        /* 交互控制区 */
+        .interactive-box {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 25px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .interactive-content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        #dynamic-math {
+            flex: 1;
+            min-width: 300px;
+            background: #34495e;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 1.1em;
+        }
+
+        .chart-container {
+            flex: 1;
+            min-width: 300px;
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            color: #333;
+        }
+        
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border: 1px dashed #bdc3c7;
+            border-radius: 4px;
+        }
+
+        .btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+            display: inline-block;
+            align-self: center;
+        }
+        .btn:hover { background-color: #c0392b; }
+        .btn:disabled { background-color: #7f8c8d; cursor: not-allowed; }
+        
+        .tip { background-color: #e8f8f5; border-left-color: #1abc9c; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>🤖 彻底搞懂逻辑回归：大白话解析与动态推演</h1>
+
+    <div class="card">
+        <h2>1. 什么是逻辑回归？（一句话：它是用来做“分类”的！）</h2>
+        <p>虽然名字里带有“回归”两个字，但逻辑回归其实是一个<strong>分类算法</strong>。你的课件里提到了“二分类”，意思就是回答“是”或者“不是”的问题。</p>
+        <ul>
+            <li><strong>医疗场景：</strong>根据体检数据，预测一个人<strong>是否</strong>感染了新冠病毒。</li>
+            <li><strong>金融场景：</strong>根据用户的信用记录，预测银行<strong>是否</strong>应该放贷。</li>
+            <li><strong>互联网场景：</strong>根据用户的浏览习惯，预测用户<strong>是否</strong>会点击这个广告。</li>
+        </ul>
+        <p>我们今天的教学场景：<strong>预测一个大学生期末考试【是否】能及格？</strong>及格用 <code>1</code> 表示，挂科用 <code>0</code> 表示。</p>
+    </div>
+
+    <div class="card tip">
+        <h2>2. 核心原理：它是怎么工作的？</h2>
+        <p>根据你的课件，逻辑回归分三步走，我们翻译成大白话：</p>
+        <p><strong>第一步：打分（线性回归）。</strong><br>
+        就像老师根据你的学习时长给你打个卷面分。公式：$z = w \cdot x + b$。<br>
+        <em>但是这个分数可能是 -50 分，也可能是 300 分，不好直接判断及格率。</em></p>
+        
+        <p><strong>第二步：把分数变成“概率”（Sigmoid 魔法函数）。</strong><br>
+        我们需要一个“魔法机器”，能把任何分数都平滑地压缩到 <strong>0 到 1 之间</strong>，代表及格的概率。这就是 Sigmoid 函数的作用，它的图像呈完美的“S”型。<br>
+        公式：$$p = \frac{1}{1 + e^{-z}}$$
+        </p>
+
+        <p><strong>第三步：一刀切判定。</strong><br>
+        如果计算出的及格概率 $p > 0.5$，我们就预测他“能及格 (1)”。如果 $p < 0.5$，就预测他“会挂科 (0)”。</p>
+    </div>
+
+    <div class="card">
+        <h2>3. 🎬 动态场景演示与 Sigmoid 函数图象</h2>
+        <p>假设我们通过学习历史数据，已经找到了规律（权重 $w = 1.2$，偏置 $b = -6$）。现在有 4 个同学的数据，请点击下方按钮，观察数据是如何动态代入公式，并映射到 <strong>Sigmoid 曲线</strong>上的！</p>
+        
+        <table id="data-table">
+            <thead>
+                <tr>
+                    <th>样本编号</th>
+                    <th>学习时长 (x)</th>
+                    <th>真实结果 (y) <br><small>1=及格, 0=挂科</small></th>
+                    <th>回归得分 (z)</th>
+                    <th>预测概率 (p)</th>
+                    <th>误差损失 (Loss)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr id="row-0" class="row-default">
+                    <td>学生 A (学渣)</td>
+                    <td>2 小时</td>
+                    <td>0</td>
+                    <td id="z-0">-</td>
+                    <td id="p-0">-</td>
+                    <td id="l-0">-</td>
+                </tr>
+                <tr id="row-1" class="row-default">
+                    <td>学生 B (划水)</td>
+                    <td>4 小时</td>
+                    <td>0</td>
+                    <td id="z-1">-</td>
+                    <td id="p-1">-</td>
+                    <td id="l-1">-</td>
+                </tr>
+                <tr id="row-2" class="row-default">
+                    <td>学生 C (努力)</td>
+                    <td>6 小时</td>
+                    <td>1</td>
+                    <td id="z-2">-</td>
+                    <td id="p-2">-</td>
+                    <td id="l-2">-</td>
+                </tr>
+                <tr id="row-3" class="row-default">
+                    <td>学生 D (学霸)</td>
+                    <td>8 小时</td>
+                    <td>1</td>
+                    <td id="z-3">-</td>
+                    <td id="p-3">-</td>
+                    <td id="l-3">-</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="interactive-box">
+            <button id="play-btn" class="btn" onclick="nextStep()">▶ 点击播放：演示下一条数据的计算过程</button>
+            
+            <div class="interactive-content">
+                <div id="dynamic-math">
+                    <div style="text-align: center; margin-top: 50px; color: #bdc3c7;">
+                        <em>点击上方按钮，这里将为你动态展示详细的数学公式代入计算过程...</em>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h3 style="margin-top: 0; color: #2980b9;">Sigmoid 函数映射图</h3>
+                    <p style="font-size: 0.9em; margin-bottom: 5px;">横轴：回归得分 $z$ | 纵轴：及格概率 $p$</p>
+                    <canvas id="sigmoidCanvas" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. 什么是最大似然估计？为什么要用对数损失函数？</h2>
+        <p>你一定很好奇课件中那长长的一串 Loss 公式是怎么来的，以及什么是“最大似然”。</p>
+        
+        <h3>🤔 大白话解释“最大似然”：</h3>
+        <p>假设你和室友打赌抛硬币，他连续抛了 10 次都是正面。你的第一反应肯定是：<strong>“这硬币被动过手脚！”</strong> <br>
+        为什么你会这么想？因为如果是一枚正常硬币，连续 10 次正面的概率太低了！我们潜意识里的逻辑是：<strong>既然现实中已经发生的事情，它对应的概率就应该是最大的。</strong></p>
+        <p>在我们的场景中，学生 C 真的及格了（$y=1$），我们就希望模型预测他及格的概率 $p$ 越大越好（趋近于1）；学生 A 真的挂科了（$y=0$），我们就希望模型预测他挂科的概率 $(1-p)$ 越大越好。这就是最大似然估计思想在机器学习里的应用。</p>
+
+        <h3>🧮 为什么要取 Log（对数）并且加负号？</h3>
+        <ul>
+            <li><strong>第一步：取对数（$\log$ 处理）。</strong>数学上有个绝招：$\log(A \times B) = \log(A) + \log(B)$。为了求总概率，原本需要把所有概率乘起来（连乘容易导致电脑计算溢出），取对数后，连乘就变成了课件里的“累加”！</li>
+            <li><strong>第二步：加负号（乘以 -1）。</strong>我们本来是希望概率最大化，但机器学习的算法（如梯度下降）天生喜欢寻找“最小值”。加个负号，把“求最大概率”完美转换成了“求最小误差（Loss）”。</li>
+            <li><strong>第三步：除以样本数 $m$。</strong>防止训练结果受样本个数的影响，求出一个平均误差。</li>
+        </ul>
+        <p>最终就推导出了你课件中的核心公式——<strong>交叉熵损失函数（Cross-Entropy Loss）</strong>：</p>
+        $$Loss(L) = -\frac{1}{m} \sum_{i=1}^{m} \left[ y^{(i)} \log(p^{(i)}) + (1 - y^{(i)}) \log(1 - p^{(i)}) \right]$$
+    </div>
+</div>
+
+<script>
+    // 定义数据案例 (权重 w=1.2, 偏置 b=-6)
+    const w = 1.2;
+    const b = -6;
+    const dataList = [
+        { name: "学生 A", x: 2, y: 0 },
+        { name: "学生 B", x: 4, y: 0 },
+        { name: "学生 C", x: 6, y: 1 },
+        { name: "学生 D", x: 8, y: 1 }
+    ];
+    let currentIndex = 0;
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+    // --- 绘制 Sigmoid 函数图像的逻辑 ---
+    function drawSigmoid(highlightZ) {
+        const canvas = document.getElementById('sigmoidCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const paddingX = 40;
+        const paddingY = 40;
+        
+        // 清空画布
+        ctx.clearRect(0, 0, width, height);
+        
+        // 坐标映射函数 (z 从 -10 到 10, p 从 0 到 1)
+        const zMin = -10, zMax = 10;
+        function getCanvasX(z) {
+            return paddingX + ((z - zMin) / (zMax - zMin)) * (width - paddingX * 2);
+        }
+        function getCanvasY(p) {
+            return height - paddingY - p * (height - paddingY * 2);
+        }
+
+        // 1. 绘制网格线和坐标轴
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#ecf0f1';
+        ctx.beginPath();
+        // 绘制 y=0.5 的阈值线
+        ctx.setLineDash([5, 5]);
+        ctx.moveTo(getCanvasX(-10), getCanvasY(0.5));
+        ctx.lineTo(getCanvasX(10), getCanvasY(0.5));
+        ctx.stroke();
+        ctx.setLineDash([]); // 恢复实线
+
+        ctx.strokeStyle = '#7f8c8d';
+        ctx.beginPath();
+        // X 轴
+        ctx.moveTo(getCanvasX(-10), getCanvasY(0));
+        ctx.lineTo(getCanvasX(10), getCanvasY(0));
+        // Y 轴
+        ctx.moveTo(getCanvasX(0), getCanvasY(0));
+        ctx.lineTo(getCanvasX(0), getCanvasY(1));
+        ctx.stroke();
+
+        // 绘制坐标刻度文本
+        ctx.fillStyle = '#7f8c8d';
+        ctx.font = '12px Arial';
+        ctx.fillText('0', getCanvasX(0) - 15, getCanvasY(0) + 15);
+        ctx.fillText('1.0', getCanvasX(0) - 25, getCanvasY(1) + 5);
+        ctx.fillText('0.5', getCanvasX(0) - 25, getCanvasY(0.5) + 5);
+        ctx.fillText('-10 (z)', getCanvasX(-10), getCanvasY(0) + 15);
+        ctx.fillText('+10 (z)', getCanvasX(10) - 20, getCanvasY(0) + 15);
+
+        // 2. 绘制 Sigmoid 曲线
+        ctx.beginPath();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#2980b9'; // 蓝色曲线
+        for (let z = -10; z <= 10; z += 0.2) {
+            let p = 1 / (1 + Math.exp(-z));
+            let cx = getCanvasX(z);
+            let cy = getCanvasY(p);
+            if (z === -10) {
+                ctx.moveTo(cx, cy);
+            } else {
+                ctx.lineTo(cx, cy);
+            }
+        }
+        ctx.stroke();
+
+        // 3. 如果有当前学生的得分，在曲线上画一个红色的点并标明
+        if (highlightZ !== undefined) {
+            let p = 1 / (1 + Math.exp(-highlightZ));
+            let cx = getCanvasX(highlightZ);
+            let cy = getCanvasY(p);
+            
+            // 画连接坐标轴的虚线
+            ctx.beginPath();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = '#e74c3c';
+            ctx.moveTo(cx, getCanvasY(0)); // 连向X轴
+            ctx.lineTo(cx, cy);
+            ctx.lineTo(getCanvasX(0), cy); // 连向Y轴
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 画红点
+            ctx.beginPath();
+            ctx.arc(cx, cy, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+
+            // 标注文本
+            ctx.fillStyle = '#c0392b';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(`z=${highlightZ.toFixed(1)}, p=${p.toFixed(2)}`, cx + 10, cy - 10);
+        }
+    }
+
+    // 页面加载完成后先画一个基础的无红点的空曲线
+    window.onload = function() {
+        drawSigmoid();
+    };
+
+    // --- 动态演算主逻辑 ---
+    function nextStep() {
+        if (currentIndex >= dataList.length) {
+            document.getElementById('play-btn').innerText = "✅ 演示完毕！请刷新页面重置";
+            document.getElementById('play-btn').disabled = true;
+            return;
+        }
+
+        // 移除所有高亮
+        for(let i=0; i<dataList.length; i++){
+            document.getElementById('row-' + i).classList.remove('row-active');
+        }
+
+        // 高亮当前行
+        const currentRow = document.getElementById('row-' + currentIndex);
+        currentRow.classList.add('row-active');
+
+        // 获取当前数据
+        const data = dataList[currentIndex];
+        const x = data.x;
+        const y = data.y;
+
+        // 动态计算
+        const z = w * x + b;
+        const p = 1 / (1 + Math.exp(-z));
+        
+        // 计算单个样本的损失
+        const loss = - (y * Math.log(p) + (1 - y) * Math.log(1 - p));
+
+        // 更新表格视图
+        document.getElementById('z-' + currentIndex).innerText = z.toFixed(2);
+        document.getElementById('p-' + currentIndex).innerText = (p * 100).toFixed(1) + '%';
+        document.getElementById('l-' + currentIndex).innerText = loss.toFixed(4);
+
+        // 重绘带当前位置的 Sigmoid 图
+        drawSigmoid(z);
+
+        // 构建动态代入数据的 LaTeX 公式
+        let explanationHTML = `
+            <p style="color: #f1c40f;"><strong>正在解析：${data.name} (时长: ${x}小时, 真实: ${y})</strong></p>
+            <p><strong>① 线性回归打分 $z$</strong></p>
+            $$z = 1.2 \\times ${x} + (-6) = ${z.toFixed(2)}$$
+            <p><strong>② Sigmoid 计算概率 $p$</strong></p>
+            $$p = \\frac{1}{1 + e^{-(${z.toFixed(2)})}} = ${p.toFixed(4)}$$
+            <p><strong>③ 计算损失 (Loss)</strong></p>
+            $$L = -[${y} \\log(${p.toFixed(4)}) + ${1-y} \\log(${1 - p.toFixed(4)})]$$
+            $$L = ${loss.toFixed(4)}$$
+            <p style="font-size: 0.8em; color:#bdc3c7;">看右侧图表：得分 ${z.toFixed(2)} 被映射成了概率 ${p.toFixed(2)}。</p>
+        `;
+
+        // 渲染数学公式到面板
+        const mathPanel = document.getElementById('dynamic-math');
+        mathPanel.innerHTML = explanationHTML;
+        
+        // 通知 MathJax 重新渲染新插入的公式
+        if (window.MathJax) {
+            MathJax.typesetPromise([mathPanel]).catch(function (err) {
+                console.error('MathJax 渲染错误:', err.message);
+            });
+        }
+
+        // 指向下一个数据
+        currentIndex++;
+        
+        if (currentIndex < dataList.length) {
+            document.getElementById('play-btn').innerText = "▶ 继续演示下一个学生";
+        } else {
+            document.getElementById('play-btn').innerText = "✅ 数据全部计算完毕！";
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CART 决策树：回归问题与最小二乘法</title>
+    <script>
+        MathJax = {
+            tex: { 
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root { 
+            --primary: #2563eb; 
+            --success: #10b981; 
+            --danger: #ef4444; 
+            --warning: #f59e0b;
+            --bg: #eff6ff; 
+            --text: #1e293b; 
+            --node-bg: #1e40af; 
+        }
+        /* 强制约束容器宽度 */
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            line-height: 1.7; 
+            padding: 20px; 
+            margin: 0; 
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 30px; 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
+        }
+        h1 { color: var(--primary); margin-bottom: 10px; text-align: center;}
+        h2 { color: var(--primary); font-size: 1.4rem; border-bottom: 2px solid #bfdbfe; padding-bottom: 10px; margin-top: 0; }
+        h3 { color: #0f172a; font-size: 1.1rem; margin-top: 20px; margin-bottom: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; text-align: center; }
+        th { background: var(--primary); color: white; padding: 12px; }
+        td { border-bottom: 1px solid #bfdbfe; padding: 12px; font-size: 1.1em; }
+        
+        .math-box { 
+            background: #f8fafc; 
+            border-left: 4px solid var(--primary); 
+            padding: 15px 20px; 
+            border-radius: 0 8px 8px 0; 
+            margin: 15px 0; 
+            overflow-x: auto; 
+            font-size: 1.05em; 
+        }
+        .highlight-text { background: #dbeafe; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #1d4ed8; }
+        
+        /* 动图与 SVG 样式 */
+        .viz-box { 
+            background: #f8fafc; 
+            border-radius: 8px; 
+            padding: 20px; 
+            text-align: center; 
+            margin-top: 20px; 
+            border: 1px solid #e2e8f0;
+            position: relative;
+        }
+        
+        .anim-controls {
+            margin-top: 15px;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 0 5px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1e40af; }
+        .data-point { transition: all 0.5s ease; }
+        .split-line { transition: x 0.5s ease; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <div>
+        <h1>CART 决策树回归篇：如何精准预测“具体数值”？</h1>
+        <p style="text-align: center; color: #475569; margin-bottom: 40px;">抛开抽象的字母，我们用“卖冰棍”的数据，带你手算一次最小二乘法切分，看懂它如何寻找那个“最完美的边界”。</p>
+    </div>
+
+    <div class="card">
+        <h2>1. 回归树的核心逻辑：不求“纯度”，但求“稳定”</h2>
+        <p>在之前的分类树中，我们要预测的是类别（去 or 不去），所以我们追求的是“基尼系数”，看分得纯不纯。</p>
+        <p>但<b>回归树（Regression Tree）</b>要预测的是具体的<b>连续数值</b>（比如：明天能卖出多少根冰棍？房价是多少万？）。此时没有“纯”与“不纯”的概念了，取而代之的是核心指标：<strong>平方误差（Squared Error）</strong>。</p>
+        <ul>
+            <li><strong>直白的理解：</strong> 俗话说“物以类聚，人以群分”。回归树的切分目标是——把数据切成两拨，使得每一拨里的数据都<strong>极度相似（方差极小）</strong>，大家都紧紧围在自己这拨的“平均值”身边。</li>
+            <li><strong>核心数学公式（残差平方和 SSR）：</strong> 假设分到了一个叶子节点里，里面有 $N$ 个数据。我们会算出这 $N$ 个数据的平均值 $\bar{y}$。然后让每个真实数据 $y_i$ 减去平均值，再平方，最后全加起来。公式如下：</li>
+        </ul>
+        <div class="math-box">
+            $$ SSR = \sum_{i=1}^{N} (y_i - \bar{y})^2 $$
+        </div>
+        <p><b>算法目标：</b> 穷举所有的切分一刀，看看哪一刀切下去，左半边加右半边的<strong>总 SSR（误差总和）最小</strong>！谁最小，谁就是最佳切分点。</p>
+    </div>
+
+    <div class="card">
+        <h2>2. 极简场景：气温与冰棍销量的预测</h2>
+        <p>为了不被小数和分数搞晕，我为你准备了一组计算结果<b>全为整数</b>的完美数据集。只有 4 天的数据：</p>
+        <table>
+            <tr><th>编号</th><th>特征 $X$：最高气温 (℃)</th><th>标签 $Y$：冰棍销量 (百根)</th></tr>
+            <tr><td>1</td><td>10℃</td><td style="color: var(--primary); font-weight: bold;">2</td></tr>
+            <tr><td>2</td><td>20℃</td><td style="color: var(--primary); font-weight: bold;">4</td></tr>
+            <tr><td>3</td><td>30℃</td><td style="color: var(--danger); font-weight: bold;">12</td></tr>
+            <tr><td>4</td><td>40℃</td><td style="color: var(--danger); font-weight: bold;">14</td></tr>
+        </table>
+        <p>直觉上看，气温在 20℃ 到 30℃ 之间时，销量发生了一个“大跳跃”。我们来看看 CART 算法是不是和我们的直觉一样，能精准找到这个分割线。</p>
+    </div>
+
+    <div class="card">
+        <h2>3. 穷举试探：CART 的切分算盘</h2>
+        <p>对于连续数值特征，CART 会把相邻特征值取平均数，作为候选的切分点。这里的气温是 10, 20, 30, 40。所以候选切分点有三个：<strong>15℃，25℃，35℃</strong>。</p>
+
+        <h3>方案 A：在 15℃ 切一刀（X <= 15）</h3>
+        <div class="math-box">
+            <strong>左边组（编号1）：</strong> 销量是 {2}。<br>
+            左边平均值 $\bar{y}_{左} = 2$。<br>
+            左边误差 $SSR_{左} = (2 - 2)^2 = 0$<br><br>
+            
+            <strong>右边组（编号2,3,4）：</strong> 销量是 {4, 12, 14}。<br>
+            右边平均值 $\bar{y}_{右} = \frac{4 + 12 + 14}{3} = \frac{30}{3} = 10$<br>
+            右边误差 $SSR_{右} = (4 - 10)^2 + (12 - 10)^2 + (14 - 10)^2$<br>
+            $\quad \quad \quad = (-6)^2 + (2)^2 + (4)^2 = 36 + 4 + 16 = 56$<br><br>
+            
+            <strong>方案 A 总误差：</strong> $0 + 56 = \mathbf{56}$ <i>（误差非常大，说明右边组内部方差太大，很不稳定）</i>
+        </div>
+
+        <h3>方案 B：在 25℃ 切一刀（X <= 25）</h3>
+        <div class="math-box">
+            <strong>左边组（编号1,2）：</strong> 销量是 {2, 4}。<br>
+            左边平均值 $\bar{y}_{左} = \frac{2 + 4}{2} = 3$<br>
+            左边误差 $SSR_{左} = (2 - 3)^2 + (4 - 3)^2 = (-1)^2 + (1)^2 = \mathbf{2}$<br><br>
+            
+            <strong>右边组（编号3,4）：</strong> 销量是 {12, 14}。<br>
+            右边平均值 $\bar{y}_{右} = \frac{12 + 14}{2} = 13$<br>
+            右边误差 $SSR_{右} = (12 - 13)^2 + (14 - 13)^2 = (-1)^2 + (1)^2 = \mathbf{2}$<br><br>
+            
+            <strong>方案 B 总误差：</strong> $2 + 2 = \mathbf{4}$ <i>（误差极小！大家跟各自平均值贴得非常紧）</i>
+        </div>
+
+        <h3>方案 C：在 35℃ 切一刀（X <= 35）</h3>
+        <div class="math-box">
+            和方案 A 对称计算，左边包含 {2, 4, 12}，右边包含 {14}。<br>
+            左边平均值是 6，误差是 $16 + 4 + 36 = 56$。<br>
+            右边只有一个点，误差是 0。<br>
+            <strong>方案 C 总误差：</strong> $56 + 0 = \mathbf{56}$
+        </div>
+
+        <p><span class="highlight-text">数学结论：</span> 方案 B (25℃) 的总误差仅为 4，远远小于方案 A 和 C 的 56。因此 CART 树毫不犹豫地选择了 <strong>气温 <= 25℃</strong> 作为根节点的切分标准！</p>
+    </div>
+
+    <div class="card">
+        <h2>4. 动态演示与数据场景结合 (可视化解析)</h2>
+        <p>通过下方我们特制的动图演示仪，您可以直观地看到“切分线”滑动时，左右两边的组群是如何重新计算平均值（水平实线），以及残差（虚线）是如何变化的。虚线的总长度的平方，就是我们刚刚手算的误差总和。</p>
+        
+        <div class="viz-box">
+            <svg id="cart-anim" width="100%" height="350" viewBox="0 0 600 350" style="background: white; border-radius: 8px;">
+                <line x1="50" y1="300" x2="550" y2="300" stroke="#94a3b8" stroke-width="2"/>
+                <line x1="50" y1="50" x2="50" y2="300" stroke="#94a3b8" stroke-width="2"/>
+                <text x="560" y="305" fill="#64748b" font-size="12">气温(X)</text>
+                <text x="30" y="40" fill="#64748b" font-size="12">销量(Y)</text>
+                
+                <text x="120" y="320" fill="#94a3b8" font-size="12" text-anchor="middle">10℃</text>
+                <text x="240" y="320" fill="#94a3b8" font-size="12" text-anchor="middle">20℃</text>
+                <text x="360" y="320" fill="#94a3b8" font-size="12" text-anchor="middle">30℃</text>
+                <text x="480" y="320" fill="#94a3b8" font-size="12" text-anchor="middle">40℃</text>
+
+                <line id="splitLine" class="split-line" x1="180" y1="50" x2="180" y2="300" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,5"/>
+                <rect id="splitBg" class="split-line" x="130" y="20" width="100" height="25" rx="4" fill="#ef4444"/>
+                <text id="splitText" class="split-line" x="180" y="38" fill="white" font-size="12" font-weight="bold" text-anchor="middle">试探: 15℃</text>
+
+                <line id="meanLeft" x1="50" y1="265" x2="180" y2="265" stroke="#3b82f6" stroke-width="2"/>
+                <text id="meanLeftText" x="60" y="260" fill="#3b82f6" font-size="12" font-weight="bold">平均=2</text>
+
+                <line id="meanRight" x1="180" y1="125" x2="550" y2="125" stroke="#f59e0b" stroke-width="2"/>
+                <text id="meanRightText" x="190" y="120" fill="#f59e0b" font-size="12" font-weight="bold">平均=10</text>
+
+                <line id="res1" x1="120" y1="265" x2="120" y2="265" stroke="#94a3b8" stroke-dasharray="2,2"/>
+                <circle cx="120" cy="265" r="6" fill="#1e293b"/>
+                <text x="110" y="285" fill="#1e293b" font-size="11">y=2</text>
+
+                <line id="res2" x1="240" y1="125" x2="240" y2="230" stroke="#94a3b8" stroke-dasharray="2,2"/>
+                <circle cx="240" cy="230" r="6" fill="#1e293b"/>
+                <text x="250" y="240" fill="#1e293b" font-size="11">y=4</text>
+
+                <line id="res3" x1="360" y1="125" x2="360" y2="90" stroke="#94a3b8" stroke-dasharray="2,2"/>
+                <circle cx="360" cy="90" r="6" fill="#1e293b"/>
+                <text x="370" y="95" fill="#1e293b" font-size="11">y=12</text>
+
+                <line id="res4" x1="480" y1="125" x2="480" y2="55" stroke="#94a3b8" stroke-dasharray="2,2"/>
+                <circle cx="480" cy="55" r="6" fill="#1e293b"/>
+                <text x="490" y="60" fill="#1e293b" font-size="11">y=14</text>
+            </svg>
+            <div class="anim-controls">
+                <button onclick="setSplit(15)">动画演练：切分点=15℃</button>
+                <button onclick="setSplit(25)" style="background: var(--success);">核心揭秘：最佳点=25℃</button>
+                <button onclick="setSplit(35)">动画演练：切分点=35℃</button>
+            </div>
+            <p id="calcDesc" style="font-weight: bold; margin-top: 15px; color: var(--danger);">当前状态：切分点在 15℃，右侧数据参差不齐，总误差高达 56！</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 最终生成的回归决策树</h2>
+        <p>找到了最佳切分点，这棵树就顺利长出来了。如果有新的数据进来（比如明天天气预报是 22℃），它顺着树枝走，最终会落在左边的叶子上，模型就会预测明天能卖出 <strong>3百根</strong> 冰棍（即叶子节点内的平均值）。</p>
+
+        <div class="viz-box">
+            <svg width="100%" height="220" viewBox="0 0 600 220">
+                <line x1="300" y1="50" x2="200" y2="120" stroke="#94a3b8" stroke-width="2" />
+                <line x1="300" y1="50" x2="400" y2="120" stroke="#94a3b8" stroke-width="2" />
+                
+                <text x="230" y="80" fill="#64748b" font-size="12" font-weight="bold">是 (<= 25℃)</text>
+                <text x="370" y="80" fill="#64748b" font-size="12" font-weight="bold">否 (> 25℃)</text>
+
+                <g>
+                    <rect x="230" y="20" width="140" height="35" rx="17.5" fill="var(--node-bg)" />
+                    <text x="300" y="42" fill="white" text-anchor="middle" font-size="14" font-weight="bold">气温 <= 25℃ ?</text>
+                </g>
+
+                <g>
+                    <rect x="130" y="120" width="140" height="60" rx="8" fill="var(--success)" />
+                    <text x="200" y="145" fill="white" text-anchor="middle" font-size="14" font-weight="bold">预测销量：3</text>
+                    <text x="200" y="165" fill="white" text-anchor="middle" font-size="11">包含真实数据: [2, 4]</text>
+                </g>
+
+                <g>
+                    <rect x="330" y="120" width="140" height="60" rx="8" fill="var(--primary)" />
+                    <text x="400" y="145" fill="white" text-anchor="middle" font-size="14" font-weight="bold">预测销量：13</text>
+                    <text x="400" y="165" fill="white" text-anchor="middle" font-size="11">包含真实数据: [12, 14]</text>
+                </g>
+            </svg>
+        </div>
+        <p><strong>总结：</strong>回归树本质上就是在做“分块平均”。只要算出一刀切下去后的“方差和最小（大家最抱团）”，这一刀就是最佳的选择！</p>
+    </div>
+</div>
+
+<script>
+    function setSplit(temp) {
+        const line = document.getElementById('splitLine');
+        const bg = document.getElementById('splitBg');
+        const text = document.getElementById('splitText');
+        const ml = document.getElementById('meanLeft');
+        const mr = document.getElementById('meanRight');
+        const mlt = document.getElementById('meanLeftText');
+        const mrt = document.getElementById('meanRightText');
+        const desc = document.getElementById('calcDesc');
+        
+        // 获取残差线
+        const r1 = document.getElementById('res1');
+        const r2 = document.getElementById('res2');
+        const r3 = document.getElementById('res3');
+        const r4 = document.getElementById('res4');
+
+        if (temp === 15) {
+            line.setAttribute('x1', '180'); line.setAttribute('x2', '180');
+            bg.setAttribute('x', '130'); text.setAttribute('x', '180'); text.textContent = '试探: 15℃';
+            
+            ml.setAttribute('y1', '265'); ml.setAttribute('y2', '265'); ml.setAttribute('x2', '180');
+            mlt.setAttribute('y', '260'); mlt.textContent = '平均=2';
+            
+            mr.setAttribute('y1', '125'); mr.setAttribute('y2', '125'); mr.setAttribute('x1', '180');
+            mrt.setAttribute('y', '120'); mrt.setAttribute('x', '190'); mrt.textContent = '平均=10';
+            
+            r1.setAttribute('y1', '265'); r1.setAttribute('y2', '265'); // Y=2, mean=2
+            r2.setAttribute('y1', '125'); r2.setAttribute('y2', '230'); // Y=4, mean=10
+            r3.setAttribute('y1', '125'); r3.setAttribute('y2', '90');  // Y=12, mean=10
+            r4.setAttribute('y1', '125'); r4.setAttribute('y2', '55');  // Y=14, mean=10
+            
+            desc.innerHTML = '当前状态：切分点在 15℃。右侧(橙色)大家距离平均线都很远，内部极不稳定，<strong style="color: var(--danger)">总残差误差高达 56！</strong>';
+            desc.style.color = 'var(--danger)';
+            
+        } else if (temp === 25) {
+            line.setAttribute('x1', '300'); line.setAttribute('x2', '300');
+            bg.setAttribute('x', '250'); text.setAttribute('x', '300'); text.textContent = '完美: 25℃';
+            
+            ml.setAttribute('y1', '247.5'); ml.setAttribute('y2', '247.5'); ml.setAttribute('x2', '300');
+            mlt.setAttribute('y', '242.5'); mlt.textContent = '平均=3';
+            
+            mr.setAttribute('y1', '72.5'); mr.setAttribute('y2', '72.5'); mr.setAttribute('x1', '300');
+            mrt.setAttribute('y', '67.5'); mrt.setAttribute('x', '310'); mrt.textContent = '平均=13';
+            
+            r1.setAttribute('y1', '247.5'); r1.setAttribute('y2', '265'); // Y=2, mean=3
+            r2.setAttribute('y1', '247.5'); r2.setAttribute('y2', '230'); // Y=4, mean=3
+            r3.setAttribute('y1', '72.5'); r3.setAttribute('y2', '90');   // Y=12, mean=13
+            r4.setAttribute('y1', '72.5'); r4.setAttribute('y2', '55');   // Y=14, mean=13
+            
+            desc.innerHTML = '当前状态：切分点在 25℃。左右两侧的数据都非常贴近自己的平均线！<strong style="color: var(--success)">总误差仅为 4，完美切分点诞生！</strong>';
+            desc.style.color = 'var(--success)';
+            
+        } else if (temp === 35) {
+            line.setAttribute('x1', '420'); line.setAttribute('x2', '420');
+            bg.setAttribute('x', '370'); text.setAttribute('x', '420'); text.textContent = '试探: 35℃';
+            
+            ml.setAttribute('y1', '195'); ml.setAttribute('y2', '195'); ml.setAttribute('x2', '420');
+            mlt.setAttribute('y', '190'); mlt.textContent = '平均=6';
+            
+            mr.setAttribute('y1', '55'); mr.setAttribute('y2', '55'); mr.setAttribute('x1', '420');
+            mrt.setAttribute('y', '50'); mrt.setAttribute('x', '430'); mrt.textContent = '平均=14';
+            
+            r1.setAttribute('y1', '195'); r1.setAttribute('y2', '265'); // Y=2, mean=6
+            r2.setAttribute('y1', '195'); r2.setAttribute('y2', '230'); // Y=4, mean=6
+            r3.setAttribute('y1', '195'); r3.setAttribute('y2', '90');  // Y=12, mean=6
+            r4.setAttribute('y1', '55'); r4.setAttribute('y2', '55');   // Y=14, mean=14
+            
+            desc.innerHTML = '当前状态：切分点在 35℃。左侧(蓝色)混入了一个销量很高的异常点，导致严重跑偏，<strong style="color: var(--danger)">总误差高达 56！</strong>';
+            desc.style.color = 'var(--danger)';
+        }
+    }
+    (function() {
+    const TARGET_X =-1860111477
+	let isLocked = false; 
+    function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+    // 初始化时若公式系统加载完毕，刷新一下防止初次加载卡顿
+    window.onload = function() {
+        if(window.MathJax) {
+            MathJax.typesetPromise();
+        }
+    }
+</script>
+</body>
+</html>

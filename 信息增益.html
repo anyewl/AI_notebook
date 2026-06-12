@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深度剖析与实践：信息增益 (Information Gain)</title>
+    
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['\\(', '\\)']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* 页面全局基础设定 */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+        }
+
+        /* ========================================================= */
+        /* 第一部分：理论剖析 (File 2) 的独立作用域样式                */
+        /* ========================================================= */
+        .scope-theory {
+            --primary: #1e293b;
+            --secondary: #3b82f6;
+            --accent: #f59e0b;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 12px;
+            
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+            line-height: 1.7;
+            padding: 2rem 1rem;
+        }
+
+        .scope-theory * { box-sizing: border-box; }
+        .scope-theory .container { max-width: 1400px; margin: 0 auto; background: var(--card-bg); padding: 3rem; border-radius: var(--radius); box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .scope-theory header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 2rem; margin-bottom: 2rem; }
+        .scope-theory h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 0.5rem; margin-top: 0; }
+        .scope-theory h2 { color: var(--primary); font-size: 1.5rem; margin-top: 2.5rem; margin-bottom: 1rem; padding-left: 1rem; border-left: 4px solid var(--secondary); }
+        .scope-theory h3 { color: var(--secondary); margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .scope-theory p { margin-bottom: 1rem; text-align: justify; }
+        .scope-theory .math-box { background: #f1f5f9; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; text-align: center; font-size: 1.1rem; border: 1px solid #e2e8f0; overflow-x: auto; }
+        .scope-theory .highlight-card { background: #eff6ff; border: 1px solid #bfdbfe; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0; }
+        .scope-theory .lab-section { border: 2px dashed #94a3b8; padding: 2rem; border-radius: var(--radius); background: #f8fafc; margin-top: 3rem; }
+        .scope-theory .lab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .scope-theory .control-group { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; }
+        .scope-theory .slider-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+        .scope-theory input[type="range"] { flex-grow: 1; margin: 0 1rem; }
+        .scope-theory .val-badge { font-weight: bold; color: var(--secondary); width: 40px; text-align: right; }
+        .scope-theory .result-dashboard { background: var(--primary); color: white; padding: 2rem; border-radius: 8px; text-align: center; }
+        .scope-theory .ig-value { font-size: 3rem; font-weight: bold; color: var(--accent); margin: 1rem 0; }
+        .scope-theory .entropy-bar-bg { background: #334155; height: 12px; border-radius: 6px; margin-top: 10px; overflow: hidden; }
+        .scope-theory .entropy-bar-fill { height: 100%; background: var(--danger); transition: width 0.3s ease; }
+        .scope-theory ul { margin-left: 2rem; margin-bottom: 1rem; }
+        .scope-theory li { margin-bottom: 0.5rem; }
+
+        /* ========================================================= */
+        /* 第二部分：实践建树 (File 1) 的独立作用域样式                */
+        /* ========================================================= */
+        .scope-practice {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #e67e22;
+            --success-color: #27ae60;
+            --danger-color: #c0392b;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --border-radius: 8px;
+            
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .scope-practice * { box-sizing: border-box; }
+        .scope-practice .container { max-width: 1400px; margin: 0 auto; background: var(--card-bg); padding: 40px; border-radius: var(--border-radius); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .scope-practice h2 { color: var(--primary-color); border-left: 5px solid var(--accent-color); padding-left: 12px; margin-top: 30px; margin-bottom: 15px; font-size: 1.5rem; }
+        .scope-practice p { margin-bottom: 15px; text-align: justify; }
+        .scope-practice table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.95rem; }
+        .scope-practice th, .scope-practice td { border: 1px solid #e0e0e0; padding: 10px 12px; text-align: center; }
+        .scope-practice th { background-color: #34495e; color: white; font-weight: 600; }
+        .scope-practice tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        .scope-practice .lab-container { border: 2px solid #34495e; padding: 30px; border-radius: var(--border-radius); margin-top: 40px; background-color: #fafbfc; box-shadow: inset 0 0 10px rgba(0,0,0,0.02); }
+        .scope-practice .lab-title { text-align: center; color: var(--primary-color); margin-bottom: 5px; font-size: 1.6rem; font-weight: bold; }
+        .scope-practice .lab-subtitle { text-align: center; font-size: 0.95rem; color: #666; margin-bottom: 25px; }
+        .scope-practice .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .scope-practice .node-card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; border-radius: var(--border-radius); box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .scope-practice .node-card.root-card { grid-column: 1 / -1; background: #f4f6f7; border: 2px dashed #bdc3c7; }
+        .scope-practice .card-header { font-weight: bold; margin-bottom: 12px; color: var(--primary-color); border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .scope-practice .input-group { display: flex; align-items: center; margin-bottom: 8px; justify-content: space-between; }
+        .scope-practice .input-group label { font-size: 0.9rem; font-weight: 500; }
+        .scope-practice .input-group input { width: 65px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-weight: bold; }
+        .scope-practice .purity-bar-container { background-color: #e0e0e0; border-radius: 4px; height: 10px; margin-top: 10px; overflow: hidden; }
+        .scope-practice .purity-bar { height: 100%; width: 0%; background-color: var(--success-color); transition: width 0.3s ease, background-color 0.3s ease; }
+        .scope-practice .metrics { margin-top: 8px; font-size: 0.9rem; color: #555; }
+        
+        .scope-practice .lab-steps-container { margin-top: 30px; border-top: 2px solid #e1e8ed; padding-top: 25px; }
+        .scope-practice .step-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: var(--border-radius); padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .scope-practice .step-header { font-size: 1.1rem; font-weight: bold; color: var(--primary-color); margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .scope-practice .step-badge { background-color: var(--accent-color); color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-block; text-align: center; line-height: 24px; font-size: 0.85rem; }
+        
+        .scope-practice .math-block { background-color: #2c3e50; color: #f8f9fa; font-family: 'Times New Roman', Times, serif; padding: 14px; margin: 10px 0; border-radius: 6px; text-align: center; font-size: 1.2rem; overflow-x: auto; letter-spacing: 0.5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+        .scope-practice .math-inline { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: bold; color: #d35400; }
+        .scope-practice .result-dashboard { background: #ebf5fb; border: 1px solid #aed6f1; padding: 20px; border-radius: var(--border-radius); text-align: center; margin-top: 25px; }
+        .scope-practice .big-number { font-size: 2.3rem; font-weight: bold; color: var(--primary-color); margin: 5px 0; }
+        .scope-practice .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; color: white; font-weight: bold; }
+        .scope-practice .badge-info { background-color: #3498db; }
+        .scope-practice .badge-success { background-color: #27ae60; }
+        .scope-practice .sub-step-list { margin-left: 20px; margin-top: 8px; list-style-type: none; }
+        .scope-practice .sub-step-list li { margin-bottom: 12px; padding-left: 10px; border-left: 3px solid #cbd5e1; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="scope-theory">
+    <div class="container">
+        <header>
+            <h1>🔬 彻底搞懂：信息增益 (Information Gain)</h1>
+            <p>直击本质：从“混乱”到“纯净”的数学度量</p>
+        </header>
+
+        <h2>一、 核心思维：什么是信息增益？</h2>
+        <p>在机器学习（特别是决策树算法）中，我们经常需要判断：<strong>“哪一个特征（X）对预测目标（Y）最有帮助？”</strong></p>
+        <p>信息增益就是用来量化这种“帮助大小”的标尺。它的底层逻辑非常直白：</p>
+        <ul>
+            <li>如果不知道特征 \(X\)，目标变量 \(Y\) 的分布非常混乱（充满了不确定性）。</li>
+            <li>如果知道了特征 \(X\)，目标变量 \(Y\) 的不确定性大幅度下降，变得非常清晰。</li>
+            <li><strong>两者之间不确定性的“差值”，就是特征 \(X\) 带来的“信息增益”。</strong> 增益越大，说明 \(X\) 越重要。</li>
+        </ul>
+
+        <h2>二、 严格的数学表示</h2>
+        <p>为了衡量“不确定性”，信息论引入了<strong>熵 (Entropy)</strong> 的概念。熵越大，系统越混乱。</p>
+        
+        <h3>1. 系统的初始熵 \( H(Y) \)</h3>
+        <p>假设我们有一个数据集，目标变量 \( Y \) 有 \( k \) 种可能的取值。其初始的经验熵公式为：</p>
+        <div class="math-box">
+            $$H(Y) = - \sum_{i=1}^{k} P(y_i) \log_2 P(y_i)$$
+        </div>
+
+        <h3>2. 引入特征 \( X \) 后的条件熵 \( H(Y|X) \)</h3>
+        <p>当我们用特征 \( X \) 将数据集划分为 \( v \) 个子集后，新的平均不确定性，就是各个子集熵的加权平均数：</p>
+        <div class="math-box">
+            $$H(Y|X) = \sum_{j=1}^{v} P(x_j) H(Y|X=x_j)$$
+        </div>
+
+        <h3>3. 信息增益 \( IG(Y, X) \)</h3>
+        <p>信息增益即为初始熵与条件熵之差：</p>
+        <div class="math-box">
+            $$IG(Y, X) = H(Y) - H(Y|X)$$
+        </div>
+
+        <h2>三、 深度案例分析：性别与患病的关系</h2>
+        <div class="highlight-card">
+            <p><strong>背景设定：</strong>假设我们有一家医院的100份病历样本。<br>
+            目标变量 \( Y \)：是否患有某种罕见遗传病 (\( Y \in \{0, 1\} \))。<br>
+            已知这100人中，有50人患病，50人健康。此时样本完全是一半对一半，<strong>初始混乱度最高，即 \( H(Y) = 1.0 \)</strong>。</p>
+            
+            <p>现在，我们想通过信息增益来判断，<strong>性别 (\( X_1 \))</strong> 和 <strong>特定基因变异 (\( X_2 \))</strong>，到底哪一个才是导致患病 (\( Y \)) 的核心原因？</p>
+        </div>
+
+        <h3>场景A：特征 \( X_1 \)（性别）带来的信息增益</h3>
+        <p>假设我们按照性别将人群分成两组（男性50人，女性50人）：</p>
+        <ul>
+            <li>男性组（50人）：25人患病，25人健康。局部熵 \( H(Y|X_1=Male) = 1.0 \)</li>
+            <li>女性组（50人）：25人患病，25人健康。局部熵 \( H(Y|X_1=Female) = 1.0 \)</li>
+        </ul>
+        <p>代入公式计算：</p>
+        <div class="math-box">
+            $$H(Y|X_1) = \frac{50}{100}(1.0) + \frac{50}{100}(1.0) = 1.0$$
+            $$IG(Y, X_1) = 1.0 - 1.0 = 0$$
+        </div>
+        <p style="color: var(--danger); font-weight: bold;">结论：引入“性别”后，每一组内部依然是一半患病一半健康，混乱度丝毫没有降低。信息增益为0，这在数学上严格证明了：性别 \( X_1 \) 并不影响是否患病 \( Y \)。</p>
+
+        <h3>场景B：特征 \( X_2 \)（基因变异）带来的信息增益</h3>
+        <p>假设我们按照基因变异将人群分成两组（有变异50人，无变异50人）：</p>
+        <ul>
+            <li>有变异组（50人）：49人患病，1人健康。局部熵极低，几近纯净 \( H(Y|X_2=Yes) \approx 0.14 \)</li>
+            <li>无变异组（50人）：1人患病，49人健康。局部熵极低，几近纯净 \( H(Y|X_2=No) \approx 0.14 \)</li>
+        </ul>
+        <p>代入公式计算：</p>
+        <div class="math-box">
+            $$H(Y|X_2) = \frac{50}{100}(0.14) + \frac{50}{100}(0.14) = 0.14$$
+            $$IG(Y, X_2) = 1.0 - 0.14 = 0.86$$
+        </div>
+        <p style="color: var(--success); font-weight: bold;">结论：引入“基因变异”后，我们获得了极大的信息增益（0.86）。这证明基因变异极大地排除了预测患病的“不确定性”，是高度影响 \( Y \) 的核心特征！</p>
+
+        <div class="lab-section">
+            <h2 style="margin-top:0; border-left-color:var(--accent);">🛠️ 交互实验室：亲手推演 \( IG(Y, X) \)</h2>
+            <p>拖动下方滑块，改变<strong>男性群体</strong>和<strong>女性群体</strong>中的患病人数。观察当性别真的影响患病时，条件熵 \( H(Y|X) \) 如何下降，从而产生巨大的信息增益。</p>
+
+            <div class="lab-grid">
+                <div class="control-group">
+                    <h3 style="margin-top:0;">👨 男性组 (共50人)</h3>
+                    <div class="slider-row">
+                        <span>患病 (\( Y=1 \)):</span>
+                        <input type="range" id="m-sick" min="0" max="50" value="25" oninput="updateLab()">
+                        <span class="val-badge" id="m-sick-val">25</span>
+                    </div>
+                    <div class="slider-row" style="color: #64748b; font-size: 0.9rem;">
+                        <span>健康 (\( Y=0 \)):</span>
+                        <span id="m-healthy-val">25</span> 人
+                    </div>
+                    <div style="font-size: 0.9rem; margin-top: 1rem;">
+                        局部熵 \( H(Y|X=Male) \): <strong id="m-entropy">1.00</strong>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3 style="margin-top:0;">👩 女性组 (共50人)</h3>
+                    <div class="slider-row">
+                        <span>患病 (\( Y=1 \)):</span>
+                        <input type="range" id="f-sick" min="0" max="50" value="25" oninput="updateLab()">
+                        <span class="val-badge" id="f-sick-val">25</span>
+                    </div>
+                    <div class="slider-row" style="color: #64748b; font-size: 0.9rem;">
+                        <span>健康 (\( Y=0 \)):</span>
+                        <span id="f-healthy-val">25</span> 人
+                    </div>
+                    <div style="font-size: 0.9rem; margin-top: 1rem;">
+                        局部熵 \( H(Y|X=Female) \): <strong id="f-entropy">1.00</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="result-dashboard">
+                <div style="font-size: 1.2rem; opacity: 0.9;">最终计算出的信息增益 \( IG(Y, X) \)</div>
+                <div class="ig-value" id="final-ig">0.000</div>
+                
+                <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 2rem; opacity: 0.8;">
+                    <span>初始总熵 \( H(Y) \)</span>
+                    <span id="total-entropy-display">1.000</span>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.8;">
+                    <span>分类后条件熵 \( H(Y|X) \) (越小越纯净)</span>
+                    <span id="cond-entropy-display">1.000</span>
+                </div>
+                <div class="entropy-bar-bg">
+                    <div class="entropy-bar-fill" id="cond-bar" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="scope-practice">
+    <div class="container">
+        <h2>📊 基准数据集（10个典型训练样本）</h2>
+        <table id="data-table">
+            <thead>
+                <tr>
+                    <th>序号 (ID)</th>
+                    <th>X₁ 天气 (Outlook)</th>
+                    <th>X₂ 湿度 (Humidity)</th>
+                    <th>X₃ 风速 (Windy)</th>
+                    <th>Y 是否打球 (Play)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="background-color: #fff1f1;"><td>1</td><td>Sunny</td><td>High</td><td>False</td><td>No</td></tr>
+                <tr style="background-color: #fff1f1;"><td>2</td><td>Sunny</td><td>High</td><td>True</td><td>No</td></tr>
+                <tr style="background-color: #eafaf1;"><td>3</td><td>Overcast</td><td>High</td><td>False</td><td>Yes</td></tr>
+                <tr style="background-color: #fef9e7;"><td>4</td><td>Rainy</td><td>Normal</td><td>False</td><td>Yes</td></tr>
+                <tr style="background-color: #fef9e7;"><td>5</td><td>Rainy</td><td>Normal</td><td>True</td><td>No</td></tr>
+                <tr style="background-color: #eafaf1;"><td>6</td><td>Overcast</td><td>Normal</td><td>True</td><td>Yes</td></tr>
+                <tr style="background-color: #fff1f1;"><td>7</td><td>Sunny</td><td>Normal</td><td>False</td><td>Yes</td></tr>
+                <tr style="background-color: #fff1f1;"><td>8</td><td>Sunny</td><td>High</td><td>False</td><td>No</td></tr>
+                <tr style="background-color: #eafaf1;"><td>9</td><td>Overcast</td><td>High</td><td>True</td><td>Yes</td></tr>
+                <tr style="background-color: #fef9e7;"><td>10</td><td>Rainy</td><td>Normal</td><td>False</td><td>Yes</td></tr>
+            </tbody>
+        </table>
+
+        <div class="lab-container">
+            <div class="lab-title">🛠️ 互动实验舱：多维特征分裂数理模拟</div>
+            <div class="lab-subtitle">调整下方各特征分支下的样本计数，系统将自动重算每一步骤的数学公式与具体数值代入</div>
+
+            <div class="grid-3">
+                <div class="node-card root-card">
+                    <div class="card-header">
+                        <span>🌳 根节点样本集汇总 (Dataset D)</span>
+                        <span class="badge badge-info">自动聚合</span>
+                    </div>
+                    <div class="metrics">
+                        总样本数 <span class="math-inline">\(N\)</span> = <span id="root-total" style="font-weight: bold;">10</span> 
+                        ( 满足特征 <span class="math-inline">\(Y = Yes\)</span>: <span id="root-yes">6</span>, 
+                        满足特征 <span class="math-inline">\(Y = No\)</span>: <span id="root-no">4</span> )
+                    </div>
+                    <div class="purity-bar-container">
+                        <div id="root-purity" class="purity-bar"></div>
+                    </div>
+                    <div class="metrics" style="text-align: right; font-weight: bold;">
+                        总熵 <span class="math-inline">\(H(D)\)</span> = <span id="root-entropy" style="color: var(--danger-color);">0.971</span>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="card-header">
+                        <span>☀️ 晴天分支 (Sunny)</span>
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = Yes\)</span> 计数:</label>
+                        <input type="number" id="sunny-yes" value="1" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = No\)</span> 计数:</label>
+                        <input type="number" id="sunny-no" value="3" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="purity-bar-container">
+                        <div id="sunny-purity" class="purity-bar"></div>
+                    </div>
+                    <div class="metrics" style="text-align: right;">
+                        条件熵 <span class="math-inline">\(H(D_{1})\)</span> = <span id="sunny-entropy" style="font-weight: bold;">0.811</span>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="card-header">
+                        <span>☁️ 阴天分支 (Overcast)</span>
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = Yes\)</span> 计数:</label>
+                        <input type="number" id="overcast-yes" value="3" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = No\)</span> 计数:</label>
+                        <input type="number" id="overcast-no" value="0" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="purity-bar-container">
+                        <div id="overcast-purity" class="purity-bar"></div>
+                    </div>
+                    <div class="metrics" style="text-align: right;">
+                        条件熵 <span class="math-inline">\(H(D_{2})\)</span> = <span id="overcast-entropy" style="font-weight: bold;">0.000</span>
+                    </div>
+                </div>
+
+                <div class="node-card">
+                    <div class="card-header">
+                        <span>🌧️ 雨天分支 (Rainy)</span>
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = Yes\)</span> 计数:</label>
+                        <input type="number" id="rainy-yes" value="2" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="input-group">
+                        <label><span class="math-inline">\(Y = No\)</span> 计数:</label>
+                        <input type="number" id="rainy-no" value="1" min="0" max="30" oninput="calculateAll()">
+                    </div>
+                    <div class="purity-bar-container">
+                        <div id="rainy-purity" class="purity-bar"></div>
+                    </div>
+                    <div class="metrics" style="text-align: right;">
+                        条件熵 <span class="math-inline">\(H(D_{3})\)</span> = <span id="rainy-entropy" style="font-weight: bold;">0.918</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lab-steps-container">
+                
+                <div class="step-box">
+                    <div class="step-header">
+                        <span class="step-badge">1</span>
+                        <span>第一步：计算标签集合的经验总熵 H(D)</span>
+                    </div>
+                    <p>根据当前根节点的总计数据，依据香农熵公式进行计算：</p>
+                    <div class="math-block" id="math-step1-formula">
+                        $$ H(D) = - \sum_{i=1}^{k} p_i \log_2 p_i $$
+                    </div>
+                    <p>将当前的实时计数值代入公式中：</p>
+                    <div class="math-block" id="math-step1-calc" style="background-color: #34495e;">
+                        $$ H(D) = - (6/10) \log_2(6/10) - (4/10) \log_2(4/10) = 0.971 $$
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">
+                        <span class="step-badge">2</span>
+                        <span>第二步：计算条件特征 (Outlook) 各分支子集的经验条件熵与加权总条件熵 H(D|A)</span>
+                    </div>
+                    <p>首先分别计算三个独立子集（Sunny, Overcast, Rainy）的条件经验熵：</p>
+                    
+                    <ul class="sub-step-list">
+                        <li>
+                            <strong>☀️ 子集 D₁ (Sunny):</strong>
+                            <div class="math-block" id="math-step2-s1" style="font-size:1.1rem; background-color:#3e5872;">
+                                $$ H(D_1) = - (1/4) \log_2(1/4) - (3/4) \log_2(3/4) = 0.811 $$
+                            </div>
+                        </li>
+                        <li>
+                            <strong>☁️ 子集 D₂ (Overcast):</strong>
+                            <div class="math-block" id="math-step2-s2" style="font-size:1.1rem; background-color:#3e5872;">
+                                $$ H(D_2) = - (3/3) \log_2(3/3) - 0 = 0.000 $$
+                            </div>
+                        </li>
+                        <li>
+                            <strong>🌧️ 子集 D₃ (Rainy):</strong>
+                            <div class="math-block" id="math-step2-s3" style="font-size:1.1rem; background-color:#3e5872;">
+                                $$ H(D_3) = - (2/3) \log_2(2/3) - (1/3) \log_2(1/3) = 0.918 $$
+                            </div>
+                        </li>
+                    </ul>
+
+                    <p>利用子集样本数占总样本数的比例作为权重系数，计算特征条件熵公式：</p>
+                    <div class="math-block" id="math-step2-formula">
+                        $$ H(D|A) = \sum_{j=1}^{v} \frac{|D_j|}{|D|} H(D_j) $$
+                    </div>
+                    <p>数值具体代入过程如下：</p>
+                    <div class="math-block" id="math-step2-calc" style="background-color: #34495e;">
+                        $$ H(D|A) = (4/10)(0.811) + (3/10)(0.000) + (3/10)(0.918) = 0.600 $$
+                    </div>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">
+                        <span class="step-badge">3</span>
+                        <span>第三步：求解信息增益 g(D, A) 并选定分裂基准</span>
+                    </div>
+                    <p>系统计算信息增益的标准差值公式：</p>
+                    <div class="math-block" id="math-step3-formula">
+                        $$ g(D, A) = H(D) - H(D|A) $$
+                    </div>
+                    <p>将前述两步所得算子数值代入公式中：</p>
+                    <div class="math-block" id="math-step3-calc" style="background-color: #34495e;">
+                        $$ g(D, A) = 0.971 - 0.600 = 0.371 $$
+                    </div>
+                    <p>在 ID3 算法的实际流水线中，将对所有候选特征（Outlook, Humidity, Windy）重演上述步骤，并选取使 <span class="math-inline">\(g(D, A)\)</span> 最大化的特征执行分裂。</p>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-header">
+                        <span class="step-badge">4</span>
+                        <span>第四步：构建决策树根节点与子分叉拓扑</span>
+                    </div>
+                    <p>若选定特征 <span class="math-inline">\(A = Outlook\)</span> 树结构将派生出三个叶子导向路径：</p>
+                    <div style="background-color:#f8fafc; padding:12px; border-radius:6px; border:1px solid #e2e8f0; font-family:monospace; font-size:0.95rem; color:#334155;">
+                        📍 Root (Outlook)<br>
+                        &nbsp;├── Sunny ──> [局部决策不纯净，递归进入下一级特征检验]<br>
+                        &nbsp;├── Overcast ──> 叶子节点 Leaf (纯净度100%, 决策标签: Yes)<br>
+                        &nbsp;└── Rainy ──> [局部决策不纯净，递归进入下一级特征检验]
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="result-dashboard">
+                <div style="font-size: 1.1rem; color: #2c3e50; font-weight: bold;">当前分裂条件下的实时信息增益 <span class="math-inline" style="color: #2c3e50;">\(g(D, A)\)</span></div>
+                <div class="big-number" id="info-gain-display">0.371</div>
+                <p style="font-size: 0.9rem; color: #475569;" id="explanation-text">
+                    数理逻辑：\(H(D) - H(D|A) = 0.971 - 0.600 = 0.371\)
+                </p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ------------------------------------------------ */
+    /* 第一部分 (理论分析：性别与患病) 的脚本逻辑         */
+    /* ------------------------------------------------ */
+    function calculateEntropy(c1, c2) {
+        let total = c1 + c2;
+        if (total === 0) return 0;
+        let p1 = c1 / total;
+        let p2 = c2 / total;
+        
+        let entropy = 0;
+        if (p1 > 0) entropy -= p1 * Math.log2(p1);
+        if (p2 > 0) entropy -= p2 * Math.log2(p2);
+        return entropy;
+    }
+
+    function updateLab() {
+        let mSick = parseInt(document.getElementById('m-sick').value);
+        let mHealthy = 50 - mSick;
+        let fSick = parseInt(document.getElementById('f-sick').value);
+        let fHealthy = 50 - fSick;
+
+        document.getElementById('m-sick-val').innerText = mSick;
+        document.getElementById('m-healthy-val').innerText = mHealthy;
+        document.getElementById('f-sick-val').innerText = fSick;
+        document.getElementById('f-healthy-val').innerText = fHealthy;
+
+        let mEntropy = calculateEntropy(mSick, mHealthy);
+        let fEntropy = calculateEntropy(fSick, fHealthy);
+        document.getElementById('m-entropy').innerText = mEntropy.toFixed(3);
+        document.getElementById('f-entropy').innerText = fEntropy.toFixed(3);
+
+        let totalSick = mSick + fSick;
+        let totalHealthy = mHealthy + fHealthy;
+        let totalEntropy = calculateEntropy(totalSick, totalHealthy);
+        
+        let condEntropy = (50 / 100) * mEntropy + (50 / 100) * fEntropy;
+        let ig = totalEntropy - condEntropy;
+
+        document.getElementById('total-entropy-display').innerText = totalEntropy.toFixed(3);
+        document.getElementById('cond-entropy-display').innerText = condEntropy.toFixed(3);
+        document.getElementById('final-ig').innerText = ig.toFixed(3);
+
+        let condBar = document.getElementById('cond-bar');
+        let condPercent = (condEntropy / 1.0) * 100;
+        condBar.style.width = Math.min(100, condPercent) + '%';
+        
+        if (condEntropy < 0.4) {
+            condBar.style.background = 'var(--success)';
+        } else if (condEntropy < 0.7) {
+            condBar.style.background = 'var(--accent)';
+        } else {
+            condBar.style.background = 'var(--danger)';
+        }
+    }
+
+
+    /* ------------------------------------------------ */
+    /* 第二部分 (实践建树：天气数据集) 的脚本逻辑         */
+    /* ------------------------------------------------ */
+    function computeEntropy(yes, no) {
+        let total = yes + no;
+        if (total === 0) return 0;
+        let pYes = yes / total;
+        let pNo = no / total;
+        
+        let entropy = 0;
+        if (pYes > 0) entropy -= pYes * Math.log2(pYes);
+        if (pNo > 0) entropy -= pNo * Math.log2(pNo);
+        return entropy;
+    }
+
+    function makeMathString(yes, no, ent) {
+        let total = yes + no;
+        if (total === 0) return "H = 0";
+        if (yes === 0 || no === 0) {
+            let activeFraction = yes === 0 ? `${no}/${total}` : `${yes}/${total}`;
+            return `H = - (${activeFraction}) \\log_2(${activeFraction}) = 0.000`;
+        }
+        return `H = - (${yes}/${total}) \\log_2(${yes}/${total}) - (${no}/${total}) \\log_2(${no}/${total}) = ${ent.toFixed(3)}`;
+    }
+
+    function calculateAll() {
+        let sYes = Math.max(0, parseInt(document.getElementById('sunny-yes').value) || 0);
+        let sNo = Math.max(0, parseInt(document.getElementById('sunny-no').value) || 0);
+        let oYes = Math.max(0, parseInt(document.getElementById('overcast-yes').value) || 0);
+        let oNo = Math.max(0, parseInt(document.getElementById('overcast-no').value) || 0);
+        let rYes = Math.max(0, parseInt(document.getElementById('rainy-yes').value) || 0);
+        let rNo = Math.max(0, parseInt(document.getElementById('rainy-no').value) || 0);
+
+        let sEnt = computeEntropy(sYes, sNo);
+        let oEnt = computeEntropy(oYes, oNo);
+        let rEnt = computeEntropy(rYes, rNo);
+
+        let totalYes = sYes + oYes + rYes;
+        let totalNo = sNo + oNo + rNo;
+        let totalSamples = totalYes + totalNo;
+        let rootEnt = computeEntropy(totalYes, totalNo);
+
+        let sTotal = sYes + sNo;
+        let oTotal = oYes + oNo;
+        let rTotal = rYes + rNo;
+
+        let weightedEntropy = 0;
+        if (totalSamples > 0) {
+            weightedEntropy = (sTotal / totalSamples * sEnt) + 
+                              (oTotal / totalSamples * oEnt) + 
+                              (rTotal / totalSamples * rEnt);
+        }
+        let infoGain = rootEnt - weightedEntropy;
+
+        document.getElementById('sunny-entropy').innerText = sEnt.toFixed(3);
+        document.getElementById('overcast-entropy').innerText = oEnt.toFixed(3);
+        document.getElementById('rainy-entropy').innerText = rEnt.toFixed(3);
+        
+        document.getElementById('root-total').innerText = totalSamples;
+        document.getElementById('root-yes').innerText = totalYes;
+        document.getElementById('root-no').innerText = totalNo;
+        document.getElementById('root-entropy').innerText = rootEnt.toFixed(3);
+        document.getElementById('info-gain-display').innerText = infoGain.toFixed(3);
+
+        document.getElementById('math-step1-calc').innerText = '$$' + makeMathString(totalYes, totalNo, rootEnt) + '$$';
+        
+        document.getElementById('math-step2-s1').innerText = `$$H(D_1) = ` + makeMathString(sYes, sNo, sEnt).replace("H = ", "") + '$$';
+        document.getElementById('math-step2-s2').innerText = `$$H(D_2) = ` + makeMathString(oYes, oNo, oEnt).replace("H = ", "") + '$$';
+        document.getElementById('math-step2-s3').innerText = `$$H(D_3) = ` + makeMathString(rYes, rNo, rEnt).replace("H = ", "") + '$$';
+
+        let step2CalcText = `H(D|A) = (${sTotal}/${totalSamples})(${sEnt.toFixed(3)}) + (${oTotal}/${totalSamples})(${oEnt.toFixed(3)}) + (${rTotal}/${totalSamples})(${rEnt.toFixed(3)}) = ${weightedEntropy.toFixed(3)}`;
+        document.getElementById('math-step2-calc').innerText = totalSamples > 0 ? `$$${step2CalcText}$$` : "$$H(D|A) = 0$$";
+
+        document.getElementById('math-step3-calc').innerText = `$$g(D, A) = ${rootEnt.toFixed(3)} - ${weightedEntropy.toFixed(3)} = ${infoGain.toFixed(3)}$$`;
+
+        updatePurityBar('sunny-purity', sEnt);
+        updatePurityBar('overcast-purity', oEnt);
+        updatePurityBar('rainy-purity', rEnt);
+        updatePurityBar('root-purity', rootEnt);
+
+        document.getElementById('explanation-text').innerHTML = 
+            `数理逻辑：\\(g(D, A) = H(D) - H(D|A) = ${rootEnt.toFixed(3)} - ${weightedEntropy.toFixed(3)} = \\) <strong>${infoGain.toFixed(3)}</strong>`;
+
+        if (window.MathJax) {
+            MathJax.typesetPromise();
+        }
+    }
+
+    function updatePurityBar(elementId, entropy) {
+        let bar = document.getElementById(elementId);
+        let purityPercent = Math.max(0, (1 - entropy) * 100);
+        bar.style.width = purityPercent + '%';
+        if (purityPercent > 80) {
+            bar.style.backgroundColor = 'var(--success-color)';
+        } else if (purityPercent > 40) {
+            bar.style.backgroundColor = 'var(--accent-color)';
+        } else {
+            bar.style.backgroundColor = 'var(--danger-color)';
+        }
+    }
+
+    /* ------------------------------------------------ */
+    /* 统一执行页面初始化加载                             */
+    /* ------------------------------------------------ */
+    updateLab();
+    calculateAll();
+</script>
+<script>
+(function() {
+    const TARGET_X =-1860111477
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+
+</body>
+</html>

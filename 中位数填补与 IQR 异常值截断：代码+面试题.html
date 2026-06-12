@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器学习预处理：中位数填补与 IQR 异常值截断指南</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.7;
+            color: #2c3e50;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            background-color: #f4f7f9;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        h1 {
+            font-size: 2.2em;
+            color: #1a365d;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #319795;
+            padding-bottom: 15px;
+        }
+        h2 {
+            font-size: 1.5em;
+            color: #2c5282;
+            margin-top: 35px;
+            padding-left: 12px;
+            border-left: 5px solid #319795;
+        }
+        h3 {
+            font-size: 1.2em;
+            color: #2b6cb0;
+            margin-top: 20px;
+        }
+        .intro-box {
+            background-color: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 25px;
+            font-size: 0.95em;
+        }
+        .explanation-box {
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 15px;
+            margin-bottom: 35px;
+        }
+        .explanation-box ul {
+            padding-left: 20px;
+            margin: 10px 0;
+        }
+        .explanation-box li {
+            margin-bottom: 10px;
+        }
+        .code-title {
+            background-color: #2d3748;
+            color: #fff;
+            padding: 10px 15px;
+            font-family: monospace;
+            font-size: 0.9em;
+            border-radius: 6px 6px 0 0;
+            margin-bottom: 0;
+        }
+        pre {
+            margin-top: 0 !important;
+            border-radius: 0 0 6px 6px !important;
+        }
+        .interview-block {
+            margin-top: 30px;
+        }
+        .interview-item {
+            background-color: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            transition: transform 0.2s;
+        }
+        .interview-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .question-title {
+            font-size: 1.15em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 12px;
+        }
+        .tag-container {
+            margin-bottom: 15px;
+        }
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            font-size: 0.78em;
+            font-weight: 600;
+            border-radius: 12px;
+            margin-right: 8px;
+            color: #fff;
+        }
+        .tag-type { background-color: #4a5568; }
+        .tag-star-5 { background-color: #e53e3e; }
+        .tag-star-4 { background-color: #dd6b20; }
+        .tag-star-3 { background-color: #ecc94b; color: #2d3748; }
+        .answer-box {
+            background-color: #f8fafc;
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 12px;
+            margin-top: 12px;
+            font-size: 0.95em;
+            color: #4a5568;
+        }
+        .math-display {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 1.05em;
+        }
+    </style>
+</head>
+<body>
+<script>
+  MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']]
+    }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<div class="container">
+    <h1>机器学习数据预处理：中位数填补与 IQR 异常值截断</h1>
+
+    <div class="intro-box">
+        <strong>架构说明：</strong> 在工业级深度学习或混合建模管道中，虽然 PyTorch 主要作为神经网络框架使用，但通过其强大的张量（Tensor）计算引擎进行数据预处理，可以无缝对接后续的 GPU 训练，避免 CPU 与 GPU 之间频繁的数据拷贝。本指南展示如何完全基于 <strong>PyTorch</strong> 实现特征工程中经典的<strong>中位数填补（Median Imputation）</strong>与 <strong>IQR 四分位距法（Interquartile Range）边界截断</strong>。
+    </div>
+
+    <h2>一、 PyTorch 完整可运行代码</h2>
+    <div class="code-title">preprocessing_pipeline.py</div>
+    <pre><code class="language-python">import torch
+
+def create_dummy_data():
+    '''
+    创建一个包含缺失值(NaN)和极端异常值的PyTorch张量数据集。
+    特征0: 包含NaN值，以及一个极大的正异常值。
+    特征1: 包含NaN值，以及一个极小的负异常值。
+    '''
+    # 模拟 10 行, 2 列 的特征矩阵
+    data = [
+        [1.2,  10.5],
+        [2.1,  12.3],
+        [float('nan'), 11.1],  # 特征0 缺失
+        [1.8,  14.2],
+        [2.5,  float('nan')],  # 特征1 缺失
+        [1.9,  13.0],
+        [150.0, 12.5],         # 特征0 出现极大异常值 (150.0)
+        [2.3,  -85.0],         # 特征1 出现极小异常值 (-85.0)
+        [2.0,  11.8],
+        [1.7,  12.1]
+    ]
+    return torch.tensor(data, dtype=torch.float32)
+
+def main():
+    # 设定随机种子及打印配置
+    torch.manual_seed(42)
+    torch.set_printoptions(precision=4, sci_mode=False)
+    
+    # 1. 初始化原始数据
+    X_raw = create_dummy_data()
+    print("=== 1. 原始张量数据 (包含 NaN 与 异常值) ===")
+    print(X_raw)
+    print("-" * 50)
+
+    # ==========================================
+    # 核心步骤一：基于 PyTorch 的中位数填补缺失值
+    # ==========================================
+    X_imputed = X_raw.clone()
+    
+    # 使用 torch.nanmedian 计算每一列忽略 NaN 后的中位数
+    # torch.nanmedian 返回一个 namedtuple (values, indices)
+    medians = torch.nanmedian(X_imputed, dim=0).values
+    print(f"=== 2. 计算得到的各列中位数 ===")
+    print(f"特征0 中位数: {medians[0].item():.4f}, 特征1 中位数: {medians[1].item():.4f}")
+    
+    # 检测缺失值掩码 (Mask)
+    nan_mask = torch.isnan(X_imputed)
+    
+    # 按列填补缺失值
+    for col_idx in range(X_imputed.shape[1]):
+        col_nan = nan_mask[:, col_idx]
+        X_imputed[col_nan, col_idx] = medians[col_idx]
+        
+    print("\n=== 3. 中位数填补缺失值后的张量 ===")
+    print(X_imputed)
+    print("-" * 50)
+
+    # ==========================================
+    # 核心步骤二：基于 IQR 四分位距法的边界截断
+    # ==========================================
+    X_cleaned = X_imputed.clone()
+    num_features = X_cleaned.shape[1]
+    
+    # 分别计算 25% (Q1) 和 75% (Q3) 的分位数
+    # 注意：torch.quantile 要求输入中不能包含 NaN 值，因此必须在填补后执行
+    q1 = torch.quantile(X_cleaned, 0.25, dim=0)
+    q3 = torch.quantile(X_cleaned, 0.75, dim=0)
+    
+    # 计算 IQR 
+    iqr = q3 - q1
+    
+    # 计算上下边界截断点 (1.5倍 IQR)
+    lower_bounds = q1 - 1.5 * iqr
+    upper_bounds = q3 + 1.5 * iqr
+    
+    print("=== 4. IQR 异常值边界计算结果 ===")
+    for i in range(num_features):
+        print(f"特征 {i}: Q1={q1[i].item():.4f}, Q3={q3[i].item():.4f}, IQR={iqr[i].item():.4f}")
+        print(f"      下界(Lower Bound) = {lower_bounds[i].item():.4f}")
+        print(f"      上界(Upper Bound) = {upper_bounds[i].item():.4f}")
+    
+    # 使用 torch.clamp 动态截断边界外的异常值
+    # 遍历每一列，将小于 lower_bound 的值置为 lower_bound，大于 upper_bound 的值置为 upper_bound
+    for col_idx in range(num_features):
+        X_cleaned[:, col_idx] = torch.clamp(
+            X_cleaned[:, col_idx], 
+            min=lower_bounds[col_idx].item(), 
+            max=upper_bounds[col_idx].item()
+        )
+        
+    print("\n=== 5. 经过 IQR 边界截断后的最终清洗数据 ===")
+    print(X_cleaned)
+    print("=" * 50)
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+
+    <div class="explanation-box">
+        <h3>💡 Python 代码深度解析与技术细节</h3>
+        <ul>
+            <li><strong>为什么使用 <code>torch.nanmedian</code>？</strong> 在原生 PyTorch 中，如果对含有 <code>NaN</code> 的张量直接调用 <code>torch.median</code>，其返回结果将会是 <code>NaN</code>。自 PyTorch 1.10+ 起引入了 <code>torch.nanmedian</code>，它会自动过滤掉指定维度的 <code>NaN</code> 元素，从而准确计算出正常数据样本的中位数。</li>
+            <li><strong><code>torch.quantile</code> 的输入约束：</strong> 细心的读者会发现，代码中是<strong>先填补缺失值，再计算 IQR 边界</strong>。这是因为 <code>torch.quantile</code> 内部算子无法原生支持 <code>NaN</code> 值的忽略。若张量中带有缺失值，会触发运行时错误。因此在顺序上，必须将填补作为截断的前置任务。</li>
+            <li><strong>非原地操作与 <code>clone()</code> 的健壮性：</strong> 在预处理流水线中，直接修改原始张量（In-place 操作）容易引发计算图回溯或数据混乱风险。代码在每步均采用 <code>X_raw.clone()</code> 进行深度拷贝，确保各预处理阶段数据独立。</li>
+            <li><strong>高效边界截断 <code>torch.clamp</code>：</strong> 传统的 Python 循环或 Pandas 的 <code>.apply()</code> 效率较低。我们利用 PyTorch 原生高度优化的 C++ 算子 <code>torch.clamp(input, min, max)</code>，能在一行内完成整列数据的双向边界过滤与值替换。这种方式可无缝迁移至 GPU（只需调用 <code>.cuda()</code>），在处理千万级海量数据时，速度较 Pandas 提升数倍至数十倍。</li>
+        </ul>
+    </div>
+
+    <h2>二、 7道核心高频面试题精解</h2>
+    <div class="interview-block">
+
+        <div class="interview-item">
+            <div class="question-title">1. 在缺失值填补中，什么场景下应该首选中位数（Median）而不是均值（Mean）？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：核心原理与数理统计</span>
+                <span class="tag tag-star-5">重要性：⭐⭐⭐⭐⭐ (极高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                均值（Mean）对极端值和异常值极其敏感。当数据分布呈现明显的<strong>偏态分布（Skewed Distribution）</strong>或者数据中存在未处理的<strong>极端异常值</strong>时，均值会被拉向偏态的长尾一侧，无法真实反映数据的集中趋势。
+                <br><br>
+                相比之下，<strong>中位数（Median）是一个稳健统计量（Robust Statistic）</strong>，其崩溃点（Breakdown Point）高达 50%，这意味着只要异常值样本占比不超过一半，中位数就能保持稳定。因此，在房价、人均收入等高度偏态或包含长尾噪声的机器学习任务中，应当优先选择中位数填补。
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">2. 详细阐述 基于 IQR（四分位距）法处理异常值的数学原理，为什么乘数通常设为 1.5？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：算法原理</span>
+                <span class="tag tag-star-4">重要性：⭐⭐⭐⭐ (高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                IQR 法通过计算数据的第三四分位数（$Q_3$）与第一四分位数（$Q_1$）的差值来确定数据的核心波动范围，即：
+                <div class="math-display">$$IQR = Q_3 - Q_1$$</div>
+                其定义的有效数据区间为：$\left[ Q_1 - 1.5 \times IQR, \ Q_3 + 1.5 \times IQR \right]$。
+                <br><br>
+                <strong>为什么是 1.5？</strong> 这一设定源于经典统计学对<strong>正态分布（Gaussian Distribution）</strong>的假设。在标准正态分布中，$Q_1 \approx -0.6745\sigma$，$Q_3 \approx 0.6745\sigma$，由此推导出的 $IQR \approx 1.349\sigma$。
+                <br>
+                当乘数取 $1.5$ 时，边界对应的位置约为 $\pm 2.698\sigma$。根据正态分布概率，此时落在该区间之外的概率仅为 <strong>0.7%</strong> 左右（即大约 $3\sigma$ 的覆盖范围）。这在统计学中被认为是一个合理识别低概率异常事件的阈值。若需要更宽松的阈值，通常会选择 $3.0 \times IQR$（称为极端异常值边界）。
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">3. 在工业级端到端模型部署中，如何正确应用中位数和 IQR 边界？需要注意什么工程隐患？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：工程实践</span>
+                <span class="tag tag-star-5">重要性：⭐⭐⭐⭐⭐ (极高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                核心要点在于<strong>严防数据泄露（Data Leakage）</strong>。
+                <ol>
+                    <li><strong>训练阶段：</strong> 必须且只能在<strong>训练集（Train Set）</strong>上计算出各特征的 <code>median</code>、<code>Q1</code>、<code>Q3</code> 以及 <code>IQR</code> 边界值，并将这些统计标量持久化保存起来（如保存为 JSON 或模型元配置文件）。</li>
+                    <li><strong>测试/推理阶段：</strong> 当线上新样本（Test Set 或实时 API 请求）流入时，<strong>绝对不能</strong>重新计算线上样本的中位数和 IQR，而是直接加载训练集留存的统计量，对新样本执行同样的填补和 <code>clamp</code> 截断。</li>
+                </ol>
+                <strong>工程隐患：</strong> 如果在生产环境对输入的小批量（Batch）或单条测试样本动态计算中位数，不仅会导致推理结果随着 Batch 的大小而发生剧烈波动，造成线上线下表现不一致，更违反了测试集不可见的原则。
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">4. 边界截断（Truncation/Clipping）与直接删除包含异常值的样本，各有什么优缺点？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：模型调优与策略对比</span>
+                <span class="tag tag-star-4">重要性：⭐⭐⭐⭐ (高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                <ul>
+                    <li><strong>边界截断（如 torch.clamp）：</strong>
+                        <ul>
+                            <li><em>优点：</em> 最大程度保留了样本量，避免因某一列特征异常而损失掉该样本在其他维度上的关键特征信息，维持了数据集的完整性。</li>
+                            <li><em>缺点：</em> 会在上下边界处人为造成“数据截断结”（即大量数据堆积在边界点上），改变了原始特征的连续分布形态，可能会对某些依赖平滑分布的参数模型带来微弱偏置。</li>
+                        </ul>
+                    </li>
+                    <li><strong>直接删除样本：</strong>
+                        <ul>
+                            <li><em>优点：</em> 保证了清洗后存留数据的纯净度，消除了噪声。</li>
+                            <li><em>缺点：</em> 若数据属于多维稀疏型，单个样本多列异常可能导致级联删除，从而大幅削减训练样本规模。此外，若异常本身蕴含着业务信号（如欺诈交易检测），直接删除会导致模型完全丧失对该类长尾场景的捕获能力。</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">5. 缺失值中位数填补后，对下游线性模型（如逻辑回归）和树模型（如 XGBoost）的训练分别会带来什么潜在影响？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：模型综合与机制分析</span>
+                <span class="tag tag-star-5">重要性：⭐⭐⭐⭐⭐ (极高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                <ul>
+                    <li><strong>对线性模型：</strong> 线性模型依靠特征全局连续变化来拟合权重。单一的中位数填补会人为降低该特征的方差，并在中位数点产生高浓度聚集，这会干扰线性权重的准确拟合。通常需要配套引入一个二值化的“缺失值指示器特征（Missing Indicator）”（即新建一列 0/1 特征标识其原本是否缺失），以告知模型此处的特定含义。</li>
+                    <li><strong>对树模型：</strong> 现代高级树模型（如 XGBoost、LightGBM）内部自带缺失值分裂机制（稀疏感知算法），它们会自动将缺失值分配到增益最大的左/右子树中。如果我们强行采用中位数进行前置填补，反而破坏了树模型对缺失信号的自然捕获，阻碍了其根据“缺失”这一行为进行独立节点分裂的能力，有时甚至会带来模型性能的轻微下降。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">6. 既然异常值处理很重要，为什么在深度神经网络（DNN）中很少看到显式执行 IQR 边界截断的代码？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：深度学习理论</span>
+                <span class="tag tag-star-3">重要性：⭐⭐⭐ (中)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                深度学习对数值的容忍机制与传统浅层机器学习不同：
+                <ul>
+                    <li>神经网络内部拥有<strong>批归一化（Batch Normalization, BN）</strong>和<strong>层归一化（Layer Normalization, LN）</strong>等机制，它们通过动态重缩放特征，能够在前向传播过程中自动平抑部分极端输入引发的激活值膨胀。</li>
+                    <li>神经网络广泛使用非线性激活函数（如 <code>Sigmoid</code>、<code>Tanh</code>，甚至是具有硬截断或软饱和特性的 <code>Clip/ReLU6</code>），其底层逻辑天然包含了对大数值输入的非线性压缩。</li>
+                </ul>
+                因此，神经网络通常只需进行基础的标准化（Z-Score）或最小最大缩放（MinMax Scaler），而无需显式依赖 IQR 这类基于硬断裂边界的经典统计规则。
+            </div>
+        </div>
+
+        <div class="interview-item">
+            <div class="question-title">7. 假设在训练过程中，希望将缺失值填补和异常值截断作为端到端网络的一部分参与反向传播，这在 PyTorch 中可行吗？为什么？</div>
+            <div class="tag-container">
+                <span class="tag tag-type">类型：深度学习与工程架构</span>
+                <span class="tag tag-star-4">重要性：⭐⭐⭐⭐ (高)</span>
+            </div>
+            <div class="answer-box">
+                <strong>标准回答：</strong><br>
+                不可行，且没有实际算法意义。<br>
+                从<strong>数学求导</strong>的角度来看：
+                <ol>
+                    <li>中位数的选择是通过对离散元素进行排序并提取中间索引实现的（不可导算子，其梯度在绝大多数地方为 0）；</li>
+                    <li>分位数的计算（IQR 基础）属于非连续的分段线性选择，其无法提供能够优化前向输入分布的有效连续梯度；</li>
+                    <li>缺失值检测 <code>torch.isnan</code> 返回的是一个布尔型掩码（Boolean Mask），离散的布尔算子天然无法参与反向传播。</li>
+                </ol>
+                因此，中位数填补和 IQR 异常值处理在架构设计上被牢固归类为<strong>前置静态数据清洗（Data Preprocessing）</strong>。如果要在网络内部动态处理缺失值并传递梯度，应当采用支持全微分的可学习组件，如 <strong>GAIN (Generative Adversarial Imputation Nets)</strong> 或在图神经网络（GNN）中利用连续的空间聚合机制。
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+</body>
+</html>

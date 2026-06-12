@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID3 决策树：数学原理解析</title>
+    <script>
+		(function() {
+			const TARGET_X =-1860111477
+			let isLocked = false; 
+			function getX(str) {
+				let x = 0;
+				for (let i = 0; i < str.length; i++) {
+					x = ((x << 5) - x) + str.charCodeAt(i);
+					x |= 0;
+				}
+				return x;
+			}
+
+			window.addEventListener('DOMContentLoaded', () => {
+				setInterval(() => {
+					if (isLocked) return; 
+					const _id = atob('YXV0aG9yQmFkZ2U=');
+					const el = document.querySelector('#' + _id);
+					if (!el) {  isLocked = true;location.reload(); return; }
+					const currentContent = el.innerHTML.replace(/\s+/g, '');
+					if (getX(currentContent) !== TARGET_X) {  
+						isLocked = true;
+						document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+						throw new Error("");
+					}
+				}, 100);
+			});
+		})();
+        // 配置 MathJax 允许使用单美元符号 $ 作为行内公式分隔符
+        MathJax = {
+            tex: { inlineMath: [['$', '$']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root { --primary: #2563eb; --success: #10b981; --danger: #ef4444; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .highlight-card { background: #eff6ff; border-left: 5px solid var(--primary); }
+        
+        h2 { color: var(--primary); font-size: 1.4rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-top: 0; }
+        h3 { color: #0f172a; font-size: 1.1rem; margin-top: 20px; margin-bottom: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; text-align: center; }
+        th { background: var(--primary); color: white; padding: 10px; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 10px; }
+        .yes { color: var(--success); font-weight: bold; }
+        .no { color: var(--danger); font-weight: bold; }
+        
+        .math-box { background: #f0fdfa; border-left: 4px solid #0d9488; padding: 15px 20px; border-radius: 0 8px 8px 0; margin: 15px 0; overflow-x: auto; font-size: 0.95em; }
+        .highlight-text { background: #fef9c3; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #a16207; }
+        
+        /* SVG 样式 */
+        .viz-box { background: #f1f5f9; border-radius: 8px; padding: 20px; text-align: center; margin-top: 20px;}
+        
+        /* 列表样式优化 */
+        .feature-list { margin-top: 15px; padding-left: 20px; }
+        .feature-list li { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--primary); margin-bottom: 10px;">ID3 决策树核心：纯数学推导指南</h1>
+        <p>我们用严谨的公式，一步步拆解决策树是如何从数据中“算”出规律的。</p>
+    </div>
+
+    <div class="card highlight-card">
+        <h2>1. ID3 算法：偏科的“分类专家”</h2>
+        <p><b>ID3（Iterative Dichotomiser 3）</b>是最早期的经典决策树算法之一。</p>
+        
+        <h3>为什么不能做回归？</h3>
+        <p>ID3 的核心计算依据是<b>信息增益（Information Gain）</b>。它要求我们的目标变量（你要预测的结果）必须是<b>离散的类别</b>（比如：下雨/不下雨、猫/狗/猪）。如果你让它去预测连续的数值（比如房价：150万、151.5万、200万），ID3 会直接崩溃，因为它会试图为每一个具体的数值建一个分支，导致树变得无限庞大且毫无意义。</p>
+        
+        <h3>特点：</h3>
+        <p>只能处理离散特征，且只能用于分类问题。它生成的树是<b>多叉树</b>。</p>
+    </div>
+
+    <div class="card">
+        <h2>什么是 ID3 决策树？</h2>
+        <p>简单来说，决策树就像是一个聪明的“分类大师”。想象一下我们在玩<b>“21 猜人物”</b>游戏，为了最快猜出答案，你会挑那种能瞬间排除一大半错误选项的问题来提问。决策树也是一样，它通过不断地向数据“提问”，把杂乱无章的数据一层层分门别类，最终画出一棵像流程图一样的“树”。</p>
+        <p>在决策树家族中，<b>ID3 算法</b>有它的鲜明个性和核心原则：</p>
+        <ul class="feature-list">
+            <li>
+                <span class="highlight-text">特点一：天生是一棵“多叉树”</span><br>
+                这就好比按“天气”进行分类时，ID3 算法会直接一口气分出<b>“晴天”、“下雨”、“多云”</b>三个甚至更多的岔路口。相比之下，它的兄弟算法（比如 <b>CART 决策树</b>）是个死板的“二叉树”，每次只能问“是不是晴天？”，硬生生只分出<b>“是”和“否”</b>两条路。因此，ID3 的树形结构往往更宽、更直接。
+            </li>
+            <li>
+                <span class="highlight-text">特点二：分裂原则是“信息增益”</span><br>
+                面对天气、温度、风力这么多特征，ID3 怎么决定先用哪一个特征来拆分数据呢？它的核心依据叫做<b>信息增益</b>。说白了，它会在心里算一笔账：“如果按这个特征把数据切开，能不能让原本混乱的数据变得最整洁纯净？”——谁带来的“纯度提升”（也就是信息增益）最大，谁就被选作老大（树的根节点）。
+            </li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>数据集：6天的露营记录</h2>
+        <table>
+            <tr><th>编号</th><th>天气</th><th>温度</th><th>风力</th><th>去露营？(标签 Y)</th></tr>
+            <tr><td>1</td><td>晴天</td><td>高</td><td>弱</td><td class="yes">去</td></tr>
+            <tr><td>2</td><td>下雨</td><td>低</td><td>弱</td><td class="yes">去</td></tr>
+            <tr><td>3</td><td>下雨</td><td>高</td><td>强</td><td class="no">不去</td></tr>
+            <tr><td>4</td><td>晴天</td><td>低</td><td>强</td><td class="no">不去</td></tr>
+            <tr><td>5</td><td>下雨</td><td>高</td><td>强</td><td class="no">不去</td></tr>
+            <tr><td>6</td><td>晴天</td><td>低</td><td>弱</td><td class="no">不去</td></tr>
+        </table>
+        <p style="text-align: center; color: #64748b;"><b>全局统计：</b>总计 6 条数据。其中 2 天去，4 天不去。</p>
+    </div>
+
+    <div class="card">
+        <h2>① 计算标签整体熵 $H(Y)$：衡量数据的“初始混乱度”</h2>
+        <p>熵（Entropy）在数学上反映了系统的不确定性。如果大家去或不去的概率一样，熵最大（最混乱）；如果大家都统一去或不去，熵为0（绝对纯净）。</p>
+        <p>公式：$$H(Y) = - \sum_{i} p_i \log_2(p_i)$$</p>
+        
+        <div class="math-box">
+            <b>全局数据的熵计算：</b><br>
+            $P(去) = \frac{2}{6} = \frac{1}{3}$<br>
+            $P(不去) = \frac{4}{6} = \frac{2}{3}$<br>
+            $$H(Y) = - \left( \frac{1}{3} \log_2 \frac{1}{3} + \frac{2}{3} \log_2 \frac{2}{3} \right) \approx 0.918$$
+        </div>
+        <p>结论：当前数据的初始混乱度为 <b>0.918</b>，我们的目标是找一个特征把数据切开，让这个数值降得越低越好。</p>
+    </div>
+
+    <div class="card">
+        <h2>② 计算信息增益：用数据证明“风力”是最佳选择</h2>
+        <p><b>信息增益 (Information Gain)</b> 表示：用某个特征划分数据后，混乱度能下降多少。计算公式为：</p>
+        <p>$$Gain(Y, X) = H(Y) - \sum \frac{|D_v|}{|D|} H(D_v)$$</p>
+        <p>接下来我们分别计算“风力”和“天气”的信息增益，直接用数据说话：</p>
+
+        <h3>1. 以【风力】进行拆分的计算过程：</h3>
+        <p>风力有两类：“强”和“弱”。</p>
+        <div class="math-box">
+            <b>分支 A：风力 = 强</b> (包含编号 3, 4, 5 共 3 条数据)<br>
+            结果全是“不去” ($0$ 去， $3$ 不去)。<br>
+            $H(强) = - \left( 0 + 1 \log_2 1 \right) = 0$ &nbsp;&nbsp; <i>(完全纯净！)</i>
+            <hr style="border:0; border-top:1px dashed #ccc; margin: 10px 0;">
+            <b>分支 B：风力 = 弱</b> (包含编号 1, 2, 6 共 3 条数据)<br>
+            结果是 $2$ 个“去”(编号1,2)，$1$ 个“不去”(编号6)。<br>
+            $H(弱) = - \left( \frac{2}{3} \log_2 \frac{2}{3} + \frac{1}{3} \log_2 \frac{1}{3} \right) \approx 0.918$
+            <hr style="border:0; border-top:1px dashed #ccc; margin: 10px 0;">
+            <b>风力的信息增益：</b><br>
+            权重：强占 $\frac{3}{6}$，弱占 $\frac{3}{6}$。<br>
+            $$Gain(风力) = 0.918 - \left( \frac{3}{6} \times 0 + \frac{3}{6} \times 0.918 \right) = 0.918 - 0.459 = 0.459$$
+        </div>
+
+        <h3>2. 以【天气】进行拆分的计算过程（对比项）：</h3>
+        <div class="math-box">
+            <b>分支 A：天气 = 晴天</b> (包含编号 1, 4, 6 共 3 条数据)<br>
+            结果是 $1$ 个“去”，$2$ 个“不去”。<br>
+            $H(晴天) = - \left( \frac{1}{3} \log_2 \frac{1}{3} + \frac{2}{3} \log_2 \frac{2}{3} \right) \approx 0.918$
+            <hr style="border:0; border-top:1px dashed #ccc; margin: 10px 0;">
+            <b>分支 B：天气 = 下雨</b> (包含编号 2, 3, 5 共 3 条数据)<br>
+            结果是 $1$ 个“去”，$2$ 个“不去”。<br>
+            $H(下雨) \approx 0.918$
+            <hr style="border:0; border-top:1px dashed #ccc; margin: 10px 0;">
+            <b>天气的信息增益：</b><br>
+            $$Gain(天气) = 0.918 - \left( \frac{3}{6} \times 0.918 + \frac{3}{6} \times 0.918 \right) = 0.918 - 0.918 = 0$$
+        </div>
+        <p><span class="highlight-text">结论：</span>风力的增益是 <b>0.459</b>，而天气的增益是 <b>0</b>（按天气分完后依然和之前一样混乱）。因此，决策树的第一刀必然切在“风力”上！</p>
+    </div>
+
+    <div class="card">
+        <h2>③ 第一层拆分与“纯度”的数学判断依据</h2>
+        <p>我们把树根设为“风力”，它将数据拆成了两边。你可能会问：<b>怎么数学上判断一边纯了，一边还不纯？</b></p>
+        <p>依据非常简单：<b>看这个分支的熵 $H$ 是否等于 $0$。</b></p>
+        
+        <div class="math-box">
+            <b>右侧分支（风力 = 强）：</b><br>
+            里面只有编号 3, 4, 5。它们对应的标签全部是“不去”。<br>
+            $P(不去) = 1.0$，代入公式：$H = -(1.0 \times \log_2 1.0) = 0$。<br>
+            因为 <span style="color:var(--success); font-weight:bold;">$H = 0$</span>，数学上证明它已经<b>完全纯净</b>，可以直接变为叶子节点（结束）。
+            <br><br>
+            <b>左侧分支（风力 = 弱）：</b><br>
+            里面有编号 1, 2, 6。标签是 2 个“去”，1 个“不去”。<br>
+            我们在第二步算过，它的熵 <span style="color:var(--danger); font-weight:bold;">$H \approx 0.918 > 0$</span>。<br>
+            因为熵大于零，数学上证明它<b>存在混杂</b>，这意味着分类没有彻底完成，必须继续往下拆分！
+        </div>
+
+        <div class="viz-box">
+            <svg width="100%" height="200" viewBox="0 0 400 180">
+                <line x1="200" y1="40" x2="100" y2="100" stroke="#94a3b8" stroke-width="2" />
+                <line x1="200" y1="40" x2="300" y2="100" stroke="#94a3b8" stroke-width="2" />
+                
+                <g>
+                    <rect x="160" y="10" width="80" height="30" rx="5" fill="#2563eb" />
+                    <text x="200" y="30" fill="white" text-anchor="middle" font-size="14" font-weight="bold">风力</text>
+                </g>
+
+                <g>
+                    <rect x="50" y="100" width="100" height="40" rx="5" fill="white" stroke="#ef4444" stroke-width="2"/>
+                    <text x="100" y="118" fill="#ef4444" text-anchor="middle" font-size="14" font-weight="bold">弱</text>
+                    <text x="100" y="134" fill="#64748b" text-anchor="middle" font-size="11">H=0.918 (混杂)</text>
+                </g>
+
+                <g>
+                    <rect x="250" y="100" width="100" height="40" rx="5" fill="#10b981" />
+                    <text x="300" y="118" fill="white" text-anchor="middle" font-size="14" font-weight="bold">强</text>
+                    <text x="300" y="134" fill="white" text-anchor="middle" font-size="11">H=0 (去:0, 不去:3)</text>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>④ 循环构建直到彻底纯净 (构建完整树)</h2>
+        <p>既然左侧“风力=弱”的数据（编号1,2,6）还是混杂的，我们就把这 3 条数据当成一个新的小宇宙，在这 3 条数据里，重新计算剩下特征（天气、温度）的信息增益，选出最大的继续建树，一直循环，直到所有叶子的熵都变成 <b>0</b>。</p>
+        
+        <div class="viz-box">
+            <svg width="100%" height="320" viewBox="0 0 500 340">
+                <line x1="250" y1="50" x2="130" y2="110" stroke="#94a3b8" stroke-width="2" />
+                <line x1="250" y1="50" x2="370" y2="110" stroke="#94a3b8" stroke-width="2" />
+                
+                <line x1="130" y1="140" x2="60" y2="200" stroke="#94a3b8" stroke-width="2" />
+                <line x1="130" y1="140" x2="230" y2="200" stroke="#94a3b8" stroke-width="2" />
+                
+                <line x1="230" y1="230" x2="150" y2="290" stroke="#94a3b8" stroke-width="2" />
+                <line x1="230" y1="230" x2="310" y2="290" stroke="#94a3b8" stroke-width="2" />
+
+                <text x="180" y="75" fill="#64748b" font-size="12" font-weight="bold">弱</text>
+                <text x="315" y="75" fill="#64748b" font-size="12" font-weight="bold">强</text>
+                
+                <text x="80" y="165" fill="#64748b" font-size="12" font-weight="bold">下雨</text>
+                <text x="190" y="165" fill="#64748b" font-size="12" font-weight="bold">晴天</text>
+
+                <text x="175" y="255" fill="#64748b" font-size="12" font-weight="bold">高</text>
+                <text x="285" y="255" fill="#64748b" font-size="12" font-weight="bold">低</text>
+
+                <g>
+                    <rect x="210" y="20" width="80" height="30" rx="5" fill="#2563eb" />
+                    <text x="250" y="40" fill="white" text-anchor="middle" font-size="14" font-weight="bold">风力</text>
+                </g>
+
+                <g>
+                    <rect x="90" y="110" width="80" height="30" rx="5" fill="#2563eb" />
+                    <text x="130" y="130" fill="white" text-anchor="middle" font-size="14" font-weight="bold">天气</text>
+                </g>
+
+                <g>
+                    <rect x="330" y="110" width="80" height="30" rx="5" fill="#ef4444" />
+                    <text x="370" y="130" fill="white" text-anchor="middle" font-size="14" font-weight="bold">不去</text>
+                </g>
+
+                <g>
+                    <rect x="20" y="200" width="80" height="30" rx="5" fill="#10b981" />
+                    <text x="60" y="220" fill="white" text-anchor="middle" font-size="14" font-weight="bold">去</text>
+                </g>
+
+                <g>
+                    <rect x="190" y="200" width="80" height="30" rx="5" fill="#2563eb" />
+                    <text x="230" y="220" fill="white" text-anchor="middle" font-size="14" font-weight="bold">温度</text>
+                </g>
+
+                <g>
+                    <rect x="110" y="290" width="80" height="30" rx="5" fill="#10b981" />
+                    <text x="150" y="310" fill="white" text-anchor="middle" font-size="14" font-weight="bold">去</text>
+                </g>
+
+                <g>
+                    <rect x="270" y="290" width="80" height="30" rx="5" fill="#ef4444" />
+                    <text x="310" y="310" fill="white" text-anchor="middle" font-size="14" font-weight="bold">不去</text>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+</body>
+</html>

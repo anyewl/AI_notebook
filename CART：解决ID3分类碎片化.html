@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CART vs ID3: 算法逻辑与演进</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; }
+        h1, h2, h3 { color: #2c3e50; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        /* 优化数学块样式 */
+        .math-block { background: #fdfdfd; padding: 20px; border-left: 5px solid #3498db; margin: 25px 0; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        /* 警示块样式 (用于ID3崩溃分析) */
+        .warning-block { background: #fff5f5; padding: 20px; border-left: 5px solid #e74c3c; margin: 25px 0; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .viz-container { display: flex; justify-content: space-around; margin-top: 30px; gap: 20px; flex-wrap: wrap; }
+        .viz-box { border: 2px solid #ddd; padding: 15px; border-radius: 8px; background: #fff; flex: 1; text-align: center; min-width: 300px; }
+        svg { width: 100%; height: 250px; }
+        .btn { padding: 12px 25px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 20px; transition: background 0.3s; }
+        .btn:hover { background: #2980b9; }
+        strong { color: #e67e22; }
+    </style>
+    
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>CART是如何解决ID3分类“碎片化”问题的？</h1>
+    
+    <p>作为一名大学数学基础薄弱的学习者，你不需要被晦涩的定义困住。我们从<strong>“分叉”的逻辑</strong>看起。</p>
+
+    <h2>1. 问题的本质：什么是碎片化（Fragmentation）？</h2>
+    <p>ID3算法的核心是基于信息增益（Information Gain）。它有一个致命的弱点：<strong>它倾向于选择取值数量最多的特征。</strong></p>
+    
+    <p>想象你在给水果分类：</p>
+    <ul>
+        <li><strong>特征A（颜色）：</strong>红、黄、绿（3个取值）</li>
+        <li><strong>特征B（唯一ID）：</strong>每个人都有唯一的ID（100个取值）</li>
+    </ul>
+    
+    <p>ID3会认为“特征B”简直完美，因为一旦选了它，每个分支下面只剩下一个样本，纯度达到了100%。但这种模型到了新数据上会彻底崩溃，这就是<strong>碎片化</strong>——树分得太细，导致每个叶子节点的数据量极少，丧失了泛化能力。</p>
+
+    <h2>2. ID3算法的数学本质崩溃</h2>
+    <p>如果您点击了“使用 A2（学号ID）分裂”，您会看到一个惊人的过拟合现象：</p>
+    
+    <div class="warning-block">
+        <p><strong>🚨 条件熵的瞬间归零</strong></p>
+        <p>因为每个学号对应 1 个学生，所以按学号分裂后，每个分支的数据集只有 1 个样本。一个样本绝对是“纯净”的，所以每个子集的熵 \(H(D_v) = 0\)。</p>
+        <p>根据条件熵公式计算，整体加权和依然是 0：</p>
+        <div style="text-align: center; margin: 15px 0;">
+            $$ H(D|A_2) = \sum_{v=1}^{8} \frac{1}{8} \times 0 = 0 $$
+        </div>
+        <p>由于条件熵降至最低的 0，导致其<strong>信息增益 \(Gain(D, A_2) = 1.0 - 0 = 1.0\)</strong> 强行达到了理论最高极值！</p>
+    </div>
+
+    <p><strong>本质痛点：</strong>ID3 会毫无分辨能力地爱上这些“高基数特征”。它天真地认为学号完美预测了成绩，导致模型直接背诵了这 8 个人的数据，面对新来的第 9 号学生时，这棵树将彻底失效崩溃。</p>
+
+    <h2>3. 数学解法：Gini系数的引入</h2>
+    <p>CART不再使用信息熵，而是使用<strong>Gini系数 (Gini Impurity)</strong>。它的数学表达极其简洁，且避开了对数计算，降低了计算复杂度。</p>
+    
+    <div class="math-block">
+        <p>假设一个节点中有 $K$ 个类别，第 $k$ 类样本的比例为 $p_k$，则该节点的 Gini 系数为：</p>
+        $$ Gini(D) = 1 - \sum_{k=1}^{K} p_k^2 $$
+    </div>
+
+    <p><strong>为什么这能解决碎片化？</strong></p>
+    <p>CART强行要求：<strong>无论特征有多少个取值，每次必须进行二分（Binary Split）。</strong></p>
+    <p>CART 会尝试所有的二分组合，计算哪种二分带来的 Gini 系数下降最大。</p>
+
+    <div class="math-block">
+        <p>特征 $A$ 的 Gini 分割计算公式（将数据集 $D$ 分为 $D_1$ 和 $D_2$）：</p>
+        $$ Gini_{split}(D) = \frac{|D_1|}{|D|} Gini(D_1) + \frac{|D_2|}{|D|} Gini(D_2) $$
+    </div>
+
+    <p>这种<strong>递归二分法</strong>保证了树结构的稳健性，有效地抑制了过拟合。</p>
+</div>
+
+<script>
+    function drawTrees() {
+        const id3 = document.getElementById('id3-svg');
+        const cart = document.getElementById('cart-svg');
+        // SVG drawing logic ...
+    }
+    drawTrees();
+
+	(function() {
+		const TARGET_X = -1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+
+</script>
+</body>
+</html>

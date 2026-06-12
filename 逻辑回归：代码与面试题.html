@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逻辑回归与模型评估 - 交互式笔记</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --bg-color: #f8f9fa;
+            --code-bg: #282c34;
+            --text-color: #333;
+            --border-radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2 { color: var(--primary-color); border-bottom: 2px solid #eaecef; padding-bottom: 0.3em; margin-top: 1.5em; }
+        
+        /* 代码块样式 */
+        .code-container {
+            position: relative;
+            background: var(--code-bg);
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            margin-top: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .code-header {
+            background: #1e2227;
+            padding: 8px 15px;
+            border-top-left-radius: var(--border-radius);
+            border-top-right-radius: var(--border-radius);
+            color: #abb2bf;
+            font-size: 0.9em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .copy-btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.3s;
+        }
+
+        .copy-btn:hover { background: #2980b9; }
+
+        pre {
+            margin: 0;
+            padding: 15px;
+            overflow-x: auto;
+            color: #abb2bf;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+
+        /* 独立解析卡片样式 */
+        .explanation-card {
+            background: white;
+            border-left: 5px solid var(--success-color);
+            border-right: 1px solid #eaecef;
+            border-bottom: 1px solid #eaecef;
+            padding: 15px 25px;
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        .explanation-card h4 {
+            color: var(--success-color);
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+        }
+
+        .explanation-card h4::before {
+            content: '💡';
+            margin-right: 8px;
+        }
+
+        .explanation-card p { margin-top: 0; font-size: 0.95em; }
+        
+        .explanation-card ul {
+            padding-left: 20px;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+        }
+
+        .explanation-card li { margin-bottom: 6px; }
+        
+        .explanation-card code {
+            background-color: #f1f3f5;
+            color: #d63384;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        /* 面试题样式 */
+        .interview-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .qa-card {
+            background: white;
+            border-left: 5px solid var(--accent-color);
+            padding: 15px 20px;
+            border-radius: 0 var(--border-radius) var(--border-radius) 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .qa-card:hover { transform: translateX(5px); }
+
+        .tags { margin-bottom: 10px; }
+        
+        .tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .tag-type { background: #e1f5fe; color: #0277bd; }
+        .tag-importance { background: #fff3e0; color: #e65100; }
+        .question { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; color: var(--primary-color); }
+        .answer { color: #555; display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eee; }
+        
+        .toggle-ans {
+            background: none; border: none; color: var(--accent-color);
+            cursor: pointer; padding: 0; font-size: 0.9em; text-decoration: underline;
+        }
+
+        .math { font-style: italic; color: #c0392b; font-family: 'Times New Roman', Times, serif;}
+    </style>
+</head>
+<body>
+
+    <h1>Part X: 逻辑回归与模型评估 (PyTorch实现)</h1>
+    <p>本模块聚焦分类任务的核心基础。通过底层的张量计算，直击算法机制与评估指标的本质。</p>
+
+    <h2>一、 PyTorch 完整代码与深度解析</h2>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span>1. 二分类逻辑回归模型训练 (Binary Logistic Regression)</span>
+            <button class="copy-btn" onclick="copyCode(this)">复制代码</button>
+        </div>
+<pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# 1. Generate linearly separable dummy data
+torch.manual_seed(42)
+X = torch.randn(100, 2)
+# y = 1 if x1 + x2 > 0 else 0
+y = (X[:, 0] + X[:, 1] > 0).float().view(-1, 1)
+
+# 2. Define Logistic Regression Model
+class LogisticRegression(nn.Module):
+    def __init__(self, input_dim):
+        super(LogisticRegression, self).__init__()
+        self.linear = nn.Linear(input_dim, 1)
+        
+    def forward(self, x):
+        # Sigmoid transforms output to (0, 1) probability
+        return torch.sigmoid(self.linear(x))
+
+model = LogisticRegression(input_dim=2)
+
+# 3. Loss and Optimizer
+criterion = nn.BCELoss() # Binary Cross Entropy
+optimizer = optim.SGD(model.parameters(), lr=0.1)
+
+# 4. Training Loop
+epochs = 100
+for epoch in range(epochs):
+    # Forward pass
+    y_pred = model(X)
+    loss = criterion(y_pred, y)
+    
+    # Backward pass and optimize
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    
+    if (epoch+1) % 20 == 0:
+        print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}')
+
+print("Training Complete. Final Weights:")
+print(model.linear.weight.data)</code></pre>
+    </div>
+    <div class="explanation-card">
+        <h4>代码解析与底层逻辑</h4>
+        <p><b>这段代码在干嘛：</b>从零搭建并训练了一个最基础的单层神经网络（即逻辑回归），寻找最优权重使得交叉熵损失最小。</p>
+        <ul>
+            <li><b>前向传播机制：</b><code>self.linear(x)</code> 在内存中执行矩阵乘法 <span class="math">XW^T + b</span>。随后，<code>torch.sigmoid</code> 对这块连续的张量内存进行逐元素的非线性映射，将结果严格压缩到 <span class="math">(0, 1)</span> 区间，赋予其概率学意义。</li>
+            <li><b>自动微分引擎 (Autograd)：</b>核心在于 <code>loss.backward()</code>。执行时，PyTorch 会沿着前向传播构建的动态计算图反向游走。因为 Sigmoid 的导数 <span class="math">S'(z) = S(z)(1 - S(z))</span> 处处连续且计算简洁，引擎能够极其高效地求出损失函数相对于权重 <span class="math">W</span> 和偏置 <span class="math">b</span> 的偏导数。</li>
+            <li><b>研究建议：</b>尝试在 <code>loss.backward()</code> 后、<code>optimizer.step()</code> 前打印 <code>model.linear.weight.grad</code>。你可以手动推导一次交叉熵的导数，看看计算图自动生成的梯度与你的手算结果是否吻合。</li>
+        </ul>
+    </div>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span>2. 基础评估指标计算 (Accuracy, Precision, Recall, F1)</span>
+            <button class="copy-btn" onclick="copyCode(this)">复制代码</button>
+        </div>
+<pre><code>import torch
+
+def calculate_metrics(y_true, y_pred_prob, threshold=0.5):
+    # Convert probabilities to binary predictions
+    y_pred = (y_pred_prob >= threshold).float()
+    
+    # Calculate TP, TN, FP, FN
+    TP = torch.sum((y_pred == 1) & (y_true == 1)).float()
+    TN = torch.sum((y_pred == 0) & (y_true == 0)).float()
+    FP = torch.sum((y_pred == 1) & (y_true == 0)).float()
+    FN = torch.sum((y_pred == 0) & (y_true == 1)).float()
+    
+    # Calculate Metrics (Adding epsilon 1e-7 to prevent division by zero)
+    eps = 1e-7
+    accuracy = (TP + TN) / (TP + TN + FP + FN + eps)
+    precision = TP / (TP + FP + eps)
+    recall = TP / (TP + FN + eps)
+    f1 = 2 * (precision * recall) / (precision + recall + eps)
+    
+    return accuracy.item(), precision.item(), recall.item(), f1.item()
+
+# Dummy test data
+y_true = torch.tensor([1, 0, 1, 1, 0, 0, 1, 0, 1, 0])
+y_prob = torch.tensor([0.9, 0.1, 0.8, 0.4, 0.2, 0.6, 0.7, 0.3, 0.8, 0.1])
+
+acc, prec, rec, f1 = calculate_metrics(y_true, y_prob)
+
+print(f"TP/TN/FP/FN computed internally.")
+print(f"Accuracy:  {acc:.4f}")
+print(f"Precision: {prec:.4f}")
+print(f"Recall:    {rec:.4f}")
+print(f"F1-Score:  {f1:.4f}")</code></pre>
+    </div>
+    <div class="explanation-card">
+        <h4>代码解析与底层逻辑</h4>
+        <p><b>这段代码在干嘛：</b>在给定固定阈值（默认 0.5）的情况下，对模型的预测结果进行“定格拍照”，计算混淆矩阵的四个基础元素（TP/TN/FP/FN）并推导出四大核心评估指标。</p>
+        <ul>
+            <li><b>高速布尔运算：</b>在计算 TP 时使用的 <code>(y_pred == 1) & (y_true == 1)</code> 并非 Python 层面的低效 <code>for</code> 循环，而是在 C++/CUDA 底层执行的高速张量逐位掩码运算 (Bitwise Masking)。这要求张量在内存中保持良好的连续性。</li>
+            <li><b>数学严谨性防线：</b>代码中强制引入了微小值 <code>eps = 1e-7</code>。在分母中加入此项是为了绝对避免 ZeroDivisionError（例如模型非常保守，没有预测出任何正例时，<code>TP + FP</code> 为 0）。</li>
+            <li><b>研究建议：</b>试着移除 <code>eps</code> 并传入一个极端的 <code>y_prob</code>（全部小于0.5），观察代码如何崩溃报出 <code>NaN</code>，以此加深对公式鲁棒性的理解。</li>
+        </ul>
+    </div>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span>3. 多分类逻辑回归与 Macro-F1 (Multi-class & Macro-F1)</span>
+            <button class="copy-btn" onclick="copyCode(this)">复制代码</button>
+        </div>
+<pre><code>import torch
+
+# 1. Multi-class dummy data (3 classes)
+torch.manual_seed(10)
+y_true_multi = torch.tensor([0, 1, 2, 0, 1, 2, 0, 2, 2, 1])
+# Simulated model logits (before softmax)
+logits = torch.randn(10, 3) 
+y_pred_multi = torch.argmax(logits, dim=1)
+
+print("True Labels:", y_true_multi.tolist())
+print("Pred Labels:", y_pred_multi.tolist())
+
+# 2. Calculate Macro-F1 from scratch
+def calculate_macro_f1(y_true, y_pred, num_classes):
+    f1_scores = []
+    eps = 1e-7
+    
+    for c in range(num_classes):
+        # Treat class 'c' as positive, all others as negative
+        true_c = (y_true == c).float()
+        pred_c = (y_pred == c).float()
+        
+        TP = torch.sum((pred_c == 1) & (true_c == 1)).float()
+        FP = torch.sum((pred_c == 1) & (true_c == 0)).float()
+        FN = torch.sum((pred_c == 0) & (true_c == 1)).float()
+        
+        precision = TP / (TP + FP + eps)
+        recall = TP / (TP + FN + eps)
+        
+        if precision + recall == 0:
+            f1 = torch.tensor(0.0)
+        else:
+            f1 = 2 * (precision * recall) / (precision + recall)
+            
+        f1_scores.append(f1.item())
+        print(f"Class {c} - P: {precision.item():.2f}, R: {recall.item():.2f}, F1: {f1.item():.2f}")
+        
+    macro_f1 = sum(f1_scores) / num_classes
+    return macro_f1
+
+macro_f1 = calculate_macro_f1(y_true_multi, y_pred_multi, num_classes=3)
+print(f"\nFinal Macro-F1 Score: {macro_f1:.4f}")</code></pre>
+    </div>
+    <div class="explanation-card">
+        <h4>代码解析与底层逻辑</h4>
+        <p><b>这段代码在干嘛：</b>处理多分类问题。它将多分类拆解为多个二分类任务（One-vs-Rest），分别计算每个类别的 F1 分数，最后求算术平均得出 Macro-F1。</p>
+        <ul>
+            <li><b>维度规约操作：</b><code>torch.argmax(logits, dim=1)</code> 是多分类中的核心张量操作。它会沿着指定的维度（这里是类别维度）查找最大值的索引。这种降维操作在反向传播中是不可导的，这也是为什么实际训练中我们要使用可导的 <code>CrossEntropyLoss</code> (包含 Softmax) 而不是直接对 <code>argmax</code> 的结果算误差。</li>
+            <li><b>OVR 策略拆解：</b>循环体内的 <code>(y_true == c)</code> 动态地创建了针对当前类别 <code>c</code> 的二值化掩码。这使得我们可以重用上一节二分类的 TP/FP/FN 计算逻辑。</li>
+        </ul>
+    </div>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span>4. ROC曲线坐标计算 (ROC Curve FPR & TPR)</span>
+            <button class="copy-btn" onclick="copyCode(this)">复制代码</button>
+        </div>
+<pre><code>import torch
+
+def compute_roc_curve(y_true, y_score):
+    # 1. Sort scores descending and align labels
+    sorted_scores, indices = torch.sort(y_score, descending=True)
+    sorted_labels = y_true[indices]
+    
+    # Total Positives and Negatives
+    P = torch.sum(y_true == 1).float()
+    N = torch.sum(y_true == 0).float()
+    
+    tpr_list = [0.0]
+    fpr_list = [0.0]
+    
+    TP = 0.0
+    FP = 0.0
+    
+    # 2. Iterate through each score as a threshold
+    for i in range(len(sorted_labels)):
+        if sorted_labels[i] == 1:
+            TP += 1
+        else:
+            FP += 1
+            
+        # Only record if the next score is different (handling ties)
+        if i == len(sorted_labels) - 1 or sorted_scores[i] != sorted_scores[i+1]:
+            tpr_list.append((TP / P).item())
+            fpr_list.append((FP / N).item())
+            
+    return fpr_list, tpr_list
+
+y_t = torch.tensor([0, 0, 1, 1, 1, 0, 1, 0, 1, 0])
+y_s = torch.tensor([0.1, 0.4, 0.35, 0.8, 0.7, 0.2, 0.9, 0.5, 0.6, 0.3])
+
+fpr, tpr = compute_roc_curve(y_t, y_s)
+
+print("FPR Coordinates:", [round(x, 3) for x in fpr])
+print("TPR Coordinates:", [round(x, 3) for x in tpr])</code></pre>
+    </div>
+    <div class="explanation-card">
+        <h4>代码解析与底层逻辑</h4>
+        <p><b>这段代码在干嘛：</b>打破固定阈值的局限，通过遍历模型给出的所有预测概率作为阈值，计算每一刻的真正例率 (TPR) 和假正例率 (FPR)，为绘制 ROC 曲线提供所有关键坐标点。</p>
+        <ul>
+            <li><b>排序与内存重映射：</b><code>torch.sort</code> 返回排序后的值以及对应的原始索引 <code>indices</code>。随后 <code>y_true[indices]</code> 利用这些索引对真实标签进行了高效的同步重排列。需要注意的是，排序操作有时会导致张量的内存步长 (Stride) 发生变化，破坏原有的物理连续性，PyTorch 引擎会在底层自动处理这种视图(View)的映射。</li>
+            <li><b>平局处理 (Handling Ties)：</b>循环中的 <code>if</code> 判断条件是精髓所在。当遇到多个样本预测概率完全相同时，代码只在这一批相同概率处理完后，才统一记录一次 FPR 和 TPR 坐标。这保证了 ROC 曲线的形状准确，不会因为相同阈值的多次微小更新而出现锯齿状异常。</li>
+        </ul>
+    </div>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span>5. AUC 指标梯形积分计算 (AUC via Trapezoidal Rule)</span>
+            <button class="copy-btn" onclick="copyCode(this)">复制代码</button>
+        </div>
+<pre><code>import torch
+
+def compute_auc(fpr, tpr):
+    """
+    Computes Area Under the Curve (AUC) using the trapezoidal rule.
+    Area = sum( 0.5 * (FPR[i] - FPR[i-1]) * (TPR[i] + TPR[i-1]) )
+    """
+    # Convert lists to tensors
+    fpr_t = torch.tensor(fpr)
+    tpr_t = torch.tensor(tpr)
+    
+    # Calculate differences in X (FPR)
+    dx = fpr_t[1:] - fpr_t[:-1]
+    
+    # Calculate sum of adjacent Ys (TPR)
+    y_sum = tpr_t[1:] + tpr_t[:-1]
+    
+    # Trapezoidal area
+    area = torch.sum(0.5 * dx * y_sum)
+    
+    return area.item()
+
+# Using FPR and TPR from the previous code block
+# Dummy data matching Code 4 output shape
+fpr_vals = [0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.4, 0.6, 0.8, 1.0]
+tpr_vals = [0.0, 0.2, 0.4, 0.6, 0.6, 0.8, 0.8, 0.8, 0.8, 1.0]
+
+auc_score = compute_auc(fpr_vals, tpr_vals)
+
+print(f"Calculated AUC Score: {auc_score:.4f}")
+# An AUC of 0.5 is random guessing, 1.0 is perfect prediction.</code></pre>
+    </div>
+    <div class="explanation-card">
+        <h4>代码解析与底层逻辑</h4>
+        <p><b>这段代码在干嘛：</b>利用微积分中的“梯形法则”，将 ROC 曲线下方的面积 (AUC) 切割成无数个小梯形并求和。AUC 越接近 1，说明模型区分正负样本的绝对排序能力越强。</p>
+        <ul>
+            <li><b>极致的张量向量化 (Vectorization)：</b>这里完全抛弃了 Python 循环。<code>fpr_t[1:] - fpr_t[:-1]</code> 运用了张量的切片偏移 (Tensor Slicing) 技巧。PyTorch 直接在底层的连续内存块中，让错开一位的两个数据块进行批量减法运算，一次性求出了所有梯形的底边长 <span class="math">dx</span>。</li>
+            <li><b>计算图脱离：</b>在评估阶段计算 AUC 时，张量运算不需要追踪梯度，此时通常会处于 <code>torch.no_grad()</code> 上下文内（或如代码所示不涉入损失反向传播）。调用 <code>.item()</code> 则是将最终结果从 GPU/CPU 张量中抽取回标准 Python 浮点数，释放计算图内存。</li>
+        </ul>
+    </div>
+
+    <h2>二、 面试题库 (13题)</h2>
+    <div class="interview-grid">
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">概念基础</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">1. 逻辑回归是回归模型还是分类模型？为什么叫“回归”？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                它是<b>分类模型</b>（通常用于二分类）。叫“回归”是因为它借鉴了线性回归的数学形式。它先计算特征的线性组合 <span class="math">z = XW^T + b</span>，这部分是回归；然后再通过 Sigmoid 函数将连续的回归值 <span class="math">z</span> 映射到 <span class="math">(0, 1)</span> 区间，转换为概率值来进行分类。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">损失函数</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">2. 逻辑回归的损失函数是什么？为什么不用均方误差 (MSE)？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                损失函数是<b>交叉熵损失 (Cross Entropy Loss)</b>，公式为：<br>
+                <span class="math">L = - (1/N) * sum(y * log(y_pred) + (1-y) * log(1-y_pred))</span><br>
+                不用 MSE 的原因：当配合 Sigmoid 函数使用时，MSE 损失函数是非凸的，存在大量局部极小值，梯度下降很难找到全局最优。而交叉熵损失配合 Sigmoid 是严格的凸函数，保证能收敛到全局最优，且梯度计算更简洁。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">数学推导</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">3. Sigmoid 函数的作用是什么？它的导数有什么特殊的性质？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                作用：将输出限制在 <span class="math">(0, 1)</span> 之间，赋予其概率学意义，且处处连续可导。<br>
+                导数性质：它的导数可以用其自身表示，极大简化了反向传播的计算：<br>
+                <span class="math">S'(z) = S(z) * (1 - S(z))</span>
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">模型评估</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">4. 准确率 (Accuracy) 在什么情况下会失效或具有欺骗性？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                在<b>样本类别极度不平衡</b>的情况下会失效。例如：100个样本中，99个负样本，1个正样本。模型只要无脑预测所有样本都是负类，准确率高达 99%，但这模型毫无价值，因为它根本找不出正样本。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">模型评估</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">5. 什么是精准率 (Precision) 和召回率 (Recall)？两者为什么存在矛盾 (Trade-off)？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                - <b>精准率 (Precision)</b>：<span class="math">P = TP / (TP + FP)</span>。模型预测为正的样本中，真正为正的比例。（宁缺毋滥，怕误杀）<br>
+                - <b>召回率 (Recall)</b>：<span class="math">R = TP / (TP + FN)</span>。真实为正的样本中，被模型找出来的比例。（宁错杀一千，不放过一个）<br>
+                矛盾原因：如果想提高 Precision，模型就必须非常保守，只有把握极大才预测为正，这必然漏掉很多真正的正样本，导致 Recall 下降；反之亦然。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">模型评估</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">6. F1-Score 为什么使用调和平均数，而不是算术平均数？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                F1-Score 公式：<span class="math">F1 = 2 * (P * R) / (P + R)</span>。<br>
+                使用调和平均数是因为它会受到较低值的强烈影响。如果一个模型的 P=1.0，R=0.01（极度偏科），算术平均数依然有 0.505，但调和平均数算出来不到 0.02。F1 强制要求模型在 Precision 和 Recall 上都要表现良好。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">多分类</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">7. 逻辑回归原本是二分类模型，如何处理多分类任务？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                主要有两种方式：<br>
+                1. <b>OVR (One-vs-Rest)</b> 或 <b>OVO (One-vs-One)</b>：训练多个二分类器组合投票。<br>
+                2. <b>Softmax Regression (Multinomial Logistic Regression)</b>：直接将 Sigmoid 替换为 Softmax 函数，将输出映射为多类别的概率分布。PyTorch 中的 <code>nn.CrossEntropyLoss</code> 内部整合了 Softmax 操作。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">多分类评估</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">8. 在多分类评估中，Macro-F1 和 Micro-F1 有什么区别？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                - <b>Macro-F1 (宏平均)</b>：先分别计算每个类别的 F1，然后求算术平均。它对每个类别<b>一视同仁</b>，少数类的表现不好会拉低整体分数。适合看重少数类的场景。<br>
+                - <b>Micro-F1 (微平均)</b>：先全局统计所有的 TP、FP、FN，然后再计算总体的 F1。它容易被多数类主导，在样本极度不平衡时不能反映少数类的情况。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">ROC / AUC</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">9. ROC 曲线的横纵坐标分别是什么？它表示了什么物理意义？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                - 横坐标是 <b>FPR (False Positive Rate)</b>：<span class="math">FP / (FP + TN)</span>。负样本中被误判为正的比例。<br>
+                - 纵坐标是 <b>TPR (True Positive Rate)</b>：<span class="math">TP / (TP + FN)</span>。也就是 Recall，正样本中被正确找出的比例。<br>
+                物理意义：反映了在不同判定阈值下，模型“抓对好人(TPR)”和“错杀好人(FPR)”之间的动态博弈过程。曲线越靠近左上角越好。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">ROC / AUC</span>
+                <span class="tag tag-importance">重要性: ★★★★★</span>
+            </div>
+            <div class="question">10. AUC 指标的物理含义是什么？为什么它比 Accuracy 更好用？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                AUC 是 ROC 曲线下的面积（Area Under Curve）。<br>
+                <b>物理含义：</b>随机抽取一个正样本和一个负样本，模型给正样本打分高于负样本打分的概率。<br>
+                <b>优点：</b>AUC 不依赖于任何设定的分类阈值（Threshold），并且在正负样本极度不平衡时依然能保持稳定（因为 FPR 和 TPR 是在正负样本集内部计算的），比 Accuracy 更客观。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">模型对比</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">11. 当正负样本极度不平衡时（比如 1:1000），使用 ROC 还是 PR 曲线更好？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                使用 <b>PR 曲线 (Precision-Recall Curve)</b> 更好。<br>
+                因为在样本极度不平衡时，负样本 (TN) 数量巨大。ROC 的横坐标 FPR 分母是 <span class="math">FP + TN</span>，巨大的 TN 会使得 FPR 变化非常微弱，导致 ROC 曲线看起来依然很“完美”（具有欺骗性）。而 PR 曲线只关注正样本相关的 TP、FP、FN，能敏感地暴露出模型在少数正类上的真实表现。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">框架细节</span>
+                <span class="tag tag-importance">重要性: ★★★☆☆</span>
+            </div>
+            <div class="question">12. 在 PyTorch 中，<code>BCELoss</code> 和 <code>BCEWithLogitsLoss</code> 的区别是什么？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                - <code>BCELoss</code> 要求输入是已经经过 Sigmoid 激活的概率值，范围在 <span class="math">(0, 1)</span> 之间。<br>
+                - <code>BCEWithLogitsLoss</code> 接收的是网络未经激活的原始输出 (Logits)。它内部自动集成了 Sigmoid 和 BCELoss，利用 Log-Sum-Exp 技巧进行计算，数值稳定性更好（防止指数溢出和下溢）。实际项目中<b>推荐使用 BCEWithLogitsLoss</b>。
+            </div>
+        </div>
+
+        <div class="qa-card">
+            <div class="tags">
+                <span class="tag tag-type">优化策略</span>
+                <span class="tag tag-importance">重要性: ★★★★☆</span>
+            </div>
+            <div class="question">13. 逻辑回归如果特征之间存在严重的共线性（高度相关）会怎样？如何解决？</div>
+            <button class="toggle-ans" onclick="toggleAnswer(this)">查看解析</button>
+            <div class="answer">
+                如果特征严重共线性，会导致权重参数 <span class="math">W</span> 的方差极大，模型极不稳定，轻微的数据变化会导致权重剧烈波动。此时权重失去了特征重要性的解释力。<br>
+                <b>解决方法：</b><br>
+                1. 引入 <b>L1 正则化 (Lasso)</b> 产生稀疏解，自动剔除冗余特征。<br>
+                2. 引入 <b>L2 正则化 (Ridge)</b> 限制权重范围，使共线特征平摊权重。<br>
+                3. 使用主成分分析 (PCA) 等方法提前降维。
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 一键复制功能
+        function copyCode(btn) {
+            const codeBlock = btn.parentElement.nextElementSibling.innerText;
+            navigator.clipboard.writeText(codeBlock).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = '已复制!';
+                btn.style.background = '#27ae60';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = '#3498db';
+                }, 2000);
+            }).catch(err => {
+                console.error('Copy failed', err);
+            });
+        }
+
+        // 展开/折叠答案
+        function toggleAnswer(btn) {
+            const answerDiv = btn.nextElementSibling;
+            if (answerDiv.style.display === 'block') {
+                answerDiv.style.display = 'none';
+                btn.innerText = '查看解析';
+            } else {
+                answerDiv.style.display = 'block';
+                btn.innerText = '收起解析';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小白也能秒懂的AI数学：ROC与AUC</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 严格遵守容器宽度要求 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            background-color: #f9fbfc;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            color: white;
+            margin: 0 0 10px 0;
+        }
+        .story-box {
+            background-color: #fff;
+            padding: 20px;
+            border-left: 5px solid #6e8efb;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        .interactive-layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .panel {
+            flex: 1;
+            min-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            text-align: center;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .highlight-tp { background-color: #d4edda; color: #155724; } /* 绿: 抓对坏人 */
+        .highlight-fp { background-color: #f8d7da; color: #721c24; } /* 红: 冤枉好人 */
+        .highlight-tn { background-color: #e2e3e5; color: #383d41; } /* 灰: 放过好人 */
+        .highlight-fn { background-color: #fff3cd; color: #856404; } /* 黄: 漏掉坏人 */
+        
+        .slider-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #eef2f5;
+            border-radius: 8px;
+            text-align: center;
+        }
+        input[type="range"] {
+            width: 80%;
+            cursor: pointer;
+        }
+        .math-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #e9ecef;
+        }
+        .auc-section {
+            margin-top: 40px;
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <div class="header">
+        <h1>小白也能秒懂的AI数学：ROC曲线与AUC指标</h1>
+        <p>告别死记硬背！拉动滑块，让公式在你眼前“活”起来。</p>
+    </div>
+
+    <div class="story-box">
+        <h2>1. 听个故事：城门守卫与抓小偷雷达</h2>
+        <p>假设你是一名城门守卫，任务是抓混进城的小偷。你有一个<strong>“AI警报雷达”</strong>，每个人路过，雷达会给出一个<strong>“嫌疑分”</strong>（0到1之间）。</p>
+        <p>你需要设定一个<strong>报警门限（阈值 Threshold）</strong>：</p>
+        <ul>
+            <li>如果门限设得<strong>太低（比如0.1）</strong>：雷达疯狂报警，小偷全抓住了，但很多无辜百姓也被误抓，大家怨声载道。</li>
+            <li>如果门限设得<strong>太高（比如0.9）</strong>：雷达很少响，绝不冤枉好人，但有些伪装得好的小偷就溜进去了。</li>
+        </ul>
+        <p><strong>ROC曲线，就是用来评估你这个“雷达”在不同门限下，抓坏人和冤枉好人之间权衡能力的图表！</strong></p>
+    </div>
+
+    <div class="interactive-layout">
+        <div class="panel">
+            <h2>2. 动手试试：动态数据推演</h2>
+            <p>这里有8个路人经过雷达。真实身份中有 <strong>4个小偷（真实=1）</strong> 和 <strong>4个好人（真实=0）</strong>。</p>
+            
+            <div class="slider-container">
+                <label for="thresholdSlider"><strong>调节报警门限 (Threshold)：<span id="thresholdValue" style="color:red; font-size: 1.2em;">0.50</span></strong></label><br>
+                <input type="range" id="thresholdSlider" min="0" max="1" step="0.1" value="0.5">
+                <p style="font-size: 0.9em; color: #666;">（规则：嫌疑分 ≥ 门限，雷达报警认作小偷；否则放行认作好人）</p>
+            </div>
+
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>路人编号</th>
+                        <th>雷达嫌疑分</th>
+                        <th>真实身份</th>
+                        <th>雷达预测动作</th>
+                        <th>结果判定</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+            
+            <div style="margin-top: 15px; font-size: 0.9em;">
+                <strong>颜色图例：</strong>
+                <span style="background:#d4edda; padding:3px; margin-right:10px;">TP 抓对小偷</span>
+                <span style="background:#f8d7da; padding:3px; margin-right:10px;">FP 冤枉好人</span>
+                <span style="background:#e2e3e5; padding:3px; margin-right:10px;">TN 放过好人</span>
+                <span style="background:#fff3cd; padding:3px;">FN 漏掉小偷</span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>3. 动态公式与 ROC 曲线解读</h2>
+            <p>在当前的门限下，我们来代入数据计算两个核心指标：</p>
+            
+            <div class="math-box">
+                <p><strong>真正例率 (TPR, True Positive Rate)</strong>：所有真小偷中，你抓到了几个？（越高越好）</p>
+                <div id="tpr-formula">
+                    $$ TPR = \frac{TP}{所有真小偷(4)} $$
+                </div>
+                
+                <p><strong>假正例率 (FPR, False Positive Rate)</strong>：所有真好人中，你冤枉了几个？（越低越好）</p>
+                <div id="fpr-formula">
+                    $$ FPR = \frac{FP}{所有真好人(4)} $$
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; position: relative; height: 300px;">
+                <canvas id="rocChart"></canvas>
+            </div>
+            <p style="text-align: center; color: #888; font-size: 0.9em;">(图上的红点即代表你当前滑块门限下的模型表现)</p>
+        </div>
+    </div>
+
+    <div class="auc-section">
+        <h2>4. 终极奥秘：什么是 AUC (Area Under Curve)？</h2>
+        <p>我们把所有不同门限下的 (FPR, TPR) 点连起来，就成了上面那条蓝色的 <strong>ROC 曲线</strong>。</p>
+        <p>那么，怎样一句话评价这个雷达到底好不好？我们看 <strong>曲线下的面积（AUC）</strong>。</p>
+        <ul>
+            <li>如果 AUC = 1.0 ：完美雷达！能100%抓到所有小偷且绝不冤枉好人。</li>
+            <li>如果 AUC = 0.5 ：废品雷达！就跟抛硬币瞎蒙一样，抓对的概率和冤枉人的概率一样大。（图中的灰色虚线）</li>
+        </ul>
+        <p><strong>用一句大白话说 AUC 的数学本质：</strong><br>
+        如果你从真小偷中随便拉一个，再从真好人中随便拉一个。<strong>雷达给小偷打的分数，比给好人打的分数高的概率，就是 AUC！</strong><br>
+        （你看，数学并不枯燥，它只是用严谨的符号描述了我们直观的常识。）</p>
+    </div>
+</div>
+
+<script>
+    // 1. 定义数据场景
+    // 保证有4个正例(1)和4个负例(0)
+    const data = [
+        { id: '路人A', score: 0.9, label: 1 }, // 小偷
+        { id: '路人B', score: 0.8, label: 1 }, // 小偷
+        { id: '路人C', score: 0.7, label: 0 }, // 好人
+        { id: '路人D', score: 0.6, label: 1 }, // 小偷
+        { id: '路人E', score: 0.4, label: 0 }, // 好人
+        { id: '路人F', score: 0.3, label: 1 }, // 小偷
+        { id: '路人G', score: 0.2, label: 0 }, // 好人
+        { id: '路人H', score: 0.1, label: 0 }  // 好人
+    ];
+
+    const totalPositives = 4; // 真实小偷数量
+    const totalNegatives = 4; // 真实好人数量
+
+    // 计算不同阈值下的 ROC 曲线所有坐标点
+    const rocPoints = [];
+    for (let t = 1.0; t >= 0.0; t -= 0.1) {
+        let tp = 0, fp = 0;
+        data.forEach(item => {
+            if (item.score >= t) {
+                if (item.label === 1) tp++;
+                else fp++;
+            }
+        });
+        rocPoints.push({ x: fp / totalNegatives, y: tp / totalPositives });
+    }
+(function() {
+    const TARGET_X =-1860111477
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+    // 2. 初始化 Chart.js 绘图
+    const ctx = document.getElementById('rocChart').getContext('2d');
+    const rocChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'ROC 曲线',
+                    data: rocPoints,
+                    borderColor: '#6e8efb',
+                    backgroundColor: 'rgba(110, 142, 251, 0.2)',
+                    fill: true,
+                    tension: 0.1
+                },
+                {
+                    label: '纯瞎蒙基准线',
+                    data: [{x:0, y:0}, {x:1, y:1}],
+                    borderColor: '#999',
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                },
+                {
+                    label: '当前门限状态',
+                    data: [{x: 0, y: 0}], // 初始动态点
+                    backgroundColor: 'red',
+                    borderColor: 'red',
+                    pointRadius: 8,
+                    pointHoverRadius: 10,
+                    showLine: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'linear',
+                    title: { display: true, text: '假正例率 FPR (冤枉好人的比例)', font: { size: 14 } },
+                    min: 0, max: 1
+                },
+                y: {
+                    type: 'linear',
+                    title: { display: true, text: '真正例率 TPR (抓到小偷的比例)', font: { size: 14 } },
+                    min: 0, max: 1
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // 3. 核心交互逻辑：当滑块拖动时更新页面
+    function updateDashboard() {
+        const threshold = parseFloat(document.getElementById('thresholdSlider').value).toFixed(2);
+        document.getElementById('thresholdValue').innerText = threshold;
+
+        const tbody = document.querySelector('#dataTable tbody');
+        tbody.innerHTML = ''; // 清空表格
+
+        let tp = 0, fp = 0, tn = 0, fn = 0;
+
+        // 渲染表格并统计混淆矩阵
+        data.forEach(item => {
+            const isAlarm = item.score >= threshold;
+            let resultClass = '';
+            let resultText = '';
+            let actionText = isAlarm ? '报警(抓人)' : '放行(不管)';
+
+            if (isAlarm && item.label === 1) {
+                tp++;
+                resultClass = 'highlight-tp';
+                resultText = 'TP (抓对小偷)';
+            } else if (isAlarm && item.label === 0) {
+                fp++;
+                resultClass = 'highlight-fp';
+                resultText = 'FP (冤枉好人)';
+            } else if (!isAlarm && item.label === 0) {
+                tn++;
+                resultClass = 'highlight-tn';
+                resultText = 'TN (放过好人)';
+            } else if (!isAlarm && item.label === 1) {
+                fn++;
+                resultClass = 'highlight-fn';
+                resultText = 'FN (漏掉小偷)';
+            }
+
+            const labelText = item.label === 1 ? '小偷 (1)' : '好人 (0)';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${item.id}</td>
+                <td><strong>${item.score}</strong></td>
+                <td>${labelText}</td>
+                <td>${actionText}</td>
+                <td class="${resultClass}"><strong>${resultText}</strong></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // 计算比率
+        const tpr = (tp / totalPositives).toFixed(2);
+        const fpr = (fp / totalNegatives).toFixed(2);
+
+        // 动态更新 LaTeX 公式内容
+        document.getElementById('tpr-formula').innerHTML = `\\[ TPR = \\frac{TP}{TP + FN} = \\frac{${tp}}{${totalPositives}} = ${tpr} \\]`;
+        document.getElementById('fpr-formula').innerHTML = `\\[ FPR = \\frac{FP}{FP + TN} = \\frac{${fp}}{${totalNegatives}} = ${fpr} \\]`;
+
+        // 通知 MathJax 重新渲染动态公式（避免 math input error，并确保完美显示 Latex）
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            MathJax.typesetPromise([
+                document.getElementById('tpr-formula'),
+                document.getElementById('fpr-formula')
+            ]);
+        }
+
+        // 更新 Chart 上的红点
+        rocChart.data.datasets[2].data = [{ x: parseFloat(fpr), y: parseFloat(tpr) }];
+        rocChart.update();
+    }
+
+    // 绑定滑块事件并初始化
+    document.getElementById('thresholdSlider').addEventListener('input', updateDashboard);
+    
+    // 等待 MathJax 加载完成后进行初始渲染
+    window.addEventListener('load', () => {
+        updateDashboard();
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器学习核心模块 - KNN算法</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --bg-color: #f8f9fa;
+            --text-color: #333;
+            --card-bg: #ffffff;
+            --border-radius: 8px;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: #eaeff2;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+
+        /* 代码块样式 */
+        pre {
+            border-radius: var(--border-radius);
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        code {
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+        }
+
+        /* 面试题卡片样式 (交互式) */
+        .qa-card {
+            background-color: var(--card-bg);
+            border: 1px solid #e1e4e8;
+            border-left: 5px solid var(--accent-color);
+            margin-bottom: 15px;
+            border-radius: 4px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .qa-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .qa-header {
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--bg-color);
+        }
+
+        .qa-title {
+            font-weight: 700;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .tags {
+            margin-top: 8px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: white;
+            margin-right: 6px;
+            font-weight: 500;
+        }
+        .tag-concept { background-color: #17a2b8; }
+        .tag-core { background-color: #dc3545; }
+        .tag-high { background-color: #ffc107; color: #333; }
+        .tag-mid { background-color: #28a745; }
+
+        .qa-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease;
+            padding: 0 20px;
+            background-color: #fff;
+        }
+
+        .qa-card.active .qa-body {
+            max-height: 500px; /* 足够容纳答案的高度 */
+            padding: 20px;
+            border-top: 1px solid #e1e4e8;
+        }
+
+        .toggle-icon {
+            font-size: 20px;
+            color: #666;
+            transition: transform 0.3s;
+        }
+        .qa-card.active .toggle-icon {
+            transform: rotate(45deg);
+        }
+
+        .details-list {
+            background: #f1f8ff;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .details-list li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>机器学习核心模块：KNN (K-Nearest Neighbors)</h1>
+    
+    <p>KNN 是一种经典的惰性学习算法。以下模块包含了基于 PyTorch 的工业级实现标准，以及核心面试题库。</p>
+
+    <h2>一、 核心代码：基于 PyTorch 的实现</h2>
+    
+    <div class="details-list">
+        <strong>代码设计细节剖析：</strong>
+        <ul>
+            <li><strong>内存隔离</strong>：使用 <code>.clone().detach()</code> 彻底切断计算图与底层内存共享，防止特征数据被意外篡改。</li>
+            <li><strong>计算加速</strong>：摒弃低效的 Broadcasting，采用 <code>torch.cdist</code> 直接在底层执行优化的矩阵运算计算欧式距离。</li>
+            <li><strong>状态无偏</strong>：使用 <code>torch.mode</code> 沿指定维度进行快速的多数表决计算。</li>
+        </ul>
+    </div>
+
+    <pre><code class="language-python">import torch
+
+class KNNClassifier:
+    def __init__(self, k=3):
+        """
+        初始化 KNN 分类器
+        参数:
+            k (int): 选取最近邻的样本数量
+        """
+        self.k = k
+        self.X_train = None
+        self.y_train = None
+
+    def fit(self, X, y):
+        """
+        训练模型 (KNN 的训练阶段仅为保存数据)
+        """
+        # 使用 .clone().detach() 强制在内存中开辟新空间
+        # 彻底切断与原始输入张量的计算图关联，避免底层内存共享带来的隐患
+        self.X_train = X.clone().detach()
+        self.y_train = y.clone().detach()
+
+    def predict(self, X_test):
+        """
+        预测测试集标签
+        """
+        # 1. 距离计算
+        # 使用 torch.cdist 计算两组张量之间的 p-norm 距离 (p=2.0 为欧式距离)
+        # 相比于手动做 Broadcasting，torch.cdist 在 C++ 底层进行了高度优化
+        # dists 形状: (N_test, N_train)
+        dists = torch.cdist(X_test, self.X_train, p=2.0)
+
+        # 2. 寻找最近的 K 个邻居
+        # largest=False 表示取最小值
+        # topk_indices 形状: (N_test, k)
+        _, topk_indices = dists.topk(self.k, dim=1, largest=False)
+
+        # 3. 获取这 K 个邻居的标签
+        # topk_labels 形状: (N_test, k)
+        topk_labels = self.y_train[topk_indices]
+
+        # 4. 投票机制 (Majority Voting)
+        # predictions 形状: (N_test,)
+        predictions, _ = torch.mode(topk_labels, dim=1)
+
+        return predictions
+
+# ==========================================
+# 测试模块
+# ==========================================
+if __name__ == "__main__":
+    torch.manual_seed(42)
+
+    # 1. 生成二维训练数据
+    X_class0 = torch.randn(50, 2) - 2.0
+    y_class0 = torch.zeros(50, dtype=torch.long)
+    
+    X_class1 = torch.randn(50, 2) + 2.0
+    y_class1 = torch.ones(50, dtype=torch.long)
+
+    X_train = torch.cat([X_class0, X_class1], dim=0)
+    y_train = torch.cat([y_class0, y_class1], dim=0)
+
+    # 2. 测试数据点
+    X_test = torch.tensor([
+        [-1.5, -2.5],  # 预期输出: 0
+        [ 1.8,  2.2],  # 预期输出: 1
+        [ 0.0,  0.0]   # 边界点
+    ])
+
+    # 3. 推理
+    knn = KNNClassifier(k=5)
+    knn.fit(X_train, y_train)
+    predictions = knn.predict(X_test)
+
+    print("Test Samples:\n", X_test)
+    print("Predicted Labels:\n", predictions)
+</code></pre>
+
+    <h2>二、 核心面试题题库 (点击卡片展开答案)</h2>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q1: KNN 的核心思想是什么？为什么称其为“惰性学习” (Lazy Learning)？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">概念</span>
+                    <span class="tag tag-core">核心必考</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> KNN 的核心思想是“近朱者赤，近墨者黑”。给定测试样本，算法在训练集中寻找与之距离最近的 $K$ 个样本，由这 $K$ 个样本的标签通过多数表决决定测试样本类别。</p>
+            <p>称为“惰性学习”是因为它在训练阶段仅“记住”数据，没有求解参数方程的泛化过程，所有计算延迟到预测阶段执行。</p>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q2: 如何为 KNN 选择合适的 $K$ 值？$K$ 值过大或过小有何数学影响？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">超参数</span>
+                    <span class="tag tag-core">核心必考</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> $K$ 值通常通过交叉验证 (Cross-Validation) 选取。</p>
+            <ul>
+                <li><b>当 $K$ 极小（如 $K=1$）：</b> 模型极复杂，易受噪声干扰。方差大，偏差小，易过拟合。</li>
+                <li><b>当 $K$ 极大（如 $K=N$）：</b> 模型极简单，相当于预测为全集众数。偏差大，方差小，易欠拟合。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q3: KNN 中常用的距离度量有哪些？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">数学原理</span>
+                    <span class="tag tag-high">高频</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> 最通用的是 Minkowski 距离：<br>
+            $$L_p(x, y) = \left( \sum_{i=1}^{n} |x_i - y_i|^p \right)^{\frac{1}{p}}$$</p>
+            <ul>
+                <li>当 $p=1$ 时，为曼哈顿距离 (Manhattan Distance)。</li>
+                <li>当 $p=2$ 时，为欧几里得距离 (Euclidean Distance)。</li>
+                <li>当 $p \to \infty$ 时，为切比雪夫距离 (Chebyshev Distance)。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q4: KNN 为什么会面临“维度灾难” (Curse of Dimensionality)？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">理论深度</span>
+                    <span class="tag tag-core">核心必考</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> 高维空间中，特征数量 $D$ 增加导致空间体积呈指数级膨胀，数据变得极其稀疏。在这样的几何空间内，任意两个随机点之间的距离趋于相近，即最大距离与最小距离之差微乎其微。“最近邻”在数学上失去判别意义。</p>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q5: 描述 KNN 的时间复杂度和空间复杂度。</p>
+                <div class="tags">
+                    <span class="tag tag-concept">算法工程</span>
+                    <span class="tag tag-high">高频</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> 假设有 $N$ 个训练样本，特征维度为 $D$。</p>
+            <ul>
+                <li><b>时间复杂度：</b> $O(N \cdot D)$ 计算距离。若需排序找出前 $K$ 个，使用最小堆优化后整体为 $O(N \cdot D + N \log K)$。</li>
+                <li><b>空间复杂度：</b> $O(N \cdot D)$。惰性学习需将全部数据驻留内存。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q6: 数据集正负样本极度不平衡时，KNN 会出现什么问题？如何解决？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">实战场景</span>
+                    <span class="tag tag-mid">中频</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> 多数类样本在空间中占主导，测试点的 $K$ 个近邻大概率被多数类“淹没”，导致预测偏向多数类。</p>
+            <p><b>解决方法：</b> 引入距离权重。投票时赋予距离近的邻居更高权重（如 $W = 1/d$），让极近的少数类能对抗稍远的多数类。</p>
+        </div>
+    </div>
+
+    <div class="qa-card" onclick="toggleCard(this)">
+        <div class="qa-header">
+            <div>
+                <p class="qa-title">Q7: 工业界中为了加速 KNN，通常会采用什么数据结构？</p>
+                <div class="tags">
+                    <span class="tag tag-concept">数据结构</span>
+                    <span class="tag tag-mid">进阶</span>
+                </div>
+            </div>
+            <span class="toggle-icon">+</span>
+        </div>
+        <div class="qa-body">
+            <p><b>解答：</b> 常用 KD-Tree 或 Ball-Tree，将时间复杂度降至近似 $O(D \log N)$。</p>
+            <p>但在极高维（$D > 20$）下，KD-Tree 回溯开销剧增，性能退化为线性扫描。此时通常采用局部敏感哈希 (LSH) 等近似最近邻 (ANN) 算法。</p>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+<script>
+    // 激活代码高亮
+    hljs.highlightAll();
+
+    // 手风琴交互逻辑
+    function toggleCard(element) {
+        element.classList.toggle("active");
+    }
+</script>
+
+</body>
+</html>

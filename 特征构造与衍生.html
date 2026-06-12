@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI基础课堂：特征构造与衍生</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    
+    <style>
+        /* 严格遵守容器宽度要求 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: #2980b9;
+        }
+
+        .explanation {
+            background-color: #f8f9fa;
+            border-left: 5px solid #3498db;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .highlight-text {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            background-color: white;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+            font-size: 16px;
+            transition: all 0.4s ease;
+        }
+
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* 动画交互样式 */
+        .btn-start {
+            display: inline-block;
+            background-color: #2ecc71;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .btn-start:hover {
+            background-color: #27ae60;
+        }
+
+        .btn-start:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .dynamic-math-box {
+            min-height: 100px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        /* 动画高亮类 */
+        .cell-highlight {
+            background-color: #ffeeba !important;
+            transform: scale(1.02);
+            font-weight: bold;
+            color: #d35400;
+        }
+
+        .new-feature-col {
+            background-color: #e8f8f5;
+            color: #1abc9c;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>AI 基础课堂：特征构造与衍生</h1>
+    
+    <div class="explanation">
+        <p><strong>什么是特征构造与衍生？</strong></p>
+        <p>AI很“笨”，它只认识我们喂给它的数字。有时候，原始数据（比如“学习时间”和“个人能力”）单独看，并不能很好地反映出最终的结果（比如“成绩”）。</p>
+        <p><strong>特征衍生</strong>就是：我们利用基础的数学公式，把旧数据组合、变形，创造出更能反映问题本质的<strong>新数据（新特征）</strong>，帮助AI更聪明地学习。</p>
+    </div>
+
+    <hr style="border:1px dashed #ccc; margin: 30px 0;">
+
+    <h2>场景一：特征的“乘法”融合（线性衍生）</h2>
+    <div class="explanation" style="border-left-color: #9b59b6; background-color: #f4f0f7;">
+        <p><strong>问题阐述：</strong>假设我们想预测学生的成绩。数据里有“学习时间”和“学习能力”两个指标。如果一个学生能力很强，但不花时间；或者花了很多时间，但能力较弱，成绩可能都不理想。</p>
+        <p><strong>数学逻辑：</strong>真正的有效学习，是两者的结合。所以我们用<strong>乘法</strong>把它们结合起来，衍生出一个新特征叫<strong>“综合学习力”</strong>。公式：<strong>$$ E = T \times A $$</strong> （其中E是综合学习力，T是时间，A是能力）。</p>
+    </div>
+
+    <button id="startAnimBtn1" class="btn-start" onclick="startAnimation1()">▶ 开始演示：综合学习力的计算</button>
+
+    <div id="mathBox1" class="dynamic-math-box">
+        <div id="mathText1" style="margin-bottom: 10px; color: #856404; font-weight: bold;"></div>
+        <div id="mathFormula1"></div>
+    </div>
+
+    <table id="dataTable1">
+        <thead>
+            <tr>
+                <th>学生</th>
+                <th>学习时间 T (小时)</th>
+                <th>学习能力 A (1-10)</th>
+                <th id="newFeatureHeader1" class="hidden" style="background-color: #9b59b6;">衍生特征：综合学习力 E</th>
+                <th>最终成绩 (预测值)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr id="row1-1">
+                <td>张三</td>
+                <td id="T1-1">2</td>
+                <td id="A1-1">5</td>
+                <td id="E1-1" class="hidden new-feature-col" style="color: #8e44ad;"></td>
+                <td>10</td>
+            </tr>
+            <tr id="row1-2">
+                <td>李四</td>
+                <td id="T1-2">5</td>
+                <td id="A1-2">8</td>
+                <td id="E1-2" class="hidden new-feature-col" style="color: #8e44ad;"></td>
+                <td>40</td>
+            </tr>
+            <tr id="row1-3">
+                <td>王五</td>
+                <td id="T1-3">8</td>
+                <td id="A1-3">4</td>
+                <td id="E1-3" class="hidden new-feature-col" style="color: #8e44ad;"></td>
+                <td>32</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <hr style="border:1px dashed #ccc; margin: 40px 0;">
+
+    <h2>场景二：对数关系（打破“越多越好”的错觉）</h2>
+    <div class="explanation" style="border-left-color: #e67e22; background-color: #fdf2e9;">
+        <p><strong>问题阐述：</strong>在现实中，学习时间越长，成绩就一定成比例一直往上涨吗？并不是！当你学到一定时间后，人会疲惫，知识吸收率会下降，这就叫<strong>“边际递减效应”</strong>。</p>
+        <p><strong>数学逻辑：</strong>为了让AI理解这种“增长缓慢”的现象，我们会对“时间”取一个<strong>对数 (Logarithm)</strong>。对数函数天然具有“一开始增长快，后面增长极慢”的平缓曲线特征。我们的衍生公式是：<strong>$$ L = 20 \times \ln(T + 1) $$</strong></p>
+        <p><em>(注：$\ln$ 代表自然对数。加1是为了防止时间为0时数学无意义计算报错。乘以20是为了把分数放大到百位制。)</em></p>
+    </div>
+
+    <button id="startAnimBtn2" class="btn-start" style="background-color: #e67e22;" onclick="startAnimation2()">▶ 开始演示：对数特征的衰减计算</button>
+
+    <div id="mathBox2" class="dynamic-math-box">
+        <div id="mathText2" style="margin-bottom: 10px; color: #856404; font-weight: bold;"></div>
+        <div id="mathFormula2"></div>
+    </div>
+
+    <table id="dataTable2">
+        <thead>
+            <tr>
+                <th>学生</th>
+                <th>疯狂刷题时间 T (小时)</th>
+                <th id="newFeatureHeader2" class="hidden" style="background-color: #e67e22;">衍生特征：对数化时间 L</th>
+                <th>最终成绩 (预测值)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr id="row2-1">
+                <td>小明 (考前抱佛脚)</td>
+                <td id="T2-1">2</td>
+                <td id="L2-1" class="hidden new-feature-col" style="color: #d35400;"></td>
+                <td id="Score2-1">22</td>
+            </tr>
+            <tr id="row2-2">
+                <td>小红 (正常复习)</td>
+                <td id="T2-2">10</td>
+                <td id="L2-2" class="hidden new-feature-col" style="color: #d35400;"></td>
+                <td id="Score2-2">48</td>
+            </tr>
+            <tr id="row2-3">
+                <td>小刚 (刻苦刷题)</td>
+                <td id="T2-3">50</td>
+                <td id="L2-3" class="hidden new-feature-col" style="color: #d35400;"></td>
+                <td id="Score2-3">78</td>
+            </tr>
+            <tr id="row2-4">
+                <td>小智 (不眠不休)</td>
+                <td id="T2-4">100</td>
+                <td id="L2-4" class="hidden new-feature-col" style="color: #d35400;"></td>
+                <td id="Score2-4">92</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="explanation" style="margin-top: 20px; border-left-color: #2ecc71;">
+        <p><strong>观察场景二的结论：</strong></p>
+        <p>你能发现，时间从 <strong>2小时 增加到 10小时</strong>（增加了8小时），成绩从22分涨到48分，<strong>涨了26分</strong>。</p>
+        <p>但是，时间从 <strong>50小时 增加到 100小时</strong>（拼了命增加了50个小时！），成绩却只从78分涨到92分，<strong>仅仅涨了14分</strong>。</p>
+        <p>通过让AI学习这个 <strong>“对数化特征 L”</strong>，AI就能瞬间理解人类学习的极限瓶颈，而不是傻傻地预测“学1万个小时能考1万分”。这就是特征衍生中<strong>非线性变换</strong>的强大魔力！</p>
+    </div>
+
+</div>
+
+<script>
+    // 场景一数据
+    const data1 = [
+        { id: 1, name: "张三", t: 2, a: 5 },
+        { id: 2, name: "李四", t: 5, a: 8 },
+        { id: 3, name: "王五", t: 8, a: 4 }
+    ];
+
+    async function startAnimation1() {
+        const btn = document.getElementById('startAnimBtn1');
+        const mathBox = document.getElementById('mathBox1');
+        const mathText = document.getElementById('mathText1');
+        const mathFormula = document.getElementById('mathFormula1');
+        const newHeader = document.getElementById('newFeatureHeader1');
+        
+        btn.disabled = true;
+        btn.innerText = "演示进行中...";
+        mathBox.style.opacity = 1;
+        newHeader.classList.remove('hidden');
+
+        for (let i = 0; i < data1.length; i++) {
+            let rowId = data1[i].id;
+            let T = data1[i].t;
+            let A = data1[i].a;
+            let E = T * A;
+
+            mathText.innerText = `正在计算 ${data1[i].name} 的综合学习力...`;
+            
+            // 构建带数据的LaTeX公式 (注意在JS模板字符串中，反斜杠需要转义)
+            let formulaStr = `$$ E = T \\times A = ${T} \\times ${A} = ${E} $$`;
+            mathFormula.innerHTML = formulaStr;
+            
+            await MathJax.typesetPromise([mathFormula]);
+
+            // 高亮原始数据
+            let cellT = document.getElementById(`T1-${rowId}`);
+            let cellA = document.getElementById(`A1-${rowId}`);
+            let cellE = document.getElementById(`E1-${rowId}`);
+            
+            cellT.classList.add('cell-highlight');
+            cellA.classList.add('cell-highlight');
+
+            // 停顿观察公式
+            await new Promise(r => setTimeout(r, 2000));
+
+            // 填入结果
+            cellE.innerText = E;
+            cellE.classList.remove('hidden');
+            cellT.classList.remove('cell-highlight');
+            cellA.classList.remove('cell-highlight');
+            
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        mathText.innerText = "场景一：特征交叉（乘法）推导完成！可以看到 E 完美对应了预测成绩。";
+        mathFormula.innerHTML = "";
+        btn.innerText = "演示完成";
+    }
+
+    // 场景二数据
+    const data2 = [
+        { id: 1, name: "小明", t: 2, expected: 22 },
+        { id: 2, name: "小红", t: 10, expected: 48 },
+        { id: 3, name: "小刚", t: 50, expected: 78 },
+        { id: 4, name: "小智", t: 100, expected: 92 }
+    ];
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+    async function startAnimation2() {
+        const btn = document.getElementById('startAnimBtn2');
+        const mathBox = document.getElementById('mathBox2');
+        const mathText = document.getElementById('mathText2');
+        const mathFormula = document.getElementById('mathFormula2');
+        const newHeader = document.getElementById('newFeatureHeader2');
+        
+        btn.disabled = true;
+        btn.innerText = "演示进行中...";
+        mathBox.style.opacity = 1;
+        newHeader.classList.remove('hidden');
+
+        for (let i = 0; i < data2.length; i++) {
+            let rowId = data2[i].id;
+            let T = data2[i].t;
+            
+            // 计算逻辑：20 * ln(T+1)
+            let L_val = 20 * Math.log(T + 1);
+            let L_display = L_val.toFixed(2); // 保留两位小数
+
+            mathText.innerText = `正在计算 ${data2[i].name} 的对数化时间特征...`;
+            
+            // 构建带数据的LaTeX公式
+            let formulaStr = `$$ L = 20 \\times \\ln(${T} + 1) = 20 \\times \\ln(${T+1}) \\approx ${L_display} $$`;
+            mathFormula.innerHTML = formulaStr;
+            
+            await MathJax.typesetPromise([mathFormula]);
+
+            // 高亮原始数据
+            let cellT = document.getElementById(`T2-${rowId}`);
+            let cellL = document.getElementById(`L2-${rowId}`);
+            
+            cellT.classList.add('cell-highlight');
+
+            // 停顿观察公式
+            await new Promise(r => setTimeout(r, 2000));
+
+            // 填入结果
+            cellL.innerText = L_display;
+            cellL.classList.remove('hidden');
+            cellT.classList.remove('cell-highlight');
+            
+            // 高亮成绩对比
+            let cellScore = document.getElementById(`Score2-${rowId}`);
+            cellScore.classList.add('cell-highlight');
+            await new Promise(r => setTimeout(r, 800));
+            cellScore.classList.remove('cell-highlight');
+
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        mathText.innerText = "场景二：对数衍生推导完成！特征 L 的数值规律与最终成绩的增速完美契合。";
+        mathFormula.innerHTML = "";
+        btn.innerText = "演示完成";
+    }
+</script>
+
+</body>
+</html>

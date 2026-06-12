@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI数学原理：数据清洗与异常处理</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        /* 强制性宽度约束 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+
+        h1, h2, h3 {
+            color: #1a252f;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        .section-card {
+            background: #ffffff;
+            border: 1px solid #e0e6ed;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        /* 严谨的数据表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-family: "Courier New", Courier, monospace; /* 数据使用等宽字体 */
+            background: #fdfefe;
+        }
+
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 12px 15px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #ecf0f1;
+            font-weight: 600;
+        }
+
+        /* 动画与高亮样式 */
+        .highlight-calc {
+            background-color: #f1c40f !important;
+            transition: background-color 0.5s ease;
+        }
+
+        .highlight-result {
+            background-color: #2ecc71 !important;
+            color: white;
+            font-weight: bold;
+            transition: all 0.5s ease;
+        }
+
+        .highlight-outlier {
+            background-color: #e74c3c !important;
+            color: white;
+            font-weight: bold;
+        }
+
+        .btn {
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+
+        .btn:hover { background-color: #34495e; }
+        .btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
+
+        .math-panel {
+            background: #f8f9fa;
+            border-left: 4px solid #2980b9;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>第三章：数据清洗与特征工程进阶</h1>
+    <p>在构建机器学习模型（例如决策树，或线性模型 $f(x) = wx + b$）之前，数据的纯净度直接决定了算法能否正确收敛。本章将从数学本质出发，推演缺失值与异常值的处理逻辑。</p>
+
+    <div class="section-card">
+        <h2>3.1 缺失值填补：均值 vs 中位数的数学博弈</h2>
+        <p>当数据存在缺失（NaN）时，常用的数学填补方法是均值或中位数。以下面的特征 $X$ 为例，注意样本中存在一个极端的数值（100），我们将通过动态演算，观察它对均值和中位数带来的不同影响。</p>
+        
+        <table id="missing-table">
+            <thead>
+                <tr>
+                    <th>样本 ID</th>
+                    <th>特征 $X$ 数值</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>1</td><td class="data-val">10</td><td>正常</td></tr>
+                <tr><td>2</td><td class="data-val">12</td><td>正常</td></tr>
+                <tr><td>3</td><td id="missing-cell" style="color:red; font-weight:bold;">NaN</td><td>缺失值 (待填补)</td></tr>
+                <tr><td>4</td><td class="data-val">16</td><td>正常</td></tr>
+                <tr><td>5</td><td class="data-val highlight-outlier">100</td><td>正常 (但存在极端偏离)</td></tr>
+            </tbody>
+        </table>
+
+        <button class="btn" id="btn-impute" onclick="animateMissingValues()">▶ 演示：计算均值与中位数填补</button>
+        
+        <div class="math-panel" id="math-missing">
+            等待计算指令...
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h2>3.2 异常值处理：基于 IQR 四分位距法的边界截断</h2>
+        <p>四分位距法（Interquartile Range, IQR）是一种鲁棒的统计学方法，不依赖数据服从正态分布。它通过计算第 25% 分位数（$Q_1$）和第 75% 分位数（$Q_3$）来定义正常数据的边界。超出边界的数据将被实施**截断 (Capping)** 处理。</p>
+        
+        <table id="outlier-table">
+            <thead>
+                <tr>
+                    <th>排序样本 ID</th>
+                    <th>特征 $Y$ 数值</th>
+                    <th>百分位分布</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>1</td><td>10</td><td>最小值</td></tr>
+                <tr id="q1-row"><td>2</td><td id="q1-val">12</td><td>$Q_1$ (25%)</td></tr>
+                <tr><td>3</td><td>14</td><td>中位数</td></tr>
+                <tr id="q3-row"><td>4</td><td id="q3-val">20</td><td>$Q_3$ (75%)</td></tr>
+                <tr id="outlier-row"><td>5</td><td id="outlier-val" class="highlight-outlier">100</td><td>待检测</td></tr>
+            </tbody>
+        </table>
+
+        <button class="btn" id="btn-outlier" onclick="animateIQR()">▶ 演示：IQR边界推导与截断计算</button>
+        
+        <div class="math-panel" id="math-outlier">
+            $$ IQR = Q_3 - Q_1 $$
+        </div>
+    </div>
+</div>
+
+<script>
+    // 通用函数：等待指定时间
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // ==========================================
+    // 3.1 缺失值动态推导逻辑
+    // ==========================================
+    async function animateMissingValues() {
+        const btn = document.getElementById('btn-impute');
+        btn.disabled = true;
+        const mathPanel = document.getElementById('math-missing');
+        const missingCell = document.getElementById('missing-cell');
+        
+        // 步骤1：计算均值
+        mathPanel.innerHTML = `<p><strong>步骤 1：计算可用数据的均值 (Mean)</strong></p>
+            $$ \\mu = \\frac{10 + 12 + 16 + 100}{4} = \\frac{138}{4} = 34.5 $$
+            <p style="color:#e74c3c;">观察结论：受极端值 100 的影响，均值 34.5 严重偏离了主体数据 (10~16)，若填补 34.5 会引入误差。</p>`;
+        await MathJax.typesetPromise([mathPanel]);
+        await sleep(3500);
+
+        // 步骤2：计算中位数
+        mathPanel.innerHTML += `<p><strong>步骤 2：计算可用数据的中位数 (Median)</strong></p>
+            <p>将有效数据排序：10, 12, 16, 100。取中间两项的均值：</p>
+            $$ Median = \\frac{12 + 16}{2} = 14 $$
+            <p style="color:#2ecc71;">观察结论：中位数 14 完美地落在了主体数据的范围内，表现出了极强的鲁棒性 (Robustness)。</p>`;
+        await MathJax.typesetPromise([mathPanel]);
+        await sleep(3500);
+
+        // 步骤3：执行填补
+        mathPanel.innerHTML += `$$ \\therefore \\text{最终决策：使用中位数 } 14 \\text{ 填补缺失值。} $$`;
+        await MathJax.typesetPromise([mathPanel]);
+        
+        missingCell.innerText = '14';
+        missingCell.className = 'highlight-result';
+        missingCell.nextElementSibling.innerText = '已用中位数填补';
+        
+        btn.innerText = '推导完成';
+    }
+
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+
+
+
+    // ==========================================
+    // 3.2 异常值 IQR 动态推导逻辑
+    // ==========================================
+    async function animateIQR() {
+        const btn = document.getElementById('btn-outlier');
+        btn.disabled = true;
+        const mathPanel = document.getElementById('math-outlier');
+        
+        const q1Row = document.getElementById('q1-row');
+        const q3Row = document.getElementById('q3-row');
+        const outlierRow = document.getElementById('outlier-row');
+        const outlierVal = document.getElementById('outlier-val');
+
+        // 步骤1：提取 Q1 和 Q3 并计算 IQR
+        q1Row.className = 'highlight-calc';
+        q3Row.className = 'highlight-calc';
+        
+        mathPanel.innerHTML = `<p><strong>步骤 1：提取分位数并计算四分位距 (IQR)</strong></p>
+            $$ Q_1 = 12, \\quad Q_3 = 20 $$
+            $$ IQR = Q_3 - Q_1 = 20 - 12 = 8 $$`;
+        await MathJax.typesetPromise([mathPanel]);
+        await sleep(3000);
+
+        // 步骤2：计算上下界
+        mathPanel.innerHTML += `<p><strong>步骤 2：根据统计学约定 ($1.5 \\times IQR$) 计算正常数据的边界</strong></p>
+            $$ \\text{下界 (Lower Bound)} = Q_1 - 1.5 \\times IQR = 12 - 1.5 \\times 8 = 0 $$
+            $$ \\text{上界 (Upper Bound)} = Q_3 + 1.5 \\times IQR = 20 + 1.5 \\times 8 = 32 $$`;
+        await MathJax.typesetPromise([mathPanel]);
+        await sleep(3500);
+
+        // 步骤3：判定与截断
+        mathPanel.innerHTML += `<p><strong>步骤 3：异常检测与边界截断 (Capping)</strong></p>
+            $$ \\text{目标值 } 100 > \\text{上界 } 32 \\implies \\text{判定为异常值!} $$
+            $$ \\text{截断操作：将 } 100 \\text{ 强制缩放至上界值 } 32 $$`;
+        await MathJax.typesetPromise([mathPanel]);
+        
+        // 更新表格 UI 反馈
+        outlierVal.innerText = '32 (已截断)';
+        outlierVal.className = 'highlight-result';
+        outlierRow.lastElementChild.innerText = '已修正至上界';
+
+        q1Row.classList.remove('highlight-calc');
+        q3Row.classList.remove('highlight-calc');
+        
+        btn.innerText = '推导与截断完成';
+    }
+</script>
+
+</body>
+</html>

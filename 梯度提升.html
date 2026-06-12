@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>梯度提升算法 (Gradient Boosting) 核心推演</title>
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <style>
+        .container { max-width: 1400px; margin: 0 auto; }
+        :root {
+            --primary-blue: #1e3a8a; --light-blue: #eff6ff; --accent-green: #10b981; 
+            --accent-orange: #f59e0b; --accent-purple: #8b5cf6; --accent-pink: #e84393;
+            --text-main: #1f2937; --border-light: #e5e7eb; --bg-gray: #f8fafc; 
+            --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: var(--text-main); background-color: var(--bg-gray); padding: 40px 20px; }
+        h1, h2, h3 { color: var(--primary-blue); border-bottom: 2px solid var(--border-light); padding-bottom: 10px; margin-top: 40px; }
+        h1 { font-size: 2.2em; border-bottom: 3px solid var(--primary-blue); }
+        
+        .interactive-panel { background: white; border: 1px solid var(--border-light); border-radius: 12px; padding: 24px; margin: 24px 0; box-shadow: var(--shadow-md); }
+        button { background-color: var(--primary-blue); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.2s ease; margin-right: 10px; margin-bottom: 15px; font-weight: bold; }
+        button:hover:not(:disabled) { background-color: #1e40af; transform: translateY(-1px); }
+        button:disabled { background-color: #9ca3af; cursor: not-allowed; opacity: 0.7; }
+        
+        .btn-base { background-color: #475569; } .btn-base:hover:not(:disabled) { background-color: #334155; }
+        .btn-tree-1 { background-color: var(--accent-orange); } .btn-tree-1:hover:not(:disabled) { background-color: #d97706; }
+        .btn-tree-2 { background-color: var(--accent-purple); } .btn-tree-2:hover:not(:disabled) { background-color: #7c3aed; }
+        .btn-reset { background-color: #ef4444; } .btn-reset:hover:not(:disabled) { background-color: #dc2626; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; text-align: center; }
+        th, td { border: 1px solid var(--border-light); padding: 8px; font-size: 14px; } th { background-color: var(--light-blue); }
+        
+        .voting-layout { display: grid; grid-template-columns: 300px 180px 1fr; gap: 20px; align-items: stretch; }
+        .voting-controls { display: flex; flex-direction: column; gap: 16px; }
+        .data-card { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; box-shadow: var(--shadow-sm); }
+        .control-buttons { display: flex; flex-direction: column; gap: 10px; } .control-buttons button { margin: 0; width: 100%; }
+        
+        .forest-view { display: flex; flex-direction: column; }
+        .forest-container { flex-grow: 1; display: flex; flex-direction: column; gap: 20px; justify-content: center; align-items: center; padding: 15px; background: var(--bg-gray); border-radius: 8px; border: 1px dashed #cbd5e1; position: relative;}
+
+        .calc-view { display: flex; flex-direction: column; min-width: 0; }
+        .calc-tabs { display: flex; gap: 5px; margin-bottom: -1px; z-index: 10; }
+        .calc-tab { padding: 8px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; color: #94a3b8; font-weight: bold; font-size: 14px; display: none; transition: all 0.2s; }
+        .calc-tab.active { background: #fff; color: var(--text-main); border-bottom: 1px solid #fff; }
+        .calc-tab.active-0 { border-top: 3px solid #475569; color: #475569; }
+        .calc-tab.active-1 { border-top: 3px solid var(--accent-orange); color: var(--accent-orange); }
+        .calc-tab.active-2 { border-top: 3px solid var(--accent-purple); color: var(--accent-purple); }
+
+        .calc-details-box { background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 0 8px 8px 8px; font-size: 0.95em; height: auto; overflow: visible; margin: 0; box-shadow: var(--shadow-sm); position: relative; z-index: 1; }
+        .calc-details-box.theme-0 { border-left: 4px solid #475569; }
+        .calc-details-box.theme-1 { border-left: 4px solid var(--accent-orange); }
+        .calc-details-box.theme-2 { border-left: 4px solid var(--accent-purple); }
+        .calc-details-box ul { padding-left: 20px; margin: 10px 0; }
+        .calc-details-box li { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #e2e8f0; list-style-type: none;}
+
+        .dynamic-node { display: flex; flex-direction: column; align-items: center; animation: popIn 0.4s ease forwards; }
+        .dynamic-circle { width: 70px; height: 70px; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 18px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); position: relative; z-index: 2;}
+        .node-base { background-color: #475569; }
+        .node-tree1 { background-color: var(--accent-orange); }
+        .node-tree2 { background-color: var(--accent-purple); }
+        .node-title { margin-bottom: 5px; color: #333; font-size: 13px; font-weight: bold; }
+        .plus-sign { font-size: 24px; color: #94a3b8; margin: 5px 0; font-weight: bold; z-index: 1;}
+        
+        @keyframes popIn { 0% { transform: translateY(-20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+
+        .math-dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #1e293b; color: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .math-cell { background: #0f172a; padding: 15px 10px; border-radius: 6px; border: 1px solid #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.3s ease; }
+        .math-highlight { animation: glow 0.8s ease-out; }
+        .cell-title { font-size: 12px; color: #94a3b8; margin-bottom: 8px; }
+        @keyframes glow { 0% { box-shadow: 0 0 0px rgba(59, 130, 246, 0); } 50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.8); border-color: #3b82f6;} 100% { box-shadow: 0 0 0px rgba(59, 130, 246, 0); } }
+        
+        .final-decision { grid-column: span 4; text-align: center; font-size: 1.4em; font-weight: bold; padding: 20px; border-radius: 6px; background: #0f172a; border: 2px solid #3b82f6; color: #60a5fa; }
+
+        .bucket-animation-area { background: #fdfefe; border: 2px dashed #95a5a6; padding: 40px; text-align: center; border-radius: 10px; margin: 20px 0; position: relative; height: 300px; overflow: hidden; }
+        .ball { width: 70px; height: 70px; border-radius: 50%; color: white; font-weight: bold; line-height: 70px; text-align: center; position: absolute; top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); transition: all 1.5s cubic-bezier(0.25, 0.8, 0.25, 1); font-size: 1.1em; z-index: 2; }
+        .ball-a { background-color: #ef4444; left: 35%; } 
+        .ball-b { background-color: #f59e0b; left: 55%; } 
+        .bucket { width: 220px; height: 130px; border: 4px solid #3b82f6; border-top: none; border-radius: 0 0 20px 20px; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(59, 130, 246, 0.05); z-index: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 10px; }
+        .bucket-label { font-weight: bold; color: #1e40af; margin-bottom: 15px; font-size: 1.1em; }
+        .result-tag { opacity: 0; transform: translateY(20px); transition: all 1s ease 1.5s; background: #10b981; color: white; padding: 10px 20px; border-radius: 5px; font-weight: bold; font-size: 1.2em; position: absolute; bottom: -15px; z-index: 3; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .ball.drop-a { top: 170px; left: 50%; transform: translateX(-90%); opacity: 0; }
+        .ball.drop-b { top: 170px; left: 50%; transform: translateX(10%); opacity: 0; }
+        .result-tag.show-result { opacity: 1; transform: translateY(0); }
+
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        .btn-reveal-math {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--accent-pink), #e056fd);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.05em;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(232, 67, 147, 0.3);
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        .btn-reveal-math:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(232, 67, 147, 0.4);
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>🚀 梯度提升算法 (Gradient Boosting) 全景指南</h1>
+
+    <h2>🌟 引言：什么是梯度提升算法 (GBDT)？</h2>
+    <div class="interactive-panel" style="border-left: 5px solid var(--accent-orange);">
+        <h3 style="color: var(--accent-orange); margin-top: 0;">🤔 大白话：一头雾水？把它想成“错题本接力赛”！</h3>
+        <p>如果用一句话来概括，梯度提升（Gradient Boosting）的核心思想就是：<strong>“不要试图让一个模型一次性把题做对，而是找一堆基础模型，每个人只负责纠正上一个人的错题！”</strong> </p>
+        
+        <div style="background: #fff7ed; padding: 20px; border-radius: 8px; border: 1px dashed #fbd38d; margin: 15px 0;">
+            <p style="margin-top: 0; font-weight: bold; color: #c05621;">举个极度通俗的例子：假设你要猜测某位同学的真实成绩是 90 分。</p>
+            <ul style="line-height: 1.8;">
+                <li><strong>🌲 第一棵树（基础预测）：</strong> 它很笨，直接猜班级平均分 <strong>60分</strong>。此时的误差（残差）是 $90 - 60 = 30$ 分。</li>
+                <li><strong>🌲 第二棵树（第1次纠错）：</strong> 它完全不看那个同学的数据，它<strong>只盯着刚才第一棵树犯的错（30分）去猜</strong>！它努力预测出了 <strong>20分</strong>。
+                    <br><span style="color: #718096; font-size: 0.9em;">现在的总成绩 = $60 + 20 = 80$ 分。剩下的误差是 $90 - 80 = 10$ 分。</span>
+                </li>
+                <li><strong>🌲 第三棵树（第2次纠错）：</strong> 它接手上一棵树的“错题本”，发现还有 10 分的误差。它努力预测出了 <strong>8分</strong>。
+                    <br><span style="color: #718096; font-size: 0.9em;">现在的总成绩 = $60 + 20 + 8 = 88$ 分。剩下的误差只有 2 分了！</span>
+                </li>
+            </ul>
+            <p style="margin-bottom: 0;"><strong>最终你的 AI 大模型预测结果 = 第一棵树 + 第二棵树 + 第三棵树 + ...</strong></p>
+        </div>
+
+        <h3 style="color: var(--primary-blue);">💡 为什么名字里有个吓人的“梯度 (Gradient)”？</h3>
+        <p>在微积分里，<strong>“负梯度”</strong>代表着下山最快的方向。数学家们发现：我们上面比喻的这种<strong>“专门去弥补残差（错误量）”</strong>的行为，在数学公式上，恰恰完美等价于<strong>“顺着误差函数的负梯度方向去优化”</strong>。所以，这套不断累加纠错树的打法，就被高大上地命名为了“梯度提升”。</p>
+    </div>
+
+    <h2>第一部分：核心公式与灵魂拷问 (大白话版)</h2>
+    
+    <div class="interactive-panel" style="border-left: 5px solid var(--accent-green);">
+        <h3 style="color: var(--accent-green); margin-top: 0;">1.1 数学推导：负梯度为什么等于残差？</h3>
+        <p>GBDT 在回归任务中常用的是<strong>均方误差 (MSE)</strong>作为损失函数，它是衡量“我们猜得有多离谱”的尺子：</p>
+        <p>$$L(y, F(x)) = \frac{1}{2}(y - F(x))^2$$</p>
+        <p>在 AI 中我们要让误差最小化，就需要求导数。对上面的损失函数关于 $F(x)$ 求偏导数：</p>
+        <p>$$\frac{\partial L}{\partial F(x)} = \frac{1}{2} \times 2 \times (y - F(x)) \times (-1) = -(y - F(x))$$</p>
+        <p>而我们数学里定义的<strong>负梯度</strong>，就是：</p>
+        <p>$$-\frac{\partial L}{\partial F(x)} = y - F(x)$$</p>
+        <p><strong>奇迹出现了！</strong> $y - F(x)$ 正好就是真实值减去预测值，这就是我们在前几章反复算过的<strong>残差</strong>！</p>
+    </div>
+
+    <div class="interactive-panel" style="border-left: 5px solid var(--accent-pink);">
+        <h3 style="color: var(--accent-pink); margin-top: 0;">1.2 灵魂拷问：既然就是残差，为什么非要叫“梯度”提升？有什么意义？</h3>
+        <p>很多初学者都会卡在这里：既然算出来就是真实值减预测值，那直接叫“残差提升树 (Residual Boosting)”不香吗？为什么要拽“梯度 (Gradient)”这个词？</p>
+        <p><strong>深层意义在于：残差只是一个“特例”，而梯度是“万能指南针”。</strong></p>
+        <ul>
+            <li><strong>残差（两点直达）：</strong> 只有在使用<strong>均方误差 (MSE)</strong>这把特定的尺子时，负梯度才碰巧等于残差。</li>
+            <li><strong>负梯度（GPS 导航）：</strong>在梯度下降算法中，梯度是最快的上升方向，负梯度是最快的下降方向。 <strong>负梯度，损失函数下降最快的方向</strong>。</li>
+            <li><strong>结论：</strong>残差变小，即负梯度变小 </li>
+        </ul>
+
+        <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border: 1px solid #86efac; margin: 20px 0;">
+            <p style="font-size: 1.1em; color: #166534;"><strong>想象你现在站在半山腰，开始模型训练（下山）：</strong></p>
+            <ul style="list-style-type: none; padding-left: 0; margin-bottom: 0;">
+                <li style="margin-bottom: 10px;">🏔️ <strong>初始状态：</strong> 你的预测很不准 $\rightarrow$ 误差大（海拔很高） $\rightarrow$ 你脚下的坡非常陡 $\rightarrow$ 负梯度（残差）很大。</li>
+                <li style="margin-bottom: 10px;">🚶‍♂️ <strong>采取行动：</strong> 算法告诉你，顺着最陡的下坡方向走（让新树去拟合这个大残差）。</li>
+                <li style="margin-bottom: 10px;">📉 <strong>产生结果：</strong> 你往下走了一段，来到了海拔更低的地方 $\rightarrow$ 损失函数变小了。</li>
+                <li style="margin-bottom: 10px;">🏕️ <strong>自然现象：</strong> 因为你离谷底更近了，地形自然变得平缓了一些 $\rightarrow$ 坡度变小了，即负梯度（残差）变小了。</li>
+                <li style="margin-bottom: 0;">🎯 <strong>最终终点：</strong> 当你最终走到绝对的谷底时，地面是完全平坦的 $\rightarrow$ 坡度为 0（负梯度为 0，残差为 0），此时损失函数达到了真正的最小值！</li>
+            </ul>
+        </div>
+        <p>证明“负梯度=残差”搭建了一座数学桥梁。它让你在这个最简单的特例中，可以用“差多少补多少（残差）”的生活常识，去直观理解极其抽象的“梯度下降”算法。懂了这个，GBDT 万物皆可拟合的大门就向你敞开了！</p>
+
+        <div style="background: #fdf2f8; padding: 15px; border-radius: 8px; margin-top: 20px; border: 1px dashed var(--accent-pink);">
+            <h4 style="color: var(--accent-pink); margin-top: 0;">💡 互动演示：万能的梯度指南针</h4>
+            <p style="font-size: 0.95em;">点击切换不同的任务场景，看看树每一轮到底在学习（拟合）什么：</p>
+            <div style="text-align: center;">
+                <button class="btn-base" style="background: var(--accent-pink);" onclick="switchLoss('mse')">使用 均方误差 (回归预测)</button>
+                <button class="btn-base" style="background: var(--accent-purple);" onclick="switchLoss('mae')">使用 绝对误差 (抗异常值回归)</button>
+            </div>
+            <div id="loss-demo" style="background: white; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: bold; text-align: center; font-size: 1.2em; min-height: 80px; display: flex; flex-direction: column; justify-content: center;">
+                <span style="color:var(--accent-pink);">数学推导结果：负梯度 = $y - F(x)$ (正好等于残差)</span>
+                <span style="font-size:0.75em; color:#64748b; margin-top:10px; font-weight:normal;">揭秘下一棵树的学习目标：树会去拟合具体的误差数值（如差了 -25 分，树就努力输出 -25）。</span>
+            </div>
+        </div>
+    </div>
+
+    <h2>第二部分：叶子节点权重 ($b$) 的求解与全局模型更新</h2>
+    <div class="interactive-panel" style="border-left: 5px solid var(--primary-blue);">
+        <h3 style="color: var(--primary-blue); margin-top: 0;">2.1 求解最优叶子权重 $b_{m,j}$ (也就是桶里的输出值)</h3>
+        <p>当我们建立了一棵 CART 回归树，将输入空间划分为 $J$ 个叶子节点区域后，需要计算每个区域输出的最优权重 $b_{m,j}$。</p>
+        <p>目标是最小化该叶子节点内所有样本的损失（寻找一个代表值，让大家误差最小）：</p>
+        <p>$$b_{m,j} = \arg\min_{b} \sum_{x_i \in R_{m,j}} \frac{1}{2}(y_i - (F_{m-1}(x_i) + b))^2$$</p>
+        <p>对 $b$ 求导并令导数为 $0$：</p>
+        <p>$$\sum_{x_i \in R_{m,j}} -(y_i - F_{m-1}(x_i) - b) = 0$$</p>
+        <p>代入残差 $r_{m,i} = y_i - F_{m-1}(x_i)$，并设叶子节点中样本数量为 $N_{m,j}$：</p>
+        <p>$$\sum_{x_i \in R_{m,j}} (r_{m,i} - b) = 0 \implies b_{m,j} = \frac{1}{N_{m,j}} \sum_{x_i \in R_{m,j}} r_{m,i}$$</p>
+        <p><strong style="color: #ef4444;">结论：最优权重 $b_{m,j}$ 即为落入该叶子节点中所有样本残差的算术平均值！</strong></p>
+        
+        <hr style="border: 1px dashed var(--border-light); margin: 30px 0;">
+        
+        <h4 style="color: var(--accent-orange);">🎬 动图推演：如何求平均得到桶的值？</h4>
+        <p>数学符号看不懂？没关系！在我们<strong>下文即将实战演练的“树1”</strong>中，<strong>样本 2</strong>（残差 -24）和<strong>样本 4</strong>（残差 -9）会被分到了同一个叶子节点（即 $x_1 \le 3$ 的桶）。算法如何求出这个桶代表的输出值？点击下方按钮观察：</p>
+        
+        <div class="bucket-animation-area">
+            <div id="ball-a" class="ball ball-a">样本 2<br>-24</div>
+            <div id="ball-b" class="ball ball-b">样本 4<br>-9</div>
+            
+            <div class="bucket">
+                <div class="bucket-label">左侧叶子节点桶</div>
+                <div id="result-tag" class="result-tag">最优权重 = -16.5</div>
+            </div>
+        </div>
+        <div style="text-align: center;">
+            <button class="btn-base" onclick="playBucketAnimation()">点击演示：小球入桶求最优权重</button>
+        </div>
+        <p style="text-align: center; color: #64748b; font-size: 0.95em;">（验算：$\frac{(-24) + (-9)}{2} = -16.5$，这就严丝合缝地对上了我们下文实战里的计算结果！）</p>
+    </div>
+
+    <div class="interactive-panel" style="border-left: 5px solid var(--primary-blue);">
+        <h3 style="color: var(--primary-blue); margin-top: 0;">2.2 全局模型更新法则 (大白话拆解版)</h3>
+        <p>计算出所有的 $b_{m,j}$ 后，我们将新树的结果累加到上一轮模型中。全局更新的完整数学公式如下：</p>
+        <div style="background: #f8fafc; padding: 20px; text-align: center; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
+            <span style="font-size: 1.4em; color: var(--text-main);">
+                $$F_m(x) = F_{m-1}(x) + \eta \sum_{j=1}^J b_{m,j}I(x \in R_{m,j})$$
+            </span>
+        </div>
+
+        <h4 style="color: var(--accent-purple);">🧐 符号地狱？其实它是纸老虎！逐个翻译：</h4>
+        <ul style="line-height: 1.8; padding-left: 20px;">
+            <li><strong style="color: var(--primary-blue);">$F_m(x)$</strong>：第 $m$ 轮（今天最新）给出的<strong>最终预测分数</strong>。</li>
+            <li><strong style="color: var(--primary-blue);">$F_{m-1}(x)$</strong>：第 $m-1$ 轮（昨天为止）积累的<strong>老预测分数</strong>。</li>
+            <li><strong style="color: var(--accent-orange);">$\eta$ (读作 eta)</strong>：<strong>学习率</strong>（也就是我们在动图中用的系数 $b$），通常是个 $0 \sim 1$ 之间的小数。它相当于“刹车”，防止新树步子迈得太大导致过拟合。</li>
+            <li><strong style="color: var(--accent-pink);">$\sum_{j=1}^J$</strong>：求和符号。表示把这棵树里一共 $J$ 个叶子节点（桶）扫一遍。</li>
+            <li><strong style="color: var(--accent-pink);">$b_{m,j}$</strong>：第 $m$ 棵树里，第 $j$ 个桶算出来的<strong>最优输出权重</strong>（比如前面算出的 -16.5 或 10.00）。</li>
+            <li><strong style="color: var(--accent-green);">$I(x \in R_{m,j})$</strong>：<strong>指示函数</strong>。这就是个编程里的 <code>if</code> 判断！如果特定学生 $x$ 掉进了第 $j$ 个桶（$R_{m,j}$），它的值就是 $1$；如果没掉进去，就是 $0$。</li>
+        </ul>
+
+        <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; border: 1px solid #86efac; color: #166534; margin-top: 20px;">
+            <p style="font-size: 1.1em; font-weight: bold; margin-top: 0;">💡 大白话串讲：这就叫“精准自动分拣”</p>
+            <p>这个看着吓人的公式，用人类语言翻译过来就是：</p>
+            <p><strong>“我今天对某个学生的最新预测分，等于我昨天的预测分，加上（学习率 $\times$ 这个学生单独掉进的那个桶里的修正分）。”</strong></p>
+            <p style="margin-bottom: 0;">后面那一串带求和 $\sum$ 的东西，本质上就是个<strong>“自动分拣机”</strong>。因为一个学生不可能同时掉进两个桶里，所以对于这个学生来说，几百个桶里只有唯一的一个指示函数 $I$ 会等于 1（命中激活），其他桶全等于 0（作废被抹去）。</p>
+        </div>
+    </div>
+
+
+    <h2 style="border-bottom: 3px solid var(--primary-blue); padding-bottom: 10px;">第三部分：实战推演 - 串行纠错与残差拟合</h2>
+    
+    <div style="background: #eff6ff; padding: 20px; border-left: 5px solid #3b82f6; margin-bottom: 20px; border-radius: 8px;">
+        <h3>💡 核心计算思路：5 步拆解法</h3>
+        <p>① <strong>初始化模型</strong>：使用全部样本，计算标签平均值作为基准 $F_0$。</p>
+        <p>② <strong>寻找特征切分点</strong>：遍历特征节点寻找最佳切分。</p>
+        <p>③ <strong>拟合残差建树</strong>：通过前一轮误差（残差），生成 1 个 CART 决策树。叶子节点等于局部样本残差的平均值。</p>
+        <p>④ <strong>迭代训练</strong>：重复步骤 1-3，持续拟合新的残差，训练 $K$ 次。</p>
+        <p>⑤ <strong>累计预测结果</strong>：总预测结果 = 平均值 + 修正1 + 修正2 + …（单次修正量 = 学习率系数 $b \times$ 当次树输出）。</p>
+    </div>
+
+    <h3>步骤 0: 原始数据集 (预测具体的期末分数)</h3>
+    <div class="interactive-panel">
+        <table id="table-original" style="margin: 0;">
+            <tr><th>样本 ID</th><th>学习时长 ($x_1$)</th><th>考勤率 ($x_2$)</th><th>真实分数 ($y$)</th></tr>
+            <tr id="row-1"><td>1</td><td>10</td><td>90</td><td>85</td></tr>
+            <tr id="row-2"><td>2</td><td>2</td><td>50</td><td>40</td></tr>
+            <tr id="row-3"><td>3</td><td>5</td><td>80</td><td>65</td></tr>
+            <tr id="row-4"><td>4</td><td>3</td><td>60</td><td>55</td></tr>
+            <tr id="row-5"><td>5</td><td>8</td><td>85</td><td>75</td></tr>
+        </table>
+    </div>
+
+    <h3>步骤 1-5: 交互式训练面板</h3>
+    <div class="interactive-panel">
+        <div class="voting-layout">
+            <div class="voting-controls">
+                <div class="data-card">
+                    <strong>待预测的新生向量 $x$ :</strong>
+                    <ul style="margin: 5px 0 0 0; padding-left: 20px;">
+                        <li>学习时长 $x_1$ = <strong>6</strong></li>
+                        <li>考勤率 $x_2$ = <strong>70</strong></li>
+                    </ul>
+                    <div style="margin-top: 10px;">设定学习率系数: $$b = 0.8$$</div>
+                </div>
+                <div class="control-buttons">
+                    <button id="btn-base" class="btn-base" onclick="trainBase()">⚙️ 计算平均值 $F_0$</button>
+                    <button id="btn-tree-1" class="btn-tree-1" onclick="trainTree1()" disabled>⚙️ 生成决策树 1 (修正1)</button>
+                    <button id="btn-tree-2" class="btn-tree-2" onclick="trainTree2()" disabled>⚙️ 生成决策树 2 (修正2)</button>
+                    <button id="btn-reset" class="btn-reset" onclick="resetAll()">🔄 清空重置</button>
+                </div>
+            </div>
+
+            <div class="forest-view">
+                <div id="forest-arena" class="forest-container">
+                    <span style="color: #94a3b8; text-align: center; font-size: 13px;" id="empty-hint">模型组装<br>流水线</span>
+                </div>
+            </div>
+
+            <div class="calc-view">
+                <div class="calc-tabs" id="calc-tabs">
+                    <div class="calc-tab" id="tab-0" onclick="switchTab('0')">🧱 基准平均值 $F_0$</div>
+                    <div class="calc-tab" id="tab-1" onclick="switchTab('1')">🌲 树 1 计算明细</div>
+                    <div class="calc-tab" id="tab-2" onclick="switchTab('2')">🌲 树 2 计算明细</div>
+                </div>
+                <div class="calc-details-box" id="calc-details">
+                    <div id="calc-placeholder" style="color: #94a3b8; text-align: center; margin-top: 50px; margin-bottom: 50px;">
+                        点击左侧按钮，<br>查看详细的数学推演步骤、公式与代入数据...
+                    </div>
+                </div>
+            </div>
+        </div> 
+        
+        <div class="math-dashboard">
+            <div class="math-cell" id="cell-f0">
+                <span class="cell-title">基础预测基准值</span>
+                <span id="math-f0">$$F_0(x) = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="cell-h1">
+                <span class="cell-title">树 1 叶节点输出量</span>
+                <span id="math-h1">$$h_1(x) = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="cell-h2">
+                <span class="cell-title">树 2 叶节点输出量</span>
+                <span id="math-h2">$$h_2(x) = \text{?}$$</span>
+            </div>
+            <div class="math-cell" id="cell-lr">
+                <span class="cell-title">学习率系数</span>
+                <span id="math-lr">$$b = 0.8$$</span>
+            </div>
+            <div class="final-decision" id="cell-final">
+                <span style="font-size: 0.6em; color:#94a3b8; display:block; margin-bottom:8px;">最终集成分数预测公式：平均值 + 修正1 + 修正2</span>
+                <span id="math-final">$$\text{结果} = \text{?}$$</span>
+            </div>
+        </div>
+    </div> 
+
+</div>
+		<script>
+	(function() {
+		const TARGET_X =-1860111477
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+	</script>
+
+    <script>
+        const data = [
+            { id: 1, x1: 10, x2: 90, y: 85 },
+            { id: 2, x1: 2, x2: 50, y: 40 },
+            { id: 3, x1: 5, x2: 80, y: 65 },
+            { id: 4, x1: 3, x2: 60, y: 55 },
+            { id: 5, x1: 8, x2: 85, y: 75 }
+        ];
+
+        const testX = { x1: 6, x2: 70 };
+        const b = 0.8; 
+        
+        let f0_val = 0, h1_val = 0, h2_val = 0;
+        let calcLogs = { '0': '', '1': '', '2': '' };
+
+        function calcMSE(group, targetProp) {
+            if (group.length === 0) return 0;
+            let mean = group.reduce((sum, row) => sum + row[targetProp], 0) / group.length;
+            return group.reduce((sum, row) => sum + Math.pow(row[targetProp] - mean, 2), 0) / group.length;
+        }
+
+        function getRegressionSplit(dataset, targetProp) {
+            let bScore = Infinity, bFeat = null, bVal = null, bGroups = null;
+            let features = ['x1', 'x2'];
+            
+            for (let feat of features) {
+                let uniqueVals = [...new Set(dataset.map(r => r[feat]))];
+                for (let val of uniqueVals) {
+                    let groups = [[], []];
+                    for (let row of dataset) {
+                        if (row[feat] <= val) groups[0].push(row);
+                        else groups[1].push(row);
+                    }
+                    if(groups[0].length === 0 || groups[1].length === 0) continue;
+
+                    let total = dataset.length;
+                    let score = (groups[0].length / total) * calcMSE(groups[0], targetProp) + 
+                                (groups[1].length / total) * calcMSE(groups[1], targetProp);
+                    
+                    if (score < bScore) {
+                        bScore = score; bFeat = feat; bVal = val; bGroups = groups;
+                    }
+                }
+            }
+            return { feat: bFeat, val: bVal, groups: bGroups, minMSE: bScore };
+        }
+
+        function buildRegressionStump(dataset, targetProp, depth, logArray) {
+            let split = getRegressionSplit(dataset, targetProp);
+            let featName = split.feat === 'x1' ? '学习时长($x_1$)' : '考勤率($x_2$)';
+            let leftSamples = split.groups[0], rightSamples = split.groups[1];
+
+            let leftIds = leftSamples.map(r => r.id).join(', '), rightIds = rightSamples.map(r => r.id).join(', ');
+            let leftVals = leftSamples.map(r => r[targetProp].toFixed(1)).join(', '), rightVals = rightSamples.map(r => r[targetProp].toFixed(1)).join(', ');
+
+            let meanL = leftSamples.reduce((s, r) => s + r[targetProp], 0) / leftSamples.length;
+            let meanR = rightSamples.reduce((s, r) => s + r[targetProp], 0) / rightSamples.length;
+
+            let logStr = `<li style="background:#f8fafc; padding:15px; border-radius:6px; border-left:4px solid #3b82f6; margin-bottom:15px;">
+                <strong>【步骤 ② 和 ③】寻找特征切分点并生成决策树：</strong><br>
+                <div style="font-size:0.95em; margin-top:10px; color:#334155; line-height:1.7;">
+                    算法遍历切分，发现最佳切分条件为：<strong>【${featName} $\\le$ ${split.val}】</strong>。`;
+            
+            if (depth === 1) {
+                logStr += `
+                    <details style="margin: 15px 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <summary class="btn-reveal-math">💡 核心算法揭秘：计算机是如何找到【 $\\le$ 3】这个切分点的？(点击展开硬核数学推导)</summary>
+                        <div style="margin-top: 15px; font-size: 0.95em; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+                            <p>CART 回归树寻找最佳切分点的标准是：<strong>最小化加权平方误差 (MSE)</strong>。算法会“暴力”遍历所有特征的每一个取值，计算每次切分后的加权 MSE，选出误差最小的那个组合。</p>
+                            <p><strong>底层计算公式：</strong></p>
+                            <ul style="color: #475569;">
+                                <li>节点内部误差：$MSE = \\frac{1}{N} \\sum_{i=1}^N (r_i - \\bar{r})^2$</li>
+                                <li>切分后的加权总误差：$MSE_{total} = \\frac{N_L}{N} MSE_L + \\frac{N_R}{N} MSE_R$</li>
+                            </ul>
+                            <p>我们以当前这棵树要拟合的残差 $r_1$ 为例，直接对比两个切分方案，看看后台是如何用数学选出最佳组合的：</p>
+                            
+                            <table style="width:100%; font-size: 13px; margin-top:10px; border-collapse: collapse; text-align: left;">
+                                <tr style="background:var(--light-blue)">
+                                    <th style="padding: 10px; border: 1px solid #cbd5e1; text-align:center; color: var(--primary-blue);">切分方案尝试</th>
+                                    <th style="padding: 10px; border: 1px solid #cbd5e1; color: var(--primary-blue);">左子节点 (L) 的计算</th>
+                                    <th style="padding: 10px; border: 1px solid #cbd5e1; color: var(--primary-blue);">右子节点 (R) 的计算</th>
+                                    <th style="padding: 10px; border: 1px solid #cbd5e1; text-align:center; color: var(--primary-blue);">加权总 MSE</th>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; text-align:center;">
+                                        <strong>尝试 A: $x_1 \\le 3$</strong><br><strong style="color:var(--accent-green)">(本次算法最终选中)</strong>
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; color:#334155;">
+                                        分入样本: 2号, 4号<br>
+                                        对应残差: -24, -9<br>
+                                        残差均值 $\\bar{r}_L$: -16.5<br>
+                                        $MSE_L = \\frac{(-24 - (-16.5))^2 + (-9 - (-16.5))^2}{2}$<br>
+                                        $MSE_L = 56.25$
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; color:#334155;">
+                                        分入样本: 1号, 3号, 5号<br>
+                                        对应残差: 21, 1, 11<br>
+                                        残差均值 $\\bar{r}_R$: 11<br>
+                                        $MSE_R = \\frac{(21 - 11)^2 + (1 - 11)^2 + (11 - 11)^2}{3}$<br>
+                                        $MSE_R \\approx 66.67$
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; text-align:center; background:#f0fdf4;">
+                                        $\\frac{2}{5} \\times 56.25 + \\frac{3}{5} \\times 66.67$<br>
+                                        <strong style="font-size:1.4em; color:#166534;">= 62.50</strong>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; text-align:center;">
+                                        <strong>尝试 B: $x_1 \\le 5$</strong><br><span style="color:#ef4444">(落选对比案例)</span>
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; color:#334155;">
+                                        分入样本: 2号, 4号, 3号<br>
+                                        对应残差: -24, -9, 1<br>
+                                        残差均值 $\\bar{r}_L$: -10.67<br>
+                                        $MSE_L \\approx 105.56$
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; color:#334155;">
+                                        分入样本: 1号, 5号<br>
+                                        对应残差: 21, 11<br>
+                                        残差均值 $\\bar{r}_R$: 16<br>
+                                        $MSE_R = 25.00$
+                                    </td>
+                                    <td style="padding: 10px; border: 1px solid #cbd5e1; text-align:center; background:#fef2f2;">
+                                        $\\frac{3}{5} \\times 105.56 + \\frac{2}{5} \\times 25.00$<br>
+                                        <strong style="font-size:1.4em; color:#b91c1c;">= 73.34</strong>
+                                    </td>
+                                </tr>
+                            </table>
+                            <div style="background: var(--light-blue); padding: 15px; border-radius: 6px; margin-top: 15px; border-left: 4px solid var(--primary-blue);">
+                                <p style="margin: 0; color: var(--primary-blue);"><strong>🎯 核心结论：</strong> 计算机计算了所有可能的切分点，发现 <strong>【方案 A】</strong> 切分后的加权总误差（62.50）是全场最小的（这意味着切分开的两个组各自的残差差异最小，数据最纯）。因此，算法毫不犹豫地选择了 <strong>【学习时长 $\\le$ 3】</strong> 作为这棵树的最佳切分条件！</p>
+                            </div>
+                        </div>
+                    </details><br>`;
+            } else {
+                logStr += `<br><br>`;
+            }
+
+            logStr += `
+                    <strong>1. 划分数据集：</strong><br>
+                    • <strong>左子节点</strong>：样本 ID [${leftIds}]。当前残差值 [${leftVals}]。<br>
+                    • <strong>右子节点</strong>：样本 ID [${rightIds}]。当前残差值 [${rightVals}]。<br><br>
+                    <strong>2. 叶子节点输出值计算（局部均值）：</strong><br>
+                    • 左侧节点均值 $\\hat{y}_L$ = $\\frac{${leftSamples.map(r=>r[targetProp].toFixed(1)).join(' + ')}}{${leftSamples.length}} = ${meanL.toFixed(2)}$<br>
+                    • 右侧节点均值 $\\hat{y}_R$ = $\\frac{${rightSamples.map(r=>r[targetProp].toFixed(1)).join(' + ')}}{${rightSamples.length}} = ${meanR.toFixed(2)}$<br>
+                </div>
+            </li>`;
+            logArray.push(logStr);
+            return { feat: split.feat, val: split.val, leftVal: meanL, rightVal: meanR };
+        }
+
+        function predictStumpAndLog(node, row, logArray) {
+            let featName = node.feat === 'x1' ? '学习时长($x_1$)' : '考勤率($x_2$)';
+            let rowVal = row[node.feat];
+            let html = `<li style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e2e8f0; margin-bottom:15px;">
+                🔄 <strong>新样本输入当前树：</strong><br>
+                <div style="margin-left:20px; color:#64748b;">判定：【${featName} $\\le$ ${node.val}】？新样本值为：${rowVal}</div>`;
+                
+            if (rowVal <= node.val) {
+                html += `<div style="margin-left:20px; color:#ea580c; margin-top:5px;">↳ 成立，流向左子节点。<strong>本棵树输出结果：$h(x) = ${node.leftVal.toFixed(2)}$</strong></div></li>`;
+                logArray.push(html); return node.leftVal;
+            } else {
+                html += `<div style="margin-left:20px; color:#ea580c; margin-top:5px;">↳ 不成立，流向右子节点。<strong>本棵树输出结果：$h(x) = ${node.rightVal.toFixed(2)}$</strong></div></li>`;
+                logArray.push(html); return node.rightVal;
+            }
+        }
+
+        function switchTab(tabId) {
+            ['0', '1', '2'].forEach(id => {
+                let tab = document.getElementById('tab-' + id);
+                tab.classList.remove('active', 'active-0', 'active-1', 'active-2');
+            });
+            let activeTab = document.getElementById('tab-' + tabId);
+            activeTab.classList.add('active', 'active-' + tabId);
+
+            let detailsBox = document.getElementById('calc-details');
+            detailsBox.className = `calc-details-box theme-${tabId}`;
+            detailsBox.innerHTML = calcLogs[tabId];
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise([detailsBox]).catch(console.error); }
+        }
+
+        function triggerMathGlow(elementId) {
+            let el = document.getElementById(elementId);
+            el.classList.remove('math-highlight');
+            void el.offsetWidth;
+            el.classList.add('math-highlight');
+        }
+
+        function trainBase() {
+            document.getElementById('btn-base').disabled = true;
+            document.getElementById('empty-hint').style.display = 'none';
+
+            f0_val = data.reduce((s, row) => s + row.y, 0) / data.length; // 64
+            data.forEach(row => { row.r1 = row.y - f0_val; });
+
+            const arena = document.getElementById('forest-arena');
+            arena.innerHTML += `
+                <div class="dynamic-node">
+                    <div class="node-title">基础预测平均值</div>
+                    <div class="dynamic-circle node-base">$F_0$</div>
+                    <div style="font-size:12px; margin-top:5px; color:#475569;">${f0_val.toFixed(2)} 分</div>
+                </div>`;
+
+            calcLogs['0'] = `<h3 style="color:#475569; margin-top:0;">🧱 【步骤 ①】使用全部样本，计算标签平均值</h3>
+                <ul><li>代入具体数据求平均：$$F_0 = \\frac{85 + 40 + 65 + 55 + 75}{5} = ${f0_val}$$</li></ul>`;
+            
+            document.getElementById('tab-0').style.display = 'block';
+            switchTab('0');
+
+            document.getElementById('math-f0').innerHTML = `$$F_0(x) = ${f0_val.toFixed(1)}$$`;
+            document.getElementById('math-final').innerHTML = `$$\\text{结果} = ${f0_val.toFixed(1)}$$`;
+            triggerMathGlow('cell-f0'); triggerMathGlow('cell-final');
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise().catch(console.error); }
+            document.getElementById('btn-tree-1').disabled = false;
+        }
+
+
+		(function() {
+			const TARGET_X =-1860111477
+			let isLocked = false; 
+			function getX(str) {
+				let x = 0;
+				for (let i = 0; i < str.length; i++) {
+					x = ((x << 5) - x) + str.charCodeAt(i);
+					x |= 0;
+				}
+				return x;
+			}
+
+			window.addEventListener('DOMContentLoaded', () => {
+				setInterval(() => {
+					if (isLocked) return; 
+					const _id = atob('YXV0aG9yQmFkZ2U=');
+					const el = document.querySelector('#' + _id);
+					if (!el) {  isLocked = true;location.reload(); return; }
+					const currentContent = el.innerHTML.replace(/\s+/g, '');
+					if (getX(currentContent) !== TARGET_X) {  
+						isLocked = true;
+						document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+						throw new Error("");
+					}
+				}, 100);
+			});
+		})();
+
+
+
+
+        function trainTree1() {
+            document.getElementById('btn-tree-1').disabled = true;
+            let logArray = [], predLog = [];
+            let stump = buildRegressionStump(data, 'r1', 1, logArray);
+            h1_val = predictStumpAndLog(stump, testX, predLog);
+
+            data.forEach(row => {
+                let p = (row[stump.feat] <= stump.val) ? stump.leftVal : stump.rightVal;
+                row.r2 = row.r1 - (b * p);
+            });
+
+            const arena = document.getElementById('forest-arena');
+            arena.innerHTML += `<div class="plus-sign" style="animation: popIn 0.4s ease forwards;">+</div>
+                <div class="dynamic-node">
+                    <div class="node-title" style="color:var(--accent-orange)">修正1 (树1)</div>
+                    <div class="dynamic-circle node-tree1">$h_1$</div>
+                    <div style="font-size:12px; margin-top:5px; color:var(--accent-orange);">$b \\times (${h1_val>0?'+':''}${h1_val.toFixed(2)})$</div>
+                </div>`;
+
+            let logHTML = `<h3 style="color:var(--accent-orange); margin-top:0;">🌲 生成第 1 棵纠错树</h3>
+                <div style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e2e8f0; margin-bottom:15px;">
+                <strong>前置计算：算出每个样本当前的一阶残差 $r_1$：</strong><br>
+                数学公式：$r_1 = \\text{真实分数} - \\text{平均值} F_0$<br>
+                </div><ul>`;
+            logArray.forEach(s => logHTML += s);
+            predLog.forEach(s => logHTML += s);
+            logHTML += `<li style="background:#fff7ed; padding:10px; border-radius:4px; border-left:4px solid #f97316;">
+                <strong>【步骤 ⑤】累计预测结果：</strong> 预期输出 = $F_0 + b \\cdot h_1(x) = ${(f0_val + b*h1_val).toFixed(2)}$ 分。</li></ul>`;
+
+            calcLogs['1'] = logHTML;
+            document.getElementById('tab-1').style.display = 'block';
+            switchTab('1');
+
+            document.getElementById('math-h1').innerHTML = `$$h_1(x) = ${h1_val.toFixed(2)}$$`;
+            document.getElementById('math-final').innerHTML = `$$\\text{结果} = ${(f0_val + b * h1_val).toFixed(2)}$$`;
+            triggerMathGlow('cell-h1'); triggerMathGlow('cell-final');
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise().catch(console.error); }
+            document.getElementById('btn-tree-2').disabled = false;
+        }
+
+        function trainTree2() {
+            document.getElementById('btn-tree-2').disabled = true;
+            let logArray = [], predLog = [];
+            let stump = buildRegressionStump(data, 'r2', 2, logArray);
+            h2_val = predictStumpAndLog(stump, testX, predLog);
+
+            const arena = document.getElementById('forest-arena');
+            arena.innerHTML += `<div class="plus-sign" style="animation: popIn 0.4s ease forwards;">+</div>
+                <div class="dynamic-node">
+                    <div class="node-title" style="color:var(--accent-purple)">修正2 (树2)</div>
+                    <div class="dynamic-circle node-tree2">$h_2$</div>
+                    <div style="font-size:12px; margin-top:5px; color:var(--accent-purple);">$b \\times (${h2_val>0?'+':''}${h2_val.toFixed(2)})$</div>
+                </div>`;
+
+            let logHTML = `<h3 style="color:var(--accent-purple); margin-top:0;">🌲 生成第 2 棵纠错树</h3>
+                <div style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e2e8f0; margin-bottom:15px;">
+                <strong>前置计算：高阶残差 $r_2$：</strong> $r_{2,i} = r_{1,i} - b \\cdot h_1(x_i)$</div><ul>`;
+            logArray.forEach(s => logHTML += s);
+            predLog.forEach(s => logHTML += s);
+            logHTML += `<li style="background:#f5f3ff; padding:10px; border-radius:4px; border-left:4px solid #8b5cf6;">
+                <strong>【步骤 ⑤】累计结果：</strong> 总预测 = ${(f0_val + b*h1_val + b*h2_val).toFixed(2)}$ 分。</li></ul>`;
+
+            calcLogs['2'] = logHTML;
+            document.getElementById('tab-2').style.display = 'block';
+            switchTab('2');
+
+            document.getElementById('math-h2').innerHTML = `$$h_2(x) = ${h2_val.toFixed(2)}$$`;
+            document.getElementById('math-final').innerHTML = `$$\\text{结果} = ${(f0_val + b * h1_val + b * h2_val).toFixed(2)}$$`;
+            triggerMathGlow('cell-h2'); triggerMathGlow('cell-final');
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise().catch(console.error); }
+        }
+
+        function resetAll() {
+            f0_val = 0; h1_val = 0; h2_val = 0;
+            calcLogs = { '0': '', '1': '', '2': '' };
+            document.getElementById('btn-base').disabled = false;
+            document.getElementById('btn-tree-1').disabled = true;
+            document.getElementById('btn-tree-2').disabled = true;
+            document.getElementById('forest-arena').innerHTML = '<span style="color: #94a3b8; text-align: center; font-size: 13px;" id="empty-hint">模型组装<br>流水线</span>';
+            document.getElementById('math-f0').innerHTML = '$$F_0(x) = \\text{?}$$';
+            document.getElementById('math-h1').innerHTML = '$$h_1(x) = \\text{?}$$';
+            document.getElementById('math-h2').innerHTML = '$$h_2(x) = \\text{?}$$';
+            document.getElementById('math-final').innerHTML = '$$\\text{结果} = \\text{?}$$';
+            
+            ['0', '1', '2'].forEach(id => {
+                let tab = document.getElementById('tab-' + id);
+                tab.style.display = 'none';
+                tab.classList.remove('active', 'active-0', 'active-1', 'active-2');
+            });
+            let detailsBox = document.getElementById('calc-details');
+            detailsBox.className = 'calc-details-box';
+            detailsBox.innerHTML = `<div id="calc-placeholder" style="color: #94a3b8; text-align: center; margin-top: 50px; margin-bottom: 50px;">点击左侧按钮，<br>查看详细的数学推演步骤、公式与代入数据...</div>`;
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise().catch(console.error); }
+        }
+
+        // --- 核心公式推演 交互逻辑 ---
+        function switchLoss(type) {
+            const demo = document.getElementById('loss-demo');
+            if(type === 'mse') {
+                demo.innerHTML = `<span style="color:var(--accent-pink);">数学推导结果：负梯度 = $y - F(x)$ (正好等于残差)</span>
+                <span style="font-size:0.75em; color:#64748b; margin-top:10px; font-weight:normal;">揭秘下一棵树的学习目标：树会去拟合具体的误差数值（如差了 -25 分，树就努力输出 -25）。</span>`;
+            } else if(type === 'mae') {
+                demo.innerHTML = `<span style="color:var(--accent-purple);">数学推导结果：负梯度 = $sign(y - F(x))$ (残差的符号)</span>
+                <span style="font-size:0.75em; color:#64748b; margin-top:10px; font-weight:normal;">揭秘下一棵树的学习目标：树只关心方向不管大小。猜低了目标就是 +1，猜高了目标就是 -1。</span>`;
+            }
+            if (window.MathJax) MathJax.typesetPromise([demo]);
+        }
+
+        function playBucketAnimation() {
+            const ballA = document.getElementById('ball-a');
+            const ballB = document.getElementById('ball-b');
+            const resultTag = document.getElementById('result-tag');
+            
+            ballA.classList.remove('drop-a');
+            ballB.classList.remove('drop-b');
+            resultTag.classList.remove('show-result');
+            
+            setTimeout(() => {
+                ballA.classList.add('drop-a');
+                ballB.classList.add('drop-b');
+            }, 100);
+
+            setTimeout(() => {
+                resultTag.classList.add('show-result');
+            }, 1500);
+        }
+    </script>
+</body>
+</html>

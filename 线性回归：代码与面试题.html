@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器学习核心：线性回归与梯度下降代码实践</title>
+    
+    
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #334155;
+            --text-dark: #0f172a;
+            --code-bg: #1e293b;
+            --code-text: #f8fafc;
+            --border-color: #e2e8f0;
+            --explain-bg: #f0fdf4;
+            --explain-border: #16a34a;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 { color: var(--text-dark); font-size: 28px; margin-bottom: 10px; border-bottom: 2px solid var(--border-color); padding-bottom: 20px; }
+        h2 { color: var(--text-dark); font-size: 22px; margin-top: 35px; margin-bottom: 15px; border-left: 5px solid var(--primary-color); padding-left: 12px; }
+        h3 { color: var(--text-dark); font-size: 18px; margin-top: 25px; margin-bottom: 10px; }
+        p { margin-bottom: 16px; }
+
+        /* 代码块样式 */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: "Fira Code", Consolas, Monaco, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 20px 0;
+        }
+
+        code { font-family: "Fira Code", Consolas, Monaco, monospace; }
+        p code { background-color: #f1f5f9; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+
+        /* 代码功能深度剖析板块样式 */
+        .explain-box {
+            background-color: #f8fafc;
+            border-left: 4px solid var(--primary-color);
+            padding: 20px;
+            margin: 15px 0 30px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .explain-box h4 {
+            color: var(--text-dark);
+            margin: 12px 0 6px 0;
+            font-size: 15px;
+        }
+        
+        .explain-box ul, .explain-box ol {
+            padding-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        /* 面试题部分：原生 HTML5 折叠面板样式 */
+        details.qa-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+            transition: all 0.3s ease;
+        }
+
+        details.qa-card[open] {
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-color: #cbd5e1;
+        }
+
+        summary.qa-header {
+            font-weight: bold;
+            color: var(--text-dark);
+            font-size: 16px;
+            cursor: pointer;
+            outline: none;
+            list-style: none;
+            display: flex;
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        summary.qa-header::-webkit-details-marker { display: none; }
+
+        .tags-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .tags { display: flex; gap: 8px; }
+        .tag { font-size: 12px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+        .tag-type { background-color: #e0f2fe; color: #0369a1; }
+        .tag-importance-high { background-color: #fee2e2; color: #b91c1c; }
+        .tag-importance-medium { background-color: #fef3c7; color: #b45309; }
+        .tag-importance-critical { background-color: #f3e8ff; color: #6b21a8; }
+
+        .toggle-status {
+            font-size: 13px;
+            color: #2563eb;
+            background: #e0f2fe;
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+
+        details[open] summary .toggle-status::before { content: "收起答案"; }
+        details:not([open]) summary .toggle-status::before { content: "查看答案"; }
+
+        .qa-answer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed var(--border-color);
+            color: #475569;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>机器学习：线性回归与梯度下降代码演练</h1>
+        <p>本页面集中展示了三段可独立运行的 PyTorch 核心源码，配套详细的代码逻辑剖析与工程研究指南，并附带10道大厂高频算法面试题。</p>
+    </header>
+
+    <section>
+        <h2>一、 PyTorch 完整代码实现与详解</h2>
+
+        <h3>代码 1：纯底层 Tensor 与 Autograd 机制手动构建</h3>
+        <pre><code>import torch
+
+# 1. 构造数据集
+torch.manual_seed(42)
+X = torch.randn(100, 1)
+Y = 2.0 * X + 1.5 + torch.randn(100, 1) * 0.2
+
+# 2. 初始化参数并开启梯度追踪
+w = torch.randn(1, 1, requires_grad=True)
+b = torch.zeros(1, requires_grad=True)
+
+learning_rate = 0.1
+epochs = 100
+
+# 3. 迭代训练循环
+for epoch in range(epochs):
+    # 前向传播：手动构建计算图
+    predictions = X.matmul(w) + b
+    
+    # 计算均方误差损失 (MSE)
+    loss = torch.mean((predictions - Y) ** 2)
+    
+    # 反向传播：自动计算 w.grad 与 b.grad
+    loss.backward()
+    
+    # 参数更新：必须在 torch.no_grad() 内进行，切断对更新动作的梯度追踪
+    with torch.no_grad():
+        w -= learning_rate * w.grad
+        b -= learning_rate * b.grad
+        
+        # 显式手动清空旧梯度，防止下一次循环时累加
+        w.grad.zero_()
+        b.grad.zero_()
+
+print(f"代码1训练完成: w = {w.item():.4f}, b = {b.item():.4f}")
+</code></pre>
+
+        <div class="explain-box">
+            <strong>💡 代码1 深度剖析：</strong>
+            <h4>这个代码在干什么？</h4>
+            <p>这段代码从零实现了线性回归模型的全套优化逻辑。它首先人工捏造了100个包含噪声的数据样本（真实规律为权重为2.0，偏置为1.5），随后让电脑在完全不知道这两个真实数字的前提下，完全通过对损失值大小的“摸索”（梯度下降），自主把随机初始化的参数精确地修正到 2.0 和 1.5 附近。</p>
+            <h4>具体是怎么干的？</h4>
+            <ul>
+                <li><strong>追踪物理路径：</strong> 通过指定 <code>requires_grad=True</code>，PyTorch 在后台悄悄搭建了一张“计算流程图”。</li>
+                <li><strong>自动求取导数：</strong> 当执行到 <code>loss.backward()</code> 时，框架通过反向链式法则自动算出了损失对 <code>w</code> 和 <code>b</code> 的导数并存入 <code>.grad</code> 属性。</li>
+                <li><strong>暗箱更新操作：</strong> 更新权重时使用了 <code>with torch.no_grad()</code> 保护块。这是因为修改 <code>w</code> 本身属于常规运算，若不挂起追踪，修改动作也会被画入计算图，导致下一次求导时逻辑错乱。</li>
+            </ul>
+            <h4>如何学习与研究它？</h4>
+            <ol>
+                <li><strong>观察梯度累加：</strong> 尝试把 <code>w.grad.zero_()</code> 这一行代码注释掉，重新运行，你会发现模型完全崩溃，无法收敛。这能让你立刻明白 PyTorch 的梯度默认累加机制。</li>
+                <li><strong>透视内部结构：</strong> 在 <code>loss.backward()</code> 之前和之后，分别加一行 <code>print(w.grad)</code>，亲眼观察导数是如何从 <code>None</code> 突然变成一串具体数字的。</li>
+            </ol>
+        </div>
+
+
+        <h3>代码 2：使用 PyTorch 标准高阶组件 (nn.Linear 与 torch.optim)</h3>
+        <pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# 1. 数据准备
+torch.manual_seed(42)
+X = torch.randn(100, 1)
+Y = 3.5 * X - 2.2 + torch.randn(100, 1) * 0.1
+
+# 2. 构建标准线性网络层与通用优化器
+model = nn.Linear(in_features=1, out_features=1)
+criterion = nn.MSELoss()
+optimizer = optim.SGD(model.parameters(), lr=0.05)
+
+# 3. 规范化训练迭代
+epochs = 100
+for epoch in range(epochs):
+    # 每次迭代开始前，清空网络中所有参数的残留梯度
+    optimizer.zero_grad()
+    
+    # 前向传播
+    outputs = model(X)
+    
+    # 计算损失
+    loss = criterion(outputs, Y)
+    
+    # 反向求导
+    loss.backward()
+    
+    # 优化器自动根据参数的梯度执行一步更新
+    optimizer.step()
+
+print(f"代码2标准模块训练完成: w = {model.weight.item():.4f}, b = {model.bias.item():.4f}")
+</code></pre>
+
+        <div class="explain-box">
+            <strong>💡 代码2 深度剖析：</strong>
+            <h4>这个代码在干什么？</h4>
+            <p>这段代码展示了现代深度学习的标准工业化编写范式。它废弃了代码1中手工相乘、手工算均值、手工扣减权重的繁琐做法，完全改用 PyTorch 精英全家桶组件来完成相同的线性参数逼近训练。</p>
+            <h4>具体是怎么干的？</h4>
+            <ul>
+                <li><code>nn.Linear(1, 1)</code> 自动在底层为我们管理并开辟了 <code>weight</code> 和 <code>bias</code> 的存储空间。</li>
+                <li><code>optim.SGD</code> 统一接收了网络里所有的可训练参数。当触发 <code>optimizer.step()</code> 时，它就像一个管家，自动遍历内部所有参数的 <code>.grad</code>，并在内部实施减去学习率的数学操作。</li>
+                <li><code>optimizer.zero_grad()</code> 能够一次性清除所有关联变量的梯度，不再需要逐个手动归零。</li>
+            </ul>
+            <h4>如何学习与研究它？</h4>
+            <ol>
+                <li><strong>检查权重容器：</strong> 在模型创建后，输入 <code>print(list(model.parameters()))</code>，看一看组件在底层为你自动封装的数据结构和形态。</li>
+                <li><strong>改变学习率试验：</strong> 将 <code>lr=0.05</code> 改成 <code>lr=10.0</code>（过大）或者 <code>lr=0.00001</code>（过小），观察运行结果。你会直观看到 Loss 突然变成 <code>NaN</code>（溢出）或者模型几乎不收敛的现象。</li>
+            </ol>
+        </div>
+
+
+        <h3>代码 3：工业级分批次训练数据管线 (Dataset 与 DataLoader)</h3>
+        <pre><code>import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
+
+# 1. 生成大样本数据并封装进工业加载管线
+torch.manual_seed(42)
+X_data = torch.randn(1000, 1)
+Y_data = -1.8 * X_data + 4.2 + torch.randn(1000, 1) * 0.3
+
+dataset = TensorDataset(X_data, Y_data)
+# 拆分为 32 个样本为一个批次，打乱顺序异步加载
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+# 2. 定义标准结构
+model = nn.Linear(1, 1)
+criterion = nn.MSELoss()
+optimizer = optim.SGD(model.parameters(), lr=0.01)
+
+# 3. 双层循环：多轮次 + 分批次迭代
+epochs = 20
+for epoch in range(epochs):
+    for batch_x, batch_y in dataloader:
+        optimizer.zero_grad()
+        
+        predictions = model(batch_x)
+        loss = criterion(predictions, batch_y)
+        
+        loss.backward()
+        optimizer.step()
+
+print(f"代码3批量训练完成: w = {model.weight.item():.4f}, b = {model.bias.item():.4f}")
+</code></pre>
+
+        <div class="explain-box">
+            <strong>💡 代码3 深度剖析：</strong>
+            <h4>这个代码在干什么？</h4>
+            <p>这段代码解决了“内存放不下海量数据”的真实工程痛点。它模拟了拥有上千条样本的真实场景，通过小批量梯度下降法（Mini-batch Gradient Descent），每次只将少量数据（32条）塞入模型计算梯度并更新参数。既保证了速度，又确保了计算安全。</p>
+            <h4>具体是怎么干的？</h4>
+            <ul>
+                <li><code>TensorDataset</code> 充当容器，把特征和标签像拉链一样一对一绑定在一起。</li>
+                <li><code>DataLoader</code> 则是高性能运输车，<code>shuffle=True</code> 会在每一轮开始前将1000条数据打乱，然后每次通过迭代器（<code>for batch_x, batch_y in dataloader</code>）定量吐出32条数据。</li>
+                <li>训练演变为双层循环：外层控制整套大数据的复习轮次（Epoch），内层控制在当前轮次内划分出的小批次（Batch）演练。</li>
+            </ul>
+            <h4>如何学习与研究它？</h4>
+            <ol>
+                <li><strong>打印批次形状：</strong> 在内层循环第一行加上 <code>print(batch_x.shape)</code>，看一看它是不是 <code>torch.Size([32, 1])</code>。注意观察最后剩余的一个批次大小是否是32，理解数据除不尽时的边界情况。</li>
+                <li><strong>研究打乱机制：</strong> 试着把 <code>shuffle</code> 换成 <code>False</code>，体会模型如果每次都按固定死板的顺序学习数据，会对优化造成怎样的潜在偏见。</li>
+            </ol>
+        </div>
+    </section>
+
+    <section>
+        <h2>二、 核心面试经典10题解析</h2>
+        <p>（点击下方题目框即可直接展开查看答案，无需 JavaScript 支持）</p>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                1. 为什么线性回归选择均方误差(MSE)作为损失函数，而不是绝对误差(MAE)？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">概念解析</span>
+                        <span class="tag tag-importance-high">重要性：高</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                1. <strong>数学优化角度：</strong> MSE 的损失函数在全域都是连续可导的，而 MAE 在残差为0的位置存在尖点不可导，这给基于梯度的优化算法带来了计算障碍。<br>
+                2. <strong>误差惩罚力度：</strong> MSE 采用平方项，对大误差有更强的“惩罚”机制（误差越大，梯度越大），能促使模型更快地调整以消除严重偏离的离群点。<br>
+                3. <strong>极大似然估计：</strong> 从概率统计角度看，若假设数据噪声服从高斯分布，则推导出来的最大似然目标函数等价于最小化均方误差。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                2. 从概率论角度来看，线性回归的最小二乘法与高斯分布有什么内在联系？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">数学推导</span>
+                        <span class="tag tag-importance-high">重要性：高</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                线性回归模型假设真实值与预测值之间存在误差：\( y = w \cdot x + b + \epsilon \)。如果假设这个误差项 \( \epsilon \) 服从独立同分布的均值为 0、方差为常数的高斯分布，即 \( \epsilon \sim \mathcal{N}(0, \sigma^2) \)，那么整个样本数据的条件概率分布也会服从高斯分布。在此前提下，构建观测数据的似然函数并进行极大似然估计（MLE），对似然函数取对数后展开，其常数项被消去，最终留下的最大化目标项正好等价于最小化均方误差。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                3. 梯度下降中的学习率（Learning Rate）过大或过小会导致什么现象？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">工程实践</span>
+                        <span class="tag tag-importance-critical">重要性：核心</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                1. <strong>学习率过大：</strong> 参数更新步长过大，容易在损失函数的极小值点附近剧烈震荡跳过最优解，甚至导致前向计算的损失值直接爆炸（变为 NaN），引发模型无法收敛。<br>
+                2. <strong>学习率过小：</strong> 每一步更新的幅度微乎其微，导致训练速度极其缓慢，时间成本过高。同时，在复杂的非凸优化中，极小的步长更容易使模型陷入局部鞍点或差的局部极小值中。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                4. 请简述批量梯度下降(BGD)、随机梯度下降(SGD)和小批量梯度下降(MBGD)的区别。
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">算法对比</span>
+                        <span class="tag tag-importance-critical">重要性：核心</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                1. <strong>BGD (Batch Gradient Descent)：</strong> 每一步更新都计算整个训练集的所有样本。方向最准，能平滑收敛，但在大数据集下计算极慢、极端消耗内存。<br>
+                2. <strong>SGD (Stochastic Gradient Descent)：</strong> 每步更新仅随机抽取一个样本。计算速度极快，内存占用小，但因为单样本噪声大，导致梯度方向震荡剧烈，较难稳定到精确的极小值。<br>
+                3. <strong>MBGD (Mini-batch Gradient Descent)：</strong> 折中方案，每步计算固定尺寸的一个小批次样本（如32, 64, 128）。既利用了矩阵并行计算加速，又通过批平均平滑了噪声，是目前深度学习的通用标准。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                5. 为什么在线性回归使用梯度下降法求解时，对特征进行归一化或标准化是非常必要的？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">数据处理</span>
+                        <span class="tag tag-importance-critical">重要性：核心</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                如果输入的特征量纲差异巨大（例如特征一范围在 0-1 之间，特征二范围在 100000 之间），那么损失函数的等高线分布将呈现为一个极其狭长的扁平椭圆。在这种地形下，梯度的方向会垂直于等高线，导致梯度下降的轨迹在窄谷两侧剧烈震荡、难以向前推进。经过归一化或标准化后，各特征尺度统一，损失函数的等高线将接近圆形，梯度方向直指中心极小值，从而允许使用更大的学习率，并大幅加速收敛。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                6. 线性回归模型只能拟合直线或超平面，它可以通过什么手段来捕获复杂的非线性关系？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">模型扩展</span>
+                        <span class="tag tag-importance-medium">重要性：中</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                可以通过特征工程对底层特征进行非线性映射。常见的方法包括：<br>
+                1. <strong>多项式回归（Polynomial Regression）：</strong> 将特征的平方、三次方项或者交叉乘积项（如 \( x_1^2 \), \( x_1 x_2 \)）作为新的特征送入线性回归。此时对于基础特征是非线性的，但对于权重参数依然保持着线性组合关系。<br>
+                2. <strong>基函数展开：</strong> 借助高斯径向基函数（RBF）或对数函数等转换特征，将其投影到高维特征空间，使其在线性框架下实现非线性决策边界的拟合。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                7. 经典线性回归（普通最小二乘法）有哪些最核心的理论假设？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">理论基础</span>
+                        <span class="tag tag-importance-high">重要性：高</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                经典 OLS 线性回归依赖以下核心假设（高斯-马尔可夫假定）：<br>
+                1. <strong>线性假定：</strong> 自变量与因变量之间具有本质上的线性依赖组合结构。<br>
+                2. <strong>外生性：</strong> 误差项的条件期望为零，即误差项与自变量不相关：\( E(\epsilon|X) = 0 \)。<br>
+                3. <strong>同方差性：</strong> 所有不同样本的误差项具有完全一致的恒定方差。<br>
+                4. <strong>无自相关性：</strong> 任何两个不同样本之间的误差项相互独立。<br>
+                5. <strong>无完全共线性：</strong> 自变量之间不存在精确的完美线性替代关系。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                8. 什么是多重共线性？它对线性回归模型有什么危害？如何诊断和处理？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">故障诊断</span>
+                        <span class="tag tag-importance-medium">重要性：中</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                1. <strong>定义与危害：</strong> 多重共线性是指回归模型中的两个或多个自变量高度相关。这会导致参数估计的方差急剧增大，使模型对数据的微小变动变得异常敏感，权重值失去物理可解释性。<br>
+                2. <strong>诊断：</strong> 可以计算相关系数矩阵，或者通过计算方差膨胀因子（VIF）。一般 VIF 大于 10 即被认为存在严重的共线性。<br>
+                3. <strong>解决手段：</strong> 删除互为替代的多余高度相关特征；使用主成分分析（PCA）降维重组新特征；或者引入 L2 正则化（岭回归）通过惩罚项强制约束权重参数大小。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                9. 为什么在 PyTorch 模型的常规训练迭代中，必须调用 zero_grad() 函数？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">框架机制</span>
+                        <span class="tag tag-importance-critical">重要性：核心</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                在 PyTorch 框架中，反向传播 <code>loss.backward()</code> 生成的变量梯度会默认<strong>无限累加</strong>到对应 Tensor 的 <code>.grad</code> 属性中，而不是覆盖它。这种设计初衷是为了方便诸如 RNN 跨时序梯度累加、大 Batch 拆分训练等高级场景。如果不调用 <code>zero_grad()</code> 显式清空，当前批次的梯度就会叠加上一个批次的旧残余梯度，导致计算出的更新梯度方向发生扭曲，进而使整个模型参数更新失控。
+            </div>
+        </details>
+
+        <details class="qa-card">
+            <summary class="qa-header">
+                10. 引入 L1 范数(Lasso)和 L2 范数(Ridge)正则化是如何改变回归损失函数的？各自有什么特色？
+                <div class="tags-container">
+                    <div class="tags">
+                        <span class="tag tag-type">优化惩罚</span>
+                        <span class="tag tag-importance-high">重要性：高</span>
+                    </div>
+                    <span class="toggle-status"></span>
+                </div>
+            </summary>
+            <div class="qa-answer">
+                1. <strong>L1 正则化（Lasso）：</strong> 在原始 MSE 损失函数后引入权重的绝对值累加惩罚项：\( L_{total} = L_{mse} + \lambda \sum |w_i| \)。它的几何等高线在坐标轴上具有尖角，倾向于将不重要的特征权重直接削减到 0，具备天然的特征选择和稀疏化能力。<br>
+                2. <strong>L2 正则化（Ridge）：</strong> 在原始 MSE 损失后引入权重的平方和惩罚项：\( L_{total} = L_{mse} + \lambda \sum w_i^2 \)。其几何约束呈圆球形，倾向于让所有权重整体均匀地逼近变小，但不会变为 0。它能有效平滑参数、克制过拟合，并显着缓解由于多重共线性带来的矩阵求逆病态震荡问题。
+            </div>
+        </details>
+
+    </section>
+</div>
+
+</body>
+</html>

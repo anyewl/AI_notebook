@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-Means 聚类算法：从小白到高手 (含动态数据展示)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }
+        h1, h2, h3 { color: #2c3e50; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .highlight { background-color: #e8f4f8; padding: 10px; border-left: 4px solid #3498db; border-radius: 4px; }
+        .interactive-area { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+        canvas { background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
+        .controls { flex: 1; min-width: 300px; }
+        button { background-color: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; transition: 0.3s; margin-bottom: 10px; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        #math-panel, .live-math-panel { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 8px; font-size: 15px; margin-top: 15px; min-height: 140px;}
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        th { background-color: #f2f2f2; color: #333; }
+        .data-table tr:hover { background-color: #f5f5f5; }
+        
+        /* 代码块与面试题样式 */
+        .code-container { background: #282c34; border-radius: 8px; margin: 15px 0; overflow: hidden; }
+        .code-header { background: #1e2227; padding: 8px 15px; color: #abb2bf; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+        .code-container pre { margin: 0; padding: 15px; overflow-x: auto; color: #abb2bf; font-family: Consolas, monospace; font-size: 14px; }
+        .interview-grid { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
+        .qa-card { background: #fff; border-left: 5px solid #3498db; padding: 15px 20px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); border: 1px solid #eaeaea; }
+        .tags { margin-bottom: 8px; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-right: 8px; }
+        .tag-type { background: #e1f5fe; color: #0277bd; }
+        .tag-importance { background: #fff3e0; color: #e65100; }
+        .question { font-weight: bold; font-size: 16px; color: #2c3e50; margin-bottom: 8px; }
+        .answer { color: #555; padding-top: 10px; border-top: 1px dashed #eee; display: none; }
+        .toggle-ans { background: none; border: none; color: #3498db; cursor: pointer; padding: 0; font-size: 14px; text-decoration: underline; margin-bottom: 5px; }
+        
+        /* 滑动条样式 (保留未删，防止影响原始结构) */
+        input[type=range] { -webkit-appearance: none; width: 100%; margin: 15px 0; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #ddd; border-radius: 4px; }
+        input[type=range]::-webkit-slider-thumb { height: 24px; width: 24px; border-radius: 50%; background: #e74c3c; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    </style>
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+    <div class="card">
+        <h2>4. 聚类评估指标：SSE (误差平方和) 动态推导</h2>
+        <p>在监督学习中，我们可以用准确率（Accuracy）来评估模型。但是在无监督聚类中，没有正确答案，我们怎么知道聚得好不好？我们需要引入 <strong>SSE (Sum of Squared Errors)</strong>。</p>
+        <div class="highlight">
+            <p><strong>核心思想：</strong> 同一个群里的人，彼此应该越紧密越好。<br>
+            <strong>数学公式：</strong> $SSE = \sum_{i=1}^{K} \sum_{x \in C_i} ||x - \mu_i||^2$<br>
+            <strong>白话翻译：</strong> 算出群里每个点到中心 $\mu_i$ 距离的平方，然后全加起来。<strong>SSE 越小，说明内部抱团越紧密，聚类效果越好。</strong>（这也是为什么第四步求均值能让算法收敛的原因，因为求均值能让该群的 SSE 达到数学上的绝对最小值）。</p>
+        </div>
+
+        <h3>数据代入实战：寻找最优群主（动图演示）</h3>
+        <p>假设在一个群里有 3 个顾客：<code>A(10, 20)</code>, <code>B(20, 10)</code>, <code>C(30, 30)</code>。请点击下方的<strong>“播放优化动画”</strong>，观察中心点寻找最优位置时，SSE 公式数据是如何实时下降的！</p>
+        
+        <div class="interactive-area">
+            <div>
+                <canvas id="sseDemoCanvas" width="350" height="300" style="background: #fdfdfd;"></canvas>
+                <div style="text-align: center; margin-top: 10px;">
+                    <button id="playSseBtn" onclick="playSseAnimation()">▶ 播放中心点优化动画</button>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="live-math-panel" id="sseLiveMath">
+                    <strong>实时 SSE 计算器：</strong><br><br>
+                    当前中心坐标：<span style="color:#e74c3c;">(等待启动)</span><br><br>
+                    A(10,20) 距离平方：-- <br>
+                    B(20,10) 距离平方：-- <br>
+                    C(30,30) 距离平方：-- <br><br>
+                    <span style="font-size: 1.2em; color: #f1c40f;"><strong>总 SSE = -- </strong></span>
+                </div>
+                <p style="font-size: 0.9em; color: #555; margin-top: 10px;">💡 提示：动画中，红色的中心点正在向三个蓝点的<strong>几何中心（均值位置）</strong>移动。你可以清楚地看到线段变短，并且右侧计算出的总误差 SSE 从最初的巨大数值，一路滑落到理论最低点。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 调参绝招：肘方法 (Elbow Method) 动态调参台</h2>
+        <p>随着分类数量 $K$ 越来越多，每个点肯定离自己的群主越来越近，总的 SSE 必然会不断减小。如果 $K=$样本总数，每个点自己就是一个群，SSE 就变成 0 了，但这样毫无意义。</p>
+        <p><strong>最佳的 K 是多少？</strong> 试着点击下方按钮增大或减小 K 值，观察左侧点群的划分，同时留意右侧折线图中 SSE 跌落的趋势。那个下降速度突然变缓的<strong>“转折点”（像人类手臂的手肘）</strong>，就是性价比最高的最佳分类数！</p>
+        
+        <div style="background: #ecf0f1; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 15px;">
+            <span style="font-weight: bold; font-size: 18px;">点击调整 K 值 (1 ~ 5): </span>
+            <button id="btnDecreaseK" onclick="changeElbowK(-1)" style="margin: 0; background-color: #bdc3c7;" disabled>减小 K</button>
+            <span id="kDisplay" style="font-size: 24px; color: #e74c3c; font-weight: bold; min-width: 20px; text-align: center;">1</span>
+            <button id="btnIncreaseK" onclick="changeElbowK(1)" style="margin: 0; background-color: #e74c3c;">增大 K</button>
+        </div>
+
+        <div class="interactive-area" style="margin-top: 0;">
+            <div style="flex: 1; min-width: 300px; text-align: center;">
+                <h4 style="margin-top:0;">聚类分布图 (当前 K 值)</h4>
+                <canvas id="elbowClusterCanvas" width="350" height="300" style="background: #fff;"></canvas>
+            </div>
+            <div style="flex: 1; min-width: 300px; text-align: center;">
+                <h4 style="margin-top:0;">SSE 误差折线图 (寻找手肘)</h4>
+                <canvas id="elbowChartCanvas" width="350" height="300" style="background: #fff;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>6. PyTorch 完整可运行代码实现：K-Means 与肘方法</h2>
+        <p>这段代码摒弃了伪代码，使用 PyTorch 强大的张量计算能力（广播机制），实现了手动版的 K-Means 并自动通过循环记录每次的 SSE，最后输出数据帮助我们寻找“肘部”。</p>
+        <div class="code-container">
+            <div class="code-header"><span>K-Means & Elbow Method Implementation</span></div>
+<pre><code>import torch
+import math
+
+def kmeans_sse(X, k, max_iters=100):
+    """
+    执行 K-Means 聚类并返回最终的 SSE 误差平方和。
+    使用 PyTorch 底层张量计算实现。
+    """
+    num_samples = X.shape[0]
+    
+    # 1. 随机初始化聚类中心 (从数据点中随机选 K 个)
+    random_indices = torch.randperm(num_samples)[:k]
+    centroids = X[random_indices].clone()
+    
+    labels = torch.zeros(num_samples, dtype=torch.long)
+    
+    for _ in range(max_iters):
+        # 2. 利用广播机制计算差值平方和 (N, 1, D) - (1, K, D)
+        diff = X.unsqueeze(1) - centroids.unsqueeze(0)
+        distances_sq = torch.sum(diff ** 2, dim=2)
+        
+        # 3. 寻找最近的中心并分配标签
+        new_labels = torch.argmin(distances_sq, dim=1)
+        
+        if torch.equal(labels, new_labels):
+            break
+        labels = new_labels
+        
+        # 4. 重新计算聚类中心
+        new_centroids = torch.zeros_like(centroids)
+        for i in range(k):
+            cluster_points = X[labels == i]
+            if len(cluster_points) == 0:
+                new_centroids[i] = X[torch.randint(0, num_samples, (1,))]
+            else:
+                new_centroids[i] = cluster_points.mean(dim=0)
+                
+        centroids = new_centroids
+
+    # 5. 计算并返回收敛后的整体 SSE
+    final_diff = X.unsqueeze(1) - centroids.unsqueeze(0)
+    final_dist_sq = torch.sum(final_diff ** 2, dim=2)
+    min_dist_sq, _ = torch.min(final_dist_sq, dim=1)
+    sse = torch.sum(min_dist_sq).item()
+    
+    return sse
+
+# ==================== 测试与肘方法模拟 ====================
+torch.manual_seed(42)
+cluster_1 = torch.randn(50, 2) + torch.tensor([0.0, 0.0])
+cluster_2 = torch.randn(50, 2) + torch.tensor([6.0, 6.0])
+cluster_3 = torch.randn(50, 2) + torch.tensor([-6.0, 6.0])
+X_data = torch.cat([cluster_1, cluster_2, cluster_3], dim=0)
+
+print("开始测试不同 K 值对应的 SSE (模拟肘方法)：")
+for k in range(1, 9):
+    sse = kmeans_sse(X_data, k)
+    print(f"尝试 K = {k} | SSE = {sse:.2f}")
+
+print("\n分析结果：当 K 大于 3 时，SSE 下降变得非常缓慢。因此，‘肘部’出现在 K=3。")
+</code></pre>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>7. 经典面试题库 (8题)</h2>
+        <div class="interview-grid">
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">算法对比</span><span class="tag tag-importance">重要性: ★★★★★</span></div>
+                <div class="question">1. K-Means 和 KNN (K-Nearest Neighbors) 有什么区别？名字里都有 K！</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer">核心区别是：<b>K-Means 是无监督学习的聚类算法</b>，没有标签，目的是把数据分为 K 个族群；而 <b>KNN 是有监督学习的分类（或回归）算法</b>，需要历史标签，K 代表的是“参考离新样本最近的 K 个邻居来投票”。两者完全不同。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">调优策略</span><span class="tag tag-importance">重要性: ★★★★★</span></div>
+                <div class="question">2. 实际项目中，你是如何确定 K-Means 中的最佳 K 值的？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer">常用三种方法：<br>1. <b>肘方法 (Elbow Method)</b>：寻找 K值与SSE折线图下降骤减的“拐点”。<br>2. <b>轮廓系数 (Silhouette Score)</b>：结合类内紧密度和类间分离度，挑选使轮廓系数接近1的峰值K。<br>3. <b>业务驱动</b>：根据实际业务强制规定（如对客户分高中低3档，则K=3）。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">算法缺陷</span><span class="tag tag-importance">重要性: ★★★★☆</span></div>
+                <div class="question">3. K-Means 对离群点 (Outliers) 敏感吗？为什么？如何解决？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer"><b>极其敏感</b>。原因在于算法求中心时使用的是<b>算术平均值</b>，且 SSE 使用了距离的<b>平方</b>，极端离群点会把均值中心严重拉偏。解决方法：聚类前剔除异常点；改用 <b>K-Medoids</b> 算法（取中位数点）；或改用 DBSCAN 算法。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">算法变体</span><span class="tag tag-importance">重要性: ★★★★☆</span></div>
+                <div class="question">4. 什么是 K-Means++？它解决了原版 K-Means 的什么问题？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer">如果初始点选得太近，K-Means 易陷入<b>局部最优解</b>。<b>K-Means++</b> 是一种改进的初始化算法，核心思想是：选定第一个中心点后，接下来的中心点要“尽可能远离已经选出的中心点”。这提高了聚类的稳定性和收敛速度。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">底层原理</span><span class="tag tag-importance">重要性: ★★★☆☆</span></div>
+                <div class="question">5. K-Means 可以处理非球形（比如环形、月牙形）分布的数据吗？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer"><b>不能</b>。它使用欧氏距离，隐式假设数据呈现凸面（球形），且各簇密度相近。环形数据会被它沿直线强行切割。这种非球形情况通常使用基于密度的 <b>DBSCAN</b> 算法。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">复杂度</span><span class="tag tag-importance">重要性: ★★★☆☆</span></div>
+                <div class="question">6. K-Means 的时间复杂度是多少？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer">时间复杂度为 $O(n \cdot k \cdot d \cdot i)$。其中 $n$ 是样本数，$k$ 是聚类中心数，$d$ 是数据维度，$i$ 是迭代次数。因为它是线性的，处理大数据时极快。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">评估指标</span><span class="tag tag-importance">重要性: ★★★★☆</span></div>
+                <div class="question">7. SSE 一定是越小越好吗？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer"><b>不是绝对的。</b>如果只追求 SSE 最小，一直增加 K 即可。当 K=样本总数时，每个点自成一类，SSE降为0，但这失去了聚类的意义。需要在“紧凑性(SSE)”和“模型复杂度(K值)”间找平衡。</div>
+            </div>
+
+            <div class="qa-card">
+                <div class="tags"><span class="tag tag-type">数学基础</span><span class="tag tag-importance">重要性: ★★★☆☆</span></div>
+                <div class="question">8. 在 K-Means 中能否使用曼哈顿距离或者余弦相似度代替欧氏距离？</div>
+                <button class="toggle-ans" onclick="toggleAns(this)">查看解析</button>
+                <div class="answer">可以，但<b>必须同步修改中心点的更新公式</b>。原版使用算术平均数是为了最小化欧氏距离的平方。如果改用曼哈顿距离，更新中心应改用组内点的<b>中位数 (Median)</b>。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 防篡改代码修复：增加容错机制，防止找不到节点导致白屏死亡 ---
+        (function() {
+            const TARGET_X = -1860111477;
+            let isLocked = false; 
+            function getX(str) {
+                let x = 0;
+                for (let i = 0; i < str.length; i++) {
+                    x = ((x << 5) - x) + str.charCodeAt(i);
+                    x |= 0;
+                }
+                return x;
+            }
+            window.addEventListener('DOMContentLoaded', () => {
+                setInterval(() => {
+                    if (isLocked) return; 
+                    const _id = atob('YXV0aG9yQmFkZ2U=');
+                    const el = document.querySelector('#' + _id);
+                    // 修复：如果找不到作者徽章节点，不再抛出异常强制刷新，而是静默退出
+                    if (!el) { return; } 
+                    const currentContent = el.innerHTML.replace(/\s+/g, '');
+                    if (getX(currentContent) !== TARGET_X) {  
+                        return; // 修复：同样取消强行破坏 DOM 的逻辑
+                    }
+                }, 100);
+            });
+        })();
+
+        function toggleAns(btn) {
+            let n = btn.nextElementSibling;
+            if(n.style.display === 'block') { n.style.display = 'none'; btn.innerText = '查看解析'; }
+            else { n.style.display = 'block'; btn.innerText = '收起解析'; }
+        }
+
+        // ==========================================
+        // 核心流程动画逻辑 (模块 3)
+        // 修复：增加对节点是否存在的 Null Check 防御性编程
+        // ==========================================
+        const canvas = document.getElementById('kmeansCanvas');
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        const mathPanel = document.getElementById('math-panel');
+        const statusText = document.getElementById('status');
+        const nextBtn = document.getElementById('nextBtn');
+
+        const originalData = [
+            { id: 'A', x: 15, y: 15 }, { id: 'B', x: 20, y: 12 }, { id: 'C', x: 12, y: 20 },
+            { id: 'D', x: 40, y: 45 }, { id: 'E', x: 45, y: 40 }, { id: 'F', x: 42, y: 48 }
+        ];
+        let points = [];
+        let centers = [];
+        let step = 0; 
+        let isFinished = false;
+        const colors = ['#e74c3c', '#2ecc71', '#95a5a6']; 
+        
+        function scale(val) { return val * (400 / 60); }
+
+        function drawBaseKmeans() {
+            if (!ctx) return; // 修复：防止获取不到上下文报错
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#f0f0f0';
+            for(let i=0; i<=60; i+=10) {
+                ctx.beginPath(); ctx.moveTo(scale(i), 0); ctx.lineTo(scale(i), 400); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, scale(i)); ctx.lineTo(400, scale(i)); ctx.stroke();
+            }
+            if (step > 1 && !isFinished) {
+                points.forEach(p => {
+                    if(p.cluster !== -1) {
+                        ctx.beginPath(); ctx.moveTo(scale(p.x), scale(p.y)); ctx.lineTo(scale(centers[p.cluster].x), scale(centers[p.cluster].y));
+                        ctx.strokeStyle = p.cluster === 0 ? 'rgba(231, 76, 60, 0.4)' : 'rgba(46, 204, 113, 0.4)';
+                        ctx.lineWidth = 2; ctx.stroke();
+                    }
+                });
+            }
+            points.forEach(p => {
+                ctx.beginPath(); ctx.arc(scale(p.x), scale(p.y), 9, 0, Math.PI * 2);
+                ctx.fillStyle = p.cluster === -1 ? colors[2] : colors[p.cluster];
+                ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#111'; ctx.font = 'bold 14px Arial'; ctx.fillText(p.id, scale(p.x) - 6, scale(p.y) - 14);
+            });
+            centers.forEach((c, i) => {
+                let cx = scale(c.x), cy = scale(c.y);
+                ctx.fillStyle = colors[i]; ctx.fillRect(cx - 7, cy - 7, 14, 14);
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(cx - 7, cy - 7, 14, 14);
+                ctx.fillStyle = '#000'; ctx.font = 'bold 14px Arial'; ctx.fillText(`中心${i+1}`, cx + 12, cy + 12);
+            });
+        }
+
+        function reset() {
+            if (!ctx) return; // 修复：缺失对应 DOM 时静默退出
+            points = originalData.map(p => ({ ...p, cluster: -1 }));
+            centers = []; step = 0; isFinished = false;
+            drawBaseKmeans();
+            if (nextBtn) { nextBtn.innerText = "开始算法：随机选中心"; nextBtn.disabled = false; }
+            if (statusText) statusText.innerText = "当前状态：等待开始";
+            if (mathPanel) mathPanel.innerHTML = "这里是公式推导黑板。点击按钮，我们将展示如何把表格里的具体数字代入公式...";
+        }
+
+        function nextStep() {
+            if (isFinished || !ctx) return;
+            if (step === 0) {
+                centers = [{ x: 30, y: 15 }, { x: 25, y: 40 }];
+                if (statusText) statusText.innerText = "第一步：随机选定两个初始中心点 (方块)"; 
+                if (nextBtn) nextBtn.innerText = "下一步：计算距离并分配";
+                if (mathPanel) mathPanel.innerHTML = "<strong>【初始化】</strong><br>中心一 $C_1 = (30, 15)$，中心二 $C_2 = (25, 40)$";
+                step = 1;
+            } else if (step === 1) {
+                points.forEach(p => {
+                    let d1 = Math.pow(p.x - centers[0].x, 2) + Math.pow(p.y - centers[0].y, 2);
+                    let d2 = Math.pow(p.x - centers[1].x, 2) + Math.pow(p.y - centers[1].y, 2);
+                    p.cluster = d1 < d2 ? 0 : 1;
+                });
+                if (statusText) statusText.innerText = "第二步：计算距离并划分群组"; 
+                if (nextBtn) nextBtn.innerText = "下一步：重新计算中心点";
+                if (mathPanel) mathPanel.innerHTML = "以顾客A(15,15)为例代入距离公式：<br>到红中心距离约为 15.00，到绿中心距离约为 26.93。<br>故分入红色群组。";
+                step = 2;
+            } else if (step === 2) {
+                let c0 = points.filter(p=>p.cluster===0), c1 = points.filter(p=>p.cluster===1);
+                let old = { ...centers[0] };
+                if(c0.length) { centers[0].x = c0.reduce((s,p)=>s+p.x,0)/c0.length; centers[0].y = c0.reduce((s,p)=>s+p.y,0)/c0.length; }
+                if(c1.length) { centers[1].x = c1.reduce((s,p)=>s+p.x,0)/c1.length; centers[1].y = c1.reduce((s,p)=>s+p.y,0)/c1.length; }
+                let diff = Math.abs(old.x - centers[0].x) + Math.abs(old.y - centers[0].y);
+                if (diff < 0.1) {
+                    isFinished = true; 
+                    if (statusText) { statusText.innerText = "聚类完成！中心点不再移动。"; statusText.style.color = "#27ae60"; }
+                    if (nextBtn) { nextBtn.innerText = "算法结束"; nextBtn.disabled = true; }
+                    if (mathPanel) mathPanel.innerHTML = "中心点位置不变，算法收敛！聚类结束。";
+                } else {
+                    if (statusText) statusText.innerText = "第三步：求均值，群主移动到最新物理中心"; 
+                    if (nextBtn) nextBtn.innerText = "下一步：重新评估分配";
+                    if (mathPanel) mathPanel.innerHTML = "对群组内所有点的X和Y求平均值，作为新坐标。";
+                    step = 1;
+                }
+            }
+            drawBaseKmeans();
+            if (window.MathJax && mathPanel) { MathJax.typesetPromise([mathPanel]); }
+        }
+
+        // ==========================================
+        // SSE 动态演算台 (模块 4)
+        // ==========================================
+        const sseCanvas = document.getElementById('sseDemoCanvas');
+        const sseCtx = sseCanvas ? sseCanvas.getContext('2d') : null;
+        const ssePts = [{x: 10, y: 20, id:'A'}, {x: 20, y: 10, id:'B'}, {x: 30, y: 30, id:'C'}];
+        let sseCenter = {x: 5, y: 5}; // 初始错误位置
+        let sseTarget = {x: 20, y: 20}; // 几何中心最佳位置
+        let sseAnimating = false;
+
+        function sseScale(val) { return val * (350 / 40); }
+
+        function drawSseFrame() {
+            if (!sseCtx) return;
+            sseCtx.clearRect(0, 0, sseCanvas.width, sseCanvas.height);
+            // 绘制网格
+            sseCtx.strokeStyle = '#eee';
+            for(let i=0; i<=40; i+=5) {
+                sseCtx.beginPath(); sseCtx.moveTo(sseScale(i), 0); sseCtx.lineTo(sseScale(i), 300); sseCtx.stroke();
+                sseCtx.beginPath(); sseCtx.moveTo(0, sseScale(i)); sseCtx.lineTo(350, sseScale(i)); sseCtx.stroke();
+            }
+            
+            let totalSse = 0;
+            let mathHtml = `<strong>实时 SSE 计算器：</strong><br><br>当前中心坐标：<span style="color:#e74c3c; font-weight:bold;">(${sseCenter.x.toFixed(1)}, ${sseCenter.y.toFixed(1)})</span><br><br>`;
+
+            // 绘制连线并计算公式
+            ssePts.forEach(p => {
+                let dx = p.x - sseCenter.x;
+                let dy = p.y - sseCenter.y;
+                let sqDist = dx*dx + dy*dy;
+                totalSse += sqDist;
+                
+                sseCtx.beginPath();
+                sseCtx.moveTo(sseScale(p.x), sseScale(p.y));
+                sseCtx.lineTo(sseScale(sseCenter.x), sseScale(sseCenter.y));
+                sseCtx.strokeStyle = 'rgba(52, 152, 219, 0.5)';
+                sseCtx.lineWidth = 2;
+                sseCtx.stroke();
+
+                mathHtml += `${p.id}(${p.x},${p.y}) 距离平方：<span style="color:#3498db">${sqDist.toFixed(1)}</span> <br>`;
+            });
+
+            mathHtml += `<br><span style="font-size: 1.2em; color: #f39c12;"><strong>总 SSE = ${totalSse.toFixed(1)} </strong></span>`;
+            const liveMathEl = document.getElementById('sseLiveMath');
+            if (liveMathEl) liveMathEl.innerHTML = mathHtml;
+
+            // 绘制数据点
+            ssePts.forEach(p => {
+                sseCtx.beginPath(); sseCtx.arc(sseScale(p.x), sseScale(p.y), 8, 0, Math.PI * 2);
+                sseCtx.fillStyle = '#3498db'; sseCtx.fill();
+                sseCtx.fillStyle = '#111'; sseCtx.font = 'bold 12px Arial'; sseCtx.fillText(p.id, sseScale(p.x) - 4, sseScale(p.y) - 12);
+            });
+
+            // 绘制中心点
+            sseCtx.fillStyle = '#e74c3c';
+            sseCtx.fillRect(sseScale(sseCenter.x) - 6, sseScale(sseCenter.y) - 6, 12, 12);
+        }
+
+        function playSseAnimation() {
+            if(sseAnimating) return;
+            sseAnimating = true;
+            sseCenter = {x: 5, y: 5}; // 重置起始点
+            let progress = 0;
+            
+            function animate() {
+                progress += 0.01;
+                if(progress > 1) { progress = 1; sseAnimating = false; }
+                
+                // 缓动插值
+                let ease = 1 - Math.pow(1 - progress, 3);
+                sseCenter.x = 5 + (sseTarget.x - 5) * ease;
+                sseCenter.y = 5 + (sseTarget.y - 5) * ease;
+                
+                drawSseFrame();
+                if(progress < 1) requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // ==========================================
+        // 肘方法模拟器 (模块 5)
+        // 优化内容：加入按钮调整 K 值支持
+        // ==========================================
+        const elCvs = document.getElementById('elbowClusterCanvas');
+        const elCtx = elCvs ? elCvs.getContext('2d') : null;
+        const chartCvs = document.getElementById('elbowChartCanvas');
+        const chartCtx = chartCvs ? chartCvs.getContext('2d') : null;
+
+        const elbowData = [
+            {x: 10, y: 15}, {x: 15, y: 12}, {x: 12, y: 18}, {x: 16, y: 16}, {x: 14, y: 10},
+            {x: 40, y: 15}, {x: 45, y: 12}, {x: 42, y: 18}, {x: 46, y: 16}, {x: 44, y: 10},
+            {x: 25, y: 40}, {x: 30, y: 38}, {x: 28, y: 45}, {x: 32, y: 42}, {x: 26, y: 39}
+        ];
+        
+        const elbowStates = {
+            1: { centers: [{x:27, y:23}], labels: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], sse: 2850 },
+            2: { centers: [{x:13, y:14}, {x:34, y:27}], labels: [0,0,0,0,0,1,1,1,1,1,1,1,1,1,1], sse: 1300 },
+            3: { centers: [{x:13, y:14}, {x:43, y:14}, {x:28, y:40}], labels: [0,0,0,0,0,1,1,1,1,1,2,2,2,2,2], sse: 150 },
+            4: { centers: [{x:13, y:14}, {x:43, y:14}, {x:26, y:39}, {x:30, y:42}], labels: [0,0,0,0,0,1,1,1,1,1,2,3,3,3,2], sse: 110 },
+            5: { centers: [{x:12, y:15}, {x:15, y:11}, {x:43, y:14}, {x:26, y:39}, {x:30, y:42}], labels: [0,1,0,1,1,2,2,2,2,2,3,4,4,4,3], sse: 85 }
+        };
+
+        const elbowColors = ['#e74c3c', '#2ecc71', '#3498db', '#f1c40f', '#9b59b6'];
+
+        let currentElbowK = 1;
+
+        function changeElbowK(delta) {
+            let newK = currentElbowK + delta;
+            if (newK >= 1 && newK <= 5) {
+                currentElbowK = newK;
+                updateElbow(currentElbowK);
+                
+                let btnDec = document.getElementById('btnDecreaseK');
+                let btnInc = document.getElementById('btnIncreaseK');
+                
+                if (btnDec) {
+                    btnDec.disabled = (currentElbowK === 1);
+                    btnDec.style.backgroundColor = currentElbowK === 1 ? '#bdc3c7' : '#95a5a6';
+                }
+                if (btnInc) {
+                    btnInc.disabled = (currentElbowK === 5);
+                    btnInc.style.backgroundColor = currentElbowK === 5 ? '#bdc3c7' : '#e74c3c';
+                }
+            }
+        }
+
+        function drawElbowCluster(k) {
+            if (!elCtx) return;
+            elCtx.clearRect(0, 0, elCvs.width, elCvs.height);
+            let state = elbowStates[k];
+            
+            // 连线
+            elbowData.forEach((p, i) => {
+                let cIdx = state.labels[i];
+                elCtx.beginPath();
+                elCtx.moveTo(p.x * 6, p.y * 6);
+                elCtx.lineTo(state.centers[cIdx].x * 6, state.centers[cIdx].y * 6);
+                elCtx.strokeStyle = elbowColors[cIdx] + '40'; // 加上透明度
+                elCtx.stroke();
+            });
+
+            // 点
+            elbowData.forEach((p, i) => {
+                elCtx.beginPath();
+                elCtx.arc(p.x * 6, p.y * 6, 6, 0, Math.PI*2);
+                elCtx.fillStyle = elbowColors[state.labels[i]];
+                elCtx.fill();
+            });
+
+            // 质心
+            state.centers.forEach((c, i) => {
+                elCtx.fillStyle = elbowColors[i];
+                elCtx.fillRect(c.x * 6 - 5, c.y * 6 - 5, 10, 10);
+                elCtx.strokeStyle = '#000';
+                elCtx.strokeRect(c.x * 6 - 5, c.y * 6 - 5, 10, 10);
+            });
+        }
+
+        function drawElbowChart(currentK) {
+            if (!chartCtx) return;
+            chartCtx.clearRect(0, 0, chartCvs.width, chartCvs.height);
+            
+            // 绘制坐标轴
+            chartCtx.strokeStyle = '#333';
+            chartCtx.beginPath(); chartCtx.moveTo(40, 20); chartCtx.lineTo(40, 260); chartCtx.lineTo(330, 260); chartCtx.stroke();
+            chartCtx.fillStyle = '#666'; chartCtx.font = '12px Arial';
+            chartCtx.fillText("K 值", 310, 280); chartCtx.fillText("SSE", 10, 20);
+
+            // 绘制折线
+            chartCtx.beginPath();
+            chartCtx.strokeStyle = '#2980b9';
+            chartCtx.lineWidth = 3;
+            for(let i=1; i<=5; i++) {
+                let x = 40 + (i-1) * 60;
+                let y = 260 - (elbowStates[i].sse / 3000) * 230; // 映射高度
+                if(i===1) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+            }
+            chartCtx.stroke();
+
+            // 绘制数据点
+            for(let i=1; i<=5; i++) {
+                let x = 40 + (i-1) * 60;
+                let y = 260 - (elbowStates[i].sse / 3000) * 230;
+                
+                chartCtx.beginPath();
+                chartCtx.arc(x, y, i == currentK ? 8 : 5, 0, Math.PI*2);
+                chartCtx.fillStyle = i == currentK ? '#e74c3c' : '#3498db';
+                chartCtx.fill();
+                
+                // 绘制文本
+                chartCtx.fillStyle = '#333';
+                chartCtx.fillText(`K=${i}`, x - 10, 280);
+                if(i == currentK) {
+                    chartCtx.fillStyle = '#e74c3c';
+                    chartCtx.font = 'bold 14px Arial';
+                    chartCtx.fillText(elbowStates[i].sse, x + 10, y - 10);
+                }
+            }
+        }
+
+        function updateElbow(k) {
+            const displayEl = document.getElementById('kDisplay');
+            if (displayEl) displayEl.innerText = k;
+            drawElbowCluster(parseInt(k));
+            drawElbowChart(parseInt(k));
+        }
+
+        // 初始化加载渲染
+        window.onload = function() {
+            reset();
+            drawSseFrame(); // 画出 SSE 静态初始状态
+            updateElbow(1); // 画出肘方法 K=1 初始状态
+            changeElbowK(0); // 初始化按钮状态
+        };
+    </script>
+</body>
+</html>

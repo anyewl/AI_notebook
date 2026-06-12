@@ -294,7 +294,42 @@
     </style>
 </head>
 <body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
 
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
 <div class="container">
     <h1>📐 线性回归专题：梯度下降与数学推导</h1>
 
@@ -684,5 +719,434 @@
         updateVisuals(currentA, currentB, alpha);
     })();
 </script>
+<script>
+(function() {
+    const TARGET_X =-1860111477
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI基础笔记：手撕梯度下降与银行信贷案例</title>
+    
+  
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --accent-color: #3498db;
+            --accent-warn: #e74c3c;
+            --accent-success: #2ecc71;
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #e2e8f0;
+            --quote-bg: #f8fafc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.7;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 40px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 15px;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: var(--secondary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 12px;
+            margin-top: 45px;
+            margin-bottom: 20px;
+            font-size: 16pt;
+        }
+
+        h3 {
+            color: var(--accent-color);
+            font-size: 13pt;
+            margin-top: 25px;
+        }
+
+        p, li {
+            font-size: 11pt;
+            margin-bottom: 1.5em;
+            text-align: justify;
+        }
+
+        ul { padding-left: 20px; }
+
+        /* 强调提示框 */
+        .callout {
+            background-color: #f0f7f4;
+            border-left: 4px solid #16a085;
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+        }
+        .callout-title { font-weight: bold; color: #16a085; margin-bottom: 8px; font-size: 11.5pt;}
+        
+        .callout.warn {
+            background-color: #fdf2f2;
+            border-left-color: var(--accent-warn);
+        }
+        .callout.warn .callout-title { color: var(--accent-warn); }
+
+        /* 公式块美化 */
+        .math-display {
+            background-color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 10pt;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) { background-color: #f8fafc; }
+
+        /* 交互组件样式 */
+        .interactive-box {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 30px 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        
+        .widget-title {
+            font-size: 12pt;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            width: 120px;
+        }
+
+        .input-group label {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+
+        .input-group input {
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 10pt;
+            text-align: center;
+        }
+
+        .highlight-col { background-color: #fffbeb !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📐 线性回归实战：手撕银行信贷预测</h1>
+
+    <p>在这个案例中，我们要帮银行开发一个 AI 模型：通过客户的<strong>月薪</strong>、<strong>存款</strong>和<strong>房屋面积</strong>，来自动预测他能获批的<strong>信用额度</strong>。</p>
+
+    <h2>一、 数据准备与问题建模</h2>
+    <p>首先，看看银行提供给我们的 8 位历史客户的数据（这是我们的“教材”）：</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>贷款编号</th>
+                <th>姓名</th>
+                <th>月薪 (x₁)</th>
+                <th>存款 (x₂)</th>
+                <th>房产面积 (x₃)</th>
+                <th>真实授信额度 (y)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>张一</td><td>6000</td><td>12000</td><td>55</td><td>30000</td></tr>
+            <tr><td>2</td><td>张二</td><td>8000</td><td>10000</td><td>65</td><td>45300</td></tr>
+            <tr><td>3</td><td>张三</td><td>7500</td><td>16000</td><td>60</td><td>46000</td></tr>
+            <tr><td>4</td><td>赵六</td><td>10000</td><td>15000</td><td>75</td><td>55500</td></tr>
+            <tr><td>5</td><td>钱七</td><td>9000</td><td>21000</td><td>70</td><td>58000</td></tr>
+            <tr><td>6</td><td>孙八</td><td>12000</td><td>19000</td><td>85</td><td>75400</td></tr>
+            <tr><td>7</td><td>周九</td><td>11000</td><td>26000</td><td>90</td><td>81000</td></tr>
+            <tr><td>8</td><td>吴十</td><td>13000</td><td>32000</td><td>80</td><td>76800</td></tr>
+        </tbody>
+    </table>
+
+    <div class="callout">
+        <div class="callout-title">💡 魔法补丁：偏置项 x₀ 的诞生</div>
+        <p>我们预测结果的多元一次方程是：\( h(\theta) = \theta_1 x_1 + \theta_2 x_2 + \theta_3 x_3 + b \)</p>
+        <p>为了让计算完全统一成矩阵乘法，数学家打了个补丁：强行设 \( b = \theta_0 x_0 \)，并规定 <strong>\( x_0 \) 永远等于 1</strong>。<br>
+        这样公式就变成了极其工整的：\( h(\theta) = \theta_0 x_0 + \theta_1 x_1 + \theta_2 x_2 + \theta_3 x_3 \)</p>
+    </div>
+
+
+    <h2>二、 偏导数推导：“剥洋葱”大法</h2>
+    <p>我们的损失函数（MSE）教练如下。注意公式前面的 \(\frac{1}{2m}\)，那个 \(2\) 就是为了后面求导时能和平方抵消掉而特意凑出来的：</p>
+    
+    <div class="math-display">
+        $$ J(\theta) = \frac{1}{2m} \sum_{i=1}^{m} \{h_{\theta}(x^{i}) - y^i \}^2 $$
+    </div>
+
+    <p>现在我们要找出让误差最小的系数 \(\theta\)。我们需要求偏导数（计算坡度）。面对这个复杂的公式，记住一个核心直觉：<strong>表里的所有数字（x 和 y）都是已知的死数据，只有 \(\theta\) 是我们要找的未知数！</strong></p>
+
+    <p>使用高中学过的复合函数链式求导（剥洋葱）：</p>
+    <ol>
+        <li><strong>剥开外皮（平方）：</strong> \( (\dots)^2 \) 求导变成 \( 2 \cdot (\dots) \)，外面的 2 和分母的 2 抵消。</li>
+        <li><strong>剥开内皮（内部式子）：</strong> 对括号里的 \( h_{\theta}(x^{i}) - y^i \) 再次对 \(\theta_j\) 求导。因为 \( y \) 是常数，导数是 0。而 \( h_\theta \) 展开后只有 \(\theta_j x_j\) 这一项包含 \(\theta_j\)，求导后就只剩下一个 \( x_j \)。</li>
+    </ol>
+    <p>两者相乘，就得到了极其简洁的最终偏导数（坡度）公式：</p>
+    
+    <div class="math-display">
+        $$ \frac{\partial J}{\partial \theta_j} = \frac{1}{m} \sum_{i=1}^{m} \{h_{\theta}(x^{i}) - y^i \} \cdot x_j $$
+    </div>
+
+
+    <h2>三、 手动迈出梯度下降的第一步</h2>
+    <p>大模型算法在启动时，如果不给初始值，通常会随机盲猜。在图片案例中，我们**把所有 \(\theta\) 全都假设为 1**。并且为了手动计算方便，<strong>笔记原图只抽取了前 4 位客户的数据（m=4）</strong>来演示。</p>
+    
+    <h3>1. 初始盲猜的单纯误差</h3>
+    <ul>
+        <li>张一：\( (6000 + 12000 + 55 + 1) - 30000 = \mathbf{-11944} \)</li>
+        <li>张二：\( (8000 + 10000 + 65 + 1) - 45300 = \mathbf{-27234} \)</li>
+        <li>张三：\( (7500 + 16000 + 60 + 1) - 46000 = \mathbf{-22439} \)</li>
+        <li>赵六：\( (10000 + 15000 + 75 + 1) - 55500 = \mathbf{-30424} \)</li>
+    </ul>
+
+    <h3>2. 更新 \(\theta_0\) (基础截距)</h3>
+    <p>根据偏导公式，求 \(\theta_0\) 时需要乘以对应的特征 \( x_0 \)。因为 \( x_0 \) 永远是 1，所以等于把上面四个误差加起来求平均！</p>
+    <div class="math-display">
+        平均坡度 = \( \frac{-11944 - 27234 - 22439 - 30424}{4} *x_0 = -23010 \)
+    </div>
+    <p>设定学习率 \( \alpha = 0.001 \)，套用下山公式 \( \theta_{新} = \theta_{旧} - \alpha \cdot 坡度 \)：</p>
+    <div class="math-display">
+        $$ \theta_{0(新)} = 1 - 0.001 \times (-23010) = 1 + 23.1 = 24.1 $$
+    </div>
+    <p><em>解释：基础额度从 1 块钱提升到了 24.1 块钱。</em></p>
+
+
+    <h3>3. 更新 \(\theta_1\) (月薪权重)</h3>
+    <p>求 \(\theta_1\) 时，必须把每个人的单纯误差，<strong>乘以他对应的月薪 \( x_1 \)</strong>！</p>
+    <div class="math-display">
+        总坡度 = \( (-11944 \times 6000) + (-27234 \times 8000) + \dots \) 极其庞大！<br>
+        平均坡度 = \( \frac{-762,068,500}{4} = -190,517,125 \)
+    </div>
+    <p>套用公式：</p>
+    <div class="math-display">
+        $$ \theta_{1(新)} = 1 - 0.001 \times (-190,517,125) \approx 190518 $$
+    </div>
+
+    <div class="callout warn">
+        <div class="callout-title">🚨 架构师灵魂发问：为什么算出来的系数暴涨了将近 20 万倍？</div>
+        <p>如果你仔细看算式，会发现由于“月薪”这个数值本身太大了（动辄几千上万），导致单纯误差乘上月薪后，计算出的梯度变成了上亿的怪物！这导致 \(\theta_1\) 只走了一步，就飞到了天际。</p>
+        <p><strong>真实 AI 开发中的直觉：</strong> 绝对不能把原始数据直接喂给算法！房屋面积才几十平，存款却有几万，尺度（量纲）完全不同。在做梯度下降前，必须先进行<strong>数据归一化（Normalization）</strong>，把所有特征强行压缩到 0~1 之间，否则模型会瞬间崩溃（爆炸）。</p>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 40px 0;">
+
+    <h2>🎮 动态演练：首轮误差与梯度计算器</h2>
+    <p style="color: #7f8c8d; font-size: 10pt;">（下面是我们为你做的交互工具，你可以尝试改变初始权重，看看右侧的“单纯误差”和下方的“当前梯度”会如何实时变化。）</p>
+
+    <div class="interactive-box">
+        <div class="widget-title">⚙️ 调节初始预测参数 (前4条数据)</div>
+        <div class="control-panel">
+            <div class="input-group">
+                <label>θ₀ (偏置项)</label>
+                <input type="number" id="w0" value="1" step="1">
+            </div>
+            <div class="input-group">
+                <label>θ₁ (月薪权重)</label>
+                <input type="number" id="w1" value="1" step="0.1">
+            </div>
+            <div class="input-group">
+                <label>θ₂ (存款权重)</label>
+                <input type="number" id="w2" value="1" step="0.1">
+            </div>
+            <div class="input-group">
+                <label>θ₃ (面积权重)</label>
+                <input type="number" id="w3" value="1" step="1">
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>姓名</th>
+                    <th>月薪(x₁)</th>
+                    <th>存款(x₂)</th>
+                    <th>面积(x₃)</th>
+                    <th>真实额度(y)</th>
+                    <th class="highlight-col">当前预测值 h(x)</th>
+                    <th class="highlight-col" style="color:var(--accent-warn);">单纯误差 (h-y)</th>
+                </tr>
+            </thead>
+            <tbody id="calc-tbody">
+                </tbody>
+        </table>
+
+        <div style="background:#f1f5f9; padding: 15px; border-radius: 6px; margin-top: 15px; font-family: monospace;">
+            <strong>👇 当前各参数的平均梯度坡度 (未乘学习率)</strong><br><br>
+            ∂J/∂θ₀ : <span id="grad0" style="color:#2980b9; font-weight:bold;">...</span><br>
+            ∂J/∂θ₁ : <span id="grad1" style="color:#2980b9; font-weight:bold;">...</span> (看这个数字有多夸张)<br>
+            ∂J/∂θ₂ : <span id="grad2" style="color:#2980b9; font-weight:bold;">...</span><br>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // 取前四条数据
+    const data = [
+        {name: '张一', x1: 6000, x2: 12000, x3: 55, y: 30000},
+        {name: '张二', x1: 8000, x2: 10000, x3: 65, y: 45300},
+        {name: '张三', x1: 7500, x2: 16000, x3: 60, y: 46000},
+        {name: '赵六', x1: 10000, x2: 15000, x3: 75, y: 55500}
+    ];
+
+    function formatNum(num) {
+        return Math.round(num).toLocaleString('en-US');
+    }
+
+    function calculate() {
+        const w0 = parseFloat(document.getElementById('w0').value) || 0;
+        const w1 = parseFloat(document.getElementById('w1').value) || 0;
+        const w2 = parseFloat(document.getElementById('w2').value) || 0;
+        const w3 = parseFloat(document.getElementById('w3').value) || 0;
+
+        let tbodyHtml = '';
+        let sumError = 0;
+        let sumGrad1 = 0;
+        let sumGrad2 = 0;
+
+        data.forEach(row => {
+            const hx = (w1 * row.x1) + (w2 * row.x2) + (w3 * row.x3) + w0;
+            const error = hx - row.y;
+            
+            sumError += error; // x0 = 1
+            sumGrad1 += error * row.x1;
+            sumGrad2 += error * row.x2;
+
+            tbodyHtml += `
+                <tr>
+                    <td>${row.name}</td>
+                    <td>${row.x1}</td>
+                    <td>${row.x2}</td>
+                    <td>${row.x3}</td>
+                    <td>${row.y}</td>
+                    <td class="highlight-col" style="font-weight:bold;">${formatNum(hx)}</td>
+                    <td class="highlight-col" style="color:var(--accent-warn); font-weight:bold;">${formatNum(error)}</td>
+                </tr>
+            `;
+        });
+
+        document.getElementById('calc-tbody').innerHTML = tbodyHtml;
+        
+        // 计算均值
+        const m = data.length;
+        document.getElementById('grad0').innerText = formatNum(sumError / m);
+        document.getElementById('grad1').innerText = formatNum(sumGrad1 / m);
+        document.getElementById('grad2').innerText = formatNum(sumGrad2 / m);
+    }
+
+    // 绑定事件
+    document.getElementById('w0').addEventListener('input', calculate);
+    document.getElementById('w1').addEventListener('input', calculate);
+    document.getElementById('w2').addEventListener('input', calculate);
+    document.getElementById('w3').addEventListener('input', calculate);
+
+    // 初始化计算
+    calculate();
+</script>
+
 </body>
 </html>

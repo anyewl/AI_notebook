@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CART 决策树与 PyTorch 实现及面试题</title>
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        :root { 
+            --primary: #c026d3; 
+            --success: #10b981; 
+            --danger: #ef4444; 
+            --bg: #fdf4ff; 
+            --text: #1e293b; 
+            --node-bg: #86198f;
+            --code-bg: #1e1e1e;
+        }
+        body { 
+            font-family: system-ui, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            line-height: 1.7; 
+            padding: 20px; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+        }
+        .card { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 30px; 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
+        }
+        h1 { color: var(--primary); text-align: center; margin-bottom: 40px; }
+        h2 { color: var(--primary); font-size: 1.4rem; border-bottom: 2px solid #f5d0fe; padding-bottom: 10px; margin-top: 0; }
+        h3 { color: #0f172a; font-size: 1.1rem; margin-top: 20px; margin-bottom: 10px; }
+        
+        .math-box { 
+            background: #faf5ff; 
+            border-left: 4px solid var(--primary); 
+            padding: 15px 20px; 
+            border-radius: 0 8px 8px 0; 
+            margin: 15px 0; 
+            overflow-x: auto; 
+            font-size: 0.95em; 
+        }
+        
+        /* 代码高亮基础样式 */
+        pre { 
+            background: var(--code-bg); 
+            color: #d4d4d4; 
+            padding: 20px; 
+            border-radius: 8px; 
+            overflow-x: auto; 
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .keyword { color: #569cd6; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .function { color: #dcdcaa; }
+        .number { color: #b5cea8; }
+
+        /* 面试题样式 */
+        .qa-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .qa-title {
+            font-weight: bold;
+            color: #334155;
+            margin-bottom: 10px;
+        }
+        .tags {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #4338ca;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .importance {
+            color: #fbbf24;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>CART 决策树：PyTorch 代码实现与核心面试题</h1>
+
+    <div class="card">
+        <h2>💻 核心算法：CART 特征二分切分的 PyTorch 实现</h2>
+        <p>虽然决策树传统上使用 Scikit-Learn 等基于 NumPy/Cython 的库，但通过 PyTorch 的张量（Tensor）操作，我们可以非常清晰地实现 CART 树的核心逻辑：<b>Gini 不纯度计算与穷举二分</b>。这种张量化计算也是深入理解深度学习框架底层逻辑的极佳方式。</p>
+        
+        <p>以下代码完整复现了之前 HTML 中关于“天气”特征（晴天、多云、下雨）的 Gini 指数加权计算过程。</p>
+
+<pre><code><span class="keyword">import</span> torch
+
+<span class="keyword">def</span> <span class="function">calculate_gini</span>(y):
+    <span class="comment">\"\"\"计算 Gini 不纯度，使用 Tensor 操作确保高效\"\"\"</span>
+    <span class="keyword">if</span> <span class="built_in">len</span>(y) == <span class="number">0</span>:
+        <span class="keyword">return</span> torch.tensor(<span class="number">0.0</span>)
+    
+    <span class="comment"># 获取各类别出现的频次</span>
+    _, counts = torch.unique(y, return_counts=<span class="keyword">True</span>)
+    probabilities = counts.float() / <span class="built_in">len</span>(y)
+    
+    <span class="comment"># 公式: Gini = 1 - sum(p_k^2)</span>
+    gini = <span class="number">1.0</span> - torch.sum(probabilities ** <span class="number">2</span>)
+    <span class="keyword">return</span> gini
+
+<span class="keyword">def</span> <span class="function">evaluate_split</span>(X, Y, feature_idx, split_value):
+    <span class="comment">\"\"\"评估按特定特征的特定值进行二叉切分的效果\"\"\"</span>
+    <span class="comment"># 左子树: 特征等于 split_value (例如: == 多云)</span>
+    left_mask = (X[:, feature_idx] == split_value)
+    <span class="comment"># 右子树: 特征不等于 split_value (例如: == 晴天 或 下雨)</span>
+    right_mask = ~left_mask
+
+    y_left = Y[left_mask]
+    y_right = Y[right_mask]
+
+    gini_left = calculate_gini(y_left)
+    gini_right = calculate_gini(y_right)
+
+    <span class="comment"># 计算加权 Gini 指数</span>
+    weight_left = <span class="built_in">len</span>(y_left) / <span class="built_in">len</span>(Y)
+    weight_right = <span class="built_in">len</span>(y_right) / <span class="built_in">len</span>(Y)
+
+    gini_split = weight_left * gini_left + weight_right * gini_right
+    <span class="keyword">return</span> gini_split
+
+<span class="comment"># ==========================================
+# 数据集构造 (对应露营案例)
+# ==========================================</span>
+<span class="comment"># X: [天气, 温度]
+# 天气映射: 0=晴天, 1=多云, 2=下雨
+# 温度映射: 0=低, 1=高</span>
+X = torch.tensor([
+    [<span class="number">0</span>, <span class="number">1</span>],
+    [<span class="number">0</span>, <span class="number">0</span>],
+    [<span class="number">1</span>, <span class="number">1</span>],
+    [<span class="number">1</span>, <span class="number">0</span>],
+    [<span class="number">2</span>, <span class="number">0</span>],
+    [<span class="number">2</span>, <span class="number">1</span>]
+], dtype=torch.float32)
+
+<span class="comment"># Y标签: 0=不去, 1=去</span>
+Y = torch.tensor([<span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>], dtype=torch.float32)
+
+<span class="keyword">print</span>(<span class="string">"--- PyTorch CART 天气特征切分测试 ---"</span>)
+weather_idx = <span class="number">0</span>
+weather_conditions = {<span class="number">0</span>: <span class="string">"晴天"</span>, <span class="number">1</span>: <span class="string">"多云"</span>, <span class="number">2</span>: <span class="string">"下雨"</span>}
+
+<span class="keyword">for</span> val, name <span class="keyword">in</span> weather_conditions.items():
+    gini = evaluate_split(X, Y, weather_idx, val)
+    <span class="keyword">print</span>(<span class="string">f"按 {name} vs 其他 切分, 加权 Gini = {gini.item():.4f}"</span>)
+
+<span class="comment"># 预期输出:
+# 按 晴天 vs 其他 切分, 加权 Gini = 0.5000
+# 按 多云 vs 其他 切分, 加权 Gini = 0.2500
+# 按 下雨 vs 其他 切分, 加权 Gini = 0.2500</span>
+</code></pre>
+    </div>
+
+    <div class="card">
+        <h2>🎯 机器学习工程师高频面试题（CART相关）</h2>
+        
+        <div class="qa-box">
+            <div class="qa-title">
+                <span class="tags">基础理论</span> <span class="importance">⭐⭐⭐⭐⭐</span>
+                1. CART 树和传统的 ID3 / C4.5 决策树在结构上最本质的区别是什么？
+            </div>
+            <div class="qa-content">
+                <p><b>解答：</b>最本质的区别在于树的形态与分支规则。CART（Classification and Regression Trees）树是一棵<b>严格的二叉树</b>，它在任何节点上只能有“是”和“否”两个分支；而 ID3 树在遇到具有多个类别的分类特征时（如天气有3种状态），会直接产生多叉树（分出3个分支）。通过强制使用二叉结构，CART 简化了节点逻辑，也一定程度上避免了数据切分过细的问题。</p>
+            </div>
+        </div>
+
+        <div class="qa-box">
+            <div class="qa-title">
+                <span class="tags">核心机制</span> <span class="importance">⭐⭐⭐⭐⭐</span>
+                2. CART 算法既可以做分类也可以做回归，它在寻找切分点时，分类树和回归树使用的损失函数分别是什么？
+            </div>
+            <div class="qa-content">
+                <p><b>解答：</b></p>
+                <ul>
+                    <li><b>分类树：</b> 使用<b>基尼系数（Gini Impurity）</b>来选择最优切分特征和切分点。寻找使得切分后两个子集合基尼系数加权和最小的方案。</li>
+                    <li><b>回归树：</b> 使用<b>均方误差（MSE, Mean Squared Error）</b>准则，通过最小二乘法进行切分。寻找使得切分后左右两个子集各自的平方误差之和最小的方案，子节点的预测值通常为该节点内样本真实值的平均值。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="qa-box">
+            <div class="qa-title">
+                <span class="tags">数学公式</span> <span class="importance">⭐⭐⭐⭐</span>
+                3. 请写出计算基尼系数 (Gini Impurity) 的数学公式，并说明当数据集完全纯净时其值为多少？
+            </div>
+            <div class="qa-content">
+                <p><b>解答：</b></p>
+                <p>假设数据集 $D$ 中包含 $K$ 个互斥的类别，第 $k$ 个类别在数据集中出现的概率（比例）为 $p_k$，则基尼系数的公式为：</p>
+                <div class="math-box">
+                    $$Gini(D) = 1 - \sum_{k=1}^{K} p_k^2$$
+                </div>
+                <p>当数据集完全纯净（即所有样本都属于同一个类别）时，某一个 $p_k = 1$，其余均为 $0$。此时 $Gini(D) = 1 - 1^2 = 0$。Gini 指数越小，代表数据越纯净。</p>
+            </div>
+        </div>
+
+        <div class="qa-box">
+            <div class="qa-title">
+                <span class="tags">算法细节</span> <span class="importance">⭐⭐⭐⭐</span>
+                4. 当 CART 树处理一个拥有 N 种离散属性的特征（且 N > 2）时，它是如何划分子集的？
+            </div>
+            <div class="qa-content">
+                <p><b>解答：</b>因为 CART 必须维持二叉树结构，它不能直接分出 N 个叉。它的做法是将 N 种属性的所有可能分为<b>两个互斥的子集</b>。具体来说，它会采用“穷举法”，把某一个属性单独拿出来作为左子集，剩下的所有属性合并作为右子集（或者更复杂的组合方式）。接着计算所有这些可能组合的加权基尼系数，最终选择能让基尼系数降到最低的那一种二分组合进行切分。</p>
+            </div>
+        </div>
+
+        <div class="qa-box">
+            <div class="qa-title">
+                <span class="tags">过拟合应对</span> <span class="importance">⭐⭐⭐</span>
+                5. 为什么 CART 树在生成后通常需要进行剪枝（Pruning）操作？它的剪枝策略叫什么？
+            </div>
+            <div class="qa-content">
+                <p><b>解答：</b>决策树在完全生长的情况下，非常容易记住训练集中的噪声和特异点，导致极其严重的<b>过拟合（Overfitting）</b>现象，模型变得异常庞大且在测试集上表现糟糕。因此需要剪掉一些收益不大的分支。<br><br>CART 采用的策略称为<b>代价复杂度剪枝（Cost-Complexity Pruning）</b>。该策略在评估是否剪枝时，不仅考虑模型对训练数据的拟合误差，还引入了一个正则化项（树的叶子节点个数）作为惩罚。它会自底向上地计算各个子树的表面误差率增益，如果剪掉某根树枝带来的误差增加能够被模型复杂度的降低所弥补，算法就会执行剪枝操作。</p>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

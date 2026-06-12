@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机森林算法原理：多树联动与决策树推演</title>
+    
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        :root {
+            --primary-blue: #1e3a8a; --light-blue: #eff6ff; --accent-green: #10b981; 
+            --accent-red: #ef4444; --text-main: #1f2937; --border-light: #e5e7eb; 
+            --bg-gray: #f8fafc; --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: var(--text-main); background-color: var(--bg-gray); max-width: 1400px; margin: 0 auto; padding: 40px 20px; }
+        h1, h2, h3 { color: var(--primary-blue); border-bottom: 2px solid var(--border-light); padding-bottom: 10px; margin-top: 40px; }
+        h1 { font-size: 2.2em; border-bottom: 3px solid var(--primary-blue); }
+        
+        .theory-card { background: #fff; border-left: 5px solid var(--primary-blue); border-radius: 8px; padding: 25px; margin: 20px 0 40px 0; box-shadow: var(--shadow-md); }
+        .theory-card h3 { border: none; margin-top: 0; padding-top: 0; color: var(--primary-blue); }
+        .theory-card p { margin-bottom: 10px; }
+        .theory-card ul { margin-top: 5px; padding-left: 20px; }
+        .theory-card li { margin-bottom: 6px; }
+
+        .interactive-panel { background: white; border: 1px solid var(--border-light); border-radius: 12px; padding: 24px; margin: 24px 0; box-shadow: var(--shadow-md); }
+        button { background-color: var(--primary-blue); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.2s ease; margin-right: 10px; margin-bottom: 15px; font-weight: bold; }
+        button:hover:not(:disabled) { background-color: #1e40af; transform: translateY(-1px); }
+        button:disabled { background-color: #9ca3af; cursor: not-allowed; opacity: 0.7; }
+        
+        .btn-tree-a { background-color: #059669; } .btn-tree-a:hover:not(:disabled) { background-color: #047857; }
+        .btn-tree-b { background-color: #d97706; } .btn-tree-b:hover:not(:disabled) { background-color: #b45309; }
+        .btn-tree-c { background-color: #4f46e5; } .btn-tree-c:hover:not(:disabled) { background-color: #4338ca; }
+        .btn-reset { background-color: #64748b; } .btn-reset:hover:not(:disabled) { background-color: #475569; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; text-align: center; }
+        th, td { border: 1px solid var(--border-light); padding: 8px; font-size: 14px; } th { background-color: var(--light-blue); }
+        .highlight-row { background-color: #fef08a !important; transition: background-color 0.3s; }
+        .fade-out-col { opacity: 0.2; background-color: #d1d5db; text-decoration: line-through; transition: all 0.5s; }
+        
+        .voting-layout { display: grid; grid-template-columns: 280px 150px 1fr; gap: 20px; align-items: stretch; }
+        .voting-controls { display: flex; flex-direction: column; gap: 16px; }
+        .data-card { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; box-shadow: var(--shadow-sm); }
+        .control-buttons { display: flex; flex-direction: column; gap: 10px; } .control-buttons button { margin: 0; width: 100%; }
+        
+        .forest-view { display: flex; flex-direction: column; }
+        .forest-container { flex-grow: 1; display: flex; flex-direction: column; gap: 25px; justify-content: center; align-items: center; padding: 15px; background: var(--bg-gray); border-radius: 8px; border: 1px dashed #cbd5e1; }
+
+        .calc-view { display: flex; flex-direction: column; min-width: 0; }
+        .calc-tabs { display: flex; gap: 5px; margin-bottom: -1px; z-index: 10; }
+        .calc-tab { padding: 8px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; color: #94a3b8; font-weight: bold; font-size: 14px; display: none; transition: all 0.2s; }
+        .calc-tab:hover { background: #f1f5f9; color: #64748b; }
+        .calc-tab.active { background: #fff; color: var(--text-main); border-bottom: 1px solid #fff; }
+        .calc-tab.active-a { border-top: 3px solid #059669; color: #059669; }
+        .calc-tab.active-b { border-top: 3px solid #d97706; color: #d97706; }
+        .calc-tab.active-c { border-top: 3px solid #4f46e5; color: #4f46e5; }
+
+        .calc-details-box { background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 0 8px 8px 8px; font-size: 0.95em; height: auto; overflow: visible; margin: 0; box-shadow: var(--shadow-sm); position: relative; z-index: 1; }
+        .calc-details-box.theme-a { border-left: 4px solid #059669; }
+        .calc-details-box.theme-b { border-left: 4px solid #d97706; }
+        .calc-details-box.theme-c { border-left: 4px solid #4f46e5; }
+
+        .dynamic-tree { width: 70px; height: 70px; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; font-weight: bold; font-size: 20px; animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; box-shadow: 0 4px 8px rgba(0,0,0,0.2); position: relative; }
+        .tree-vote-1 { background-color: var(--accent-green); } .tree-vote-0 { background-color: var(--accent-red); }
+        .tree-title { position: absolute; top: -25px; color: #333; font-size: 14px; white-space: nowrap;}
+        
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        .math-dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #282c34; color: #abb2bf; padding: 16px; border-radius: 8px; margin-top: 20px; }
+        .math-cell { background: #21252b; padding: 12px 8px; border-radius: 6px; border: 1px solid #181a1f; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; }
+        .math-highlight { animation: glow 0.8s ease-out; }
+        @keyframes glow { 0% { box-shadow: 0 0 0px rgba(52, 152, 219, 0); } 50% { box-shadow: 0 0 15px rgba(52, 152, 219, 0.8); background: #2c313a; } 100% { box-shadow: 0 0 0px rgba(52, 152, 219, 0); } }
+        
+        .final-decision { grid-column: span 4; text-align: center; font-size: 1.2em; font-weight: bold; padding: 16px; border-radius: 6px; background: #21252b; border: 2px solid #3e4451; transition: border-color 0.3s, color 0.3s; }
+        .decision-pass { border-color: var(--accent-green); color: var(--accent-green); } .decision-fail { border-color: var(--accent-red); color: var(--accent-red); }
+    </style>
+</head>
+<body>
+	<style>
+	 .author-badge-container {
+			position: fixed;
+			top: 30px;
+			right: 30px;
+			background-color: rgba(255, 255, 255, 0.9); 
+			backdrop-filter: blur(8px);
+			border: 1px solid rgba(52, 152, 219, 0.3);
+			padding: 12px 15px;
+			border-radius: 10px;
+			box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+			font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+			font-size: 13px;
+			z-index: 10000;
+			transition: all 0.3s ease;
+			width: max-content; 
+			max-width: 90vw;
+		}
+		.badge-content {
+			white-space: nowrap;
+		}
+		.badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+		.badge-content p { margin: 3px 0; color: #444; }
+	</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+    <h1>🌲 随机森林算法：核心思想与多决策树推演</h1>
+    
+    <div class="theory-card">
+        <h3>📖 随机森林 (Random Forest) 核心理论</h3>
+        
+        <p><strong>1. 群策群力（三个臭皮匠，顶个诸葛亮）：</strong><br>
+        随机森林的核心思想是通过<strong>平权投票</strong>，整合多个“弱学习器”（即单棵决策树）。单棵树往往能力有上限，且容易产生预测偏差。但将它们集合起来后，个体间的偏差能在投票中相互抵消，从而大幅提高整体的预测性能和稳定性。</p>
+        
+        <p><strong>2. 核心机制：为什么要进行“有放回的随机抽样”？</strong></p>
+        <ul>
+            <li><strong>为什么不直接使用全量数据？</strong> 如果不随机抽样，每棵树喂的数据都一模一样，那最终训练出来的树将完全相同（全是克隆树），投票表决也就失去了意义。</li>
+            <li><strong>为什么必须是“有放回”抽样？</strong> 如果是“无放回”抽样（把数据集硬切成几块不相交的数据），每棵树的样本完全没有交集，这会导致每棵树都极其“偏科”（有偏）。<strong>有放回抽样</strong>巧妙地保证了每棵树的训练样本<strong>既有交集，又有差异</strong>。只有在这种“和而不同”的状态下，才能最大化发挥投票表决的威力。</li>
+        </ul>
+
+        <p><strong>3. 算法限定：可以集成不同的算法吗？</strong></p>
+        <p>广义的“集成学习 (Ensemble Learning)”确实可以混合缝合完全不同的算法（比如神经网络+逻辑回归）。<br>
+        但是，<strong>“随机森林”严格规定了它的基础集成单元只能是【决策树 (Decision Tree)】</strong>（最常见的是 CART 决策树）。森林里只能种“树”，这也是它名字的由来。</p>
+    </div>
+
+    <p>设定应用场景：<strong>预测大学生是否能通过期末考试。</strong>特征：学习时长、考勤率、睡眠时长。目标变量 $Y \in \{0, 1\}$。</p>
+    <div style="background: #e0f2fe; padding: 15px; border-left: 4px solid #0284c7; margin-bottom: 20px; border-radius: 4px;">
+        <strong>💡 集成学习防过拟合核心规则：</strong><br>
+        1. <strong>样本扰动</strong>：让每颗树学的不一样。树A随机抽4条，树B随机抽4条，树C抽2~4条。<br>
+        2. <strong>特征扰动</strong>：让每颗树本身不一样。3棵树分别屏蔽掉了不同的特征。
+    </div>
+
+    <h2>步骤 0: 原始数据集 (总体样本 $M=5$, 总特征 $N=3$)</h2>
+    <div class="interactive-panel" style="background-color: #fafafa; padding: 15px;">
+        <table id="table-original" style="margin: 0;">
+            <tr><th>原始 ID</th><th>学习时长 ($x_1$)</th><th>考勤率 ($x_2$)</th><th>睡眠时长 ($x_3$)</th><th>实际结果 ($Y$)</th></tr>
+            <tr id="row-1"><td>1</td><td>10</td><td>90</td><td>8</td><td>1</td></tr>
+            <tr id="row-2"><td>2</td><td>2</td><td>50</td><td>5</td><td>0</td></tr>
+            <tr id="row-3"><td>3</td><td>5</td><td>80</td><td>7</td><td>1</td></tr>
+            <tr id="row-4"><td>4</td><td>3</td><td>60</td><td>6</td><td>0</td></tr>
+            <tr id="row-5"><td>5</td><td>8</td><td>85</td><td>7</td><td>1</td></tr>
+        </table>
+    </div>
+
+    <h2>步骤 1: 准备树 A 的数据集 (抽样子集)</h2>
+    <div class="interactive-panel" style="padding: 15px;">
+        <p style="color:#059669; font-size:14px; font-weight:bold; margin-top:0;">※ 要求控制：树 A 固定抽取 4 条数据，且强制屏蔽“学习时长 ($x_1$)”。</p>
+        <button id="btn-step1" onclick="startStep1()">▶ 1. 抽取树 A 数据集</button>
+        <table id="table-dataset1" style="margin: 0;">
+            <tr>
+                <th>抽样序号</th>
+                <th id="col-feat-1-1" class="fade-out-col">学习时长 ($x_1$)</th>
+                <th id="col-feat-1-2">考勤率 ($x_2$)</th>
+                <th id="col-feat-1-3">睡眠时长 ($x_3$)</th>
+                <th>结果 ($Y$)</th>
+            </tr>
+            <tr id="d1-empty"><td colspan="5" style="color:#94a3b8;">点击生成</td></tr>
+        </table>
+        <p id="status-step1" style="color: var(--accent-green); font-weight: bold; margin: 10px 0 0 0; min-height: 24px;"></p>
+    </div>
+
+    <h2>步骤 2: 准备树 B 的数据集 (抽样子集)</h2>
+    <div class="interactive-panel" style="padding: 15px;">
+        <p style="color:#d97706; font-size:14px; font-weight:bold; margin-top:0;">※ 要求控制：树 B 固定抽取 4 条数据，且强制屏蔽“考勤率 ($x_2$)”。</p>
+        <button id="btn-step2" onclick="startStep2()" disabled>▶ 2. 抽取树 B 数据集</button>
+        <table id="table-dataset2" style="margin: 0;">
+            <tr>
+                <th>抽样序号</th>
+                <th id="col-feat-2-1">学习时长 ($x_1$)</th>
+                <th id="col-feat-2-2" class="fade-out-col">考勤率 ($x_2$)</th>
+                <th id="col-feat-2-3">睡眠时长 ($x_3$)</th>
+                <th>结果 ($Y$)</th>
+            </tr>
+            <tr id="d2-empty"><td colspan="5" style="color:#94a3b8;">点击生成</td></tr>
+        </table>
+        <p id="status-step2" style="color: var(--primary-blue); font-weight: bold; margin: 10px 0 0 0; min-height: 24px;"></p>
+    </div>
+
+    <h2>步骤 3: 准备树 C 的数据集 (抽样子集)</h2>
+    <div class="interactive-panel" style="padding: 15px;">
+        <p style="color:#4f46e5; font-size:14px; font-weight:bold; margin-top:0;">※ 要求控制：树 C 抽取 2~4 条数据，且强制屏蔽“睡眠时长 ($x_3$)”。</p>
+        <button id="btn-step3" onclick="startStep3()" disabled>▶ 3. 抽取树 C 数据集</button>
+        <table id="table-dataset3" style="margin: 0;">
+            <tr>
+                <th>抽样序号</th>
+                <th id="col-feat-3-1">学习时长 ($x_1$)</th>
+                <th id="col-feat-3-2">考勤率 ($x_2$)</th>
+                <th id="col-feat-3-3" class="fade-out-col">睡眠时长 ($x_3$)</th>
+                <th>结果 ($Y$)</th>
+            </tr>
+            <tr id="d3-empty"><td colspan="5" style="color:#94a3b8;">点击生成</td></tr>
+        </table>
+        <p id="status-step3" style="color: #4f46e5; font-weight: bold; margin: 10px 0 0 0; min-height: 24px;"></p>
+    </div>
+
+    <h2>步骤 4: 构建决策树并进行预测融合</h2>
+    <div class="interactive-panel">
+        <div class="voting-layout">
+            
+            <div class="voting-controls">
+                <div class="data-card">
+                    <strong>测试向量 $x$ :</strong>
+                    <ul style="margin: 5px 0 0 0; padding-left: 20px;">
+                        <li>$x_1$ = <strong>6</strong></li>
+                        <li>$x_2$ = <strong>70</strong></li>
+                        <li>$x_3$ = <strong>6</strong></li>
+                    </ul>
+                    <div style="margin-top: 10px;">$$ x = [6, 70, 6] $$</div>
+                </div>
+
+                <div class="control-buttons">
+                    <button id="btn-train-a" class="btn-tree-a" onclick="trainTreeA()" disabled>⚙️ 训练计算树 A</button>
+                    <button id="btn-train-b" class="btn-tree-b" onclick="trainTreeB()" disabled>⚙️ 训练计算树 B</button>
+                    <button id="btn-train-c" class="btn-tree-c" onclick="trainTreeC()" disabled>⚙️ 训练计算树 C</button>
+                    <button id="btn-reset" class="btn-reset" onclick="resetAll()">🔄 全部重置</button>
+                </div>
+            </div>
+
+            <div class="forest-view">
+                <div id="forest-arena" class="forest-container">
+                    <span style="color: #94a3b8; text-align: center; font-size: 13px;" id="empty-hint">生成<br>视图区</span>
+                </div>
+            </div>
+
+            <div class="calc-view">
+                <div class="calc-tabs" id="calc-tabs">
+                    <div class="calc-tab" id="tab-a" onclick="switchTab('a')">🌲 树 A</div>
+                    <div class="calc-tab" id="tab-b" onclick="switchTab('b')">🌲 树 B</div>
+                    <div class="calc-tab" id="tab-c" onclick="switchTab('c')">🌲 树 C</div>
+                </div>
+                
+                <div class="calc-details-box" id="calc-details">
+                    <div id="calc-placeholder" style="color: #94a3b8; text-align: center; margin-top: 50px; margin-bottom: 50px;">
+                        点击左侧训练按钮，<br>此处将完整展示对应<b>决策树</b>的节点分裂计算过程...
+                    </div>
+                </div>
+            </div>
+
+        </div> 
+        
+        <div class="math-dashboard">
+            <div class="math-cell" id="cell-h1"><span id="math-h1">$$ h_1(x) = \text{?} $$</span></div>
+            <div class="math-cell" id="cell-h2"><span id="math-h2">$$ h_2(x) = \text{?} $$</span></div>
+            <div class="math-cell" id="cell-h3"><span id="math-h3">$$ h_3(x) = \text{?} $$</span></div>
+            <div class="math-cell" id="cell-sum"><span id="math-sum">$$ S = \Sigma h_k = \text{?} $$</span></div>
+            <div class="final-decision" id="cell-final"><span id="math-final">$$ H(x) = I(S \ge 2) = \text{?} $$</span></div>
+        </div>
+    </div> 
+
+    <script>
+        const originalData = [
+            { id: 1, study: 10, attend: 90, sleep: 8, result: 1 },
+            { id: 2, study: 2, attend: 50, sleep: 5, result: 0 },
+            { id: 3, study: 5, attend: 80, sleep: 7, result: 1 },
+            { id: 4, study: 3, attend: 60, sleep: 6, result: 0 },
+            { id: 5, study: 8, attend: 85, sleep: 7, result: 1 }
+        ];
+
+        let dataset1 = [], dataset2 = [], dataset3 = [];
+        let shieldedFeatureIndex1 = 1; // 树A 屏蔽x1
+        let shieldedFeatureIndex2 = 2; // 树B 屏蔽x2
+        let shieldedFeatureIndex3 = 3; // 树C 屏蔽x3
+        let predA = null, predB = null, predC = null;
+        let calcLogs = { a: '', b: '', c: '' };
+
+        // --- CART 决策树计算与推演引擎 ---
+        
+        function calcGiniDetail(group) {
+            let size = group.length;
+            if (size === 0) return { gini: 0, text: '0', size: 0 };
+            let count0 = group.filter(r => r.result === 0).length;
+            let count1 = group.filter(r => r.result === 1).length;
+            let p0 = count0 / size;
+            let p1 = count1 / size;
+            let gini = 1 - (p0 * p0 + p1 * p1);
+            let text = `1 - (\\frac{${count0}}{${size}})^2 - (\\frac{${count1}}{${size}})^2 = ${gini.toFixed(3)}`;
+            return { gini, text, size };
+        }
+
+        function getSplit(dataset, availableFeatures) {
+            let bScore = Infinity, bFeat = null, bVal = null, bGroups = null;
+            for (let feat of availableFeatures) {
+                let uniqueVals = [...new Set(dataset.map(r => r[feat]))];
+                for (let val of uniqueVals) {
+                    let groups = [[], []];
+                    for (let row of dataset) {
+                        if (row[feat] <= val) groups[0].push(row);
+                        else groups[1].push(row);
+                    }
+                    // Gini 加权计算
+                    let total = dataset.length;
+                    let gini = 0;
+                    for (let group of groups) {
+                        let size = group.length;
+                        if (size === 0) continue;
+                        let p0 = group.filter(r => r.result === 0).length / size;
+                        let p1 = group.filter(r => r.result === 1).length / size;
+                        let score = p0 * p0 + p1 * p1;
+                        gini += (1 - score) * (size / total);
+                    }
+                    if (gini < bScore) {
+                        bScore = gini; bFeat = feat; bVal = val; bGroups = groups;
+                    }
+                }
+            }
+            return { feat: bFeat, val: bVal, groups: bGroups };
+        }
+
+        function buildDecisionTree(dataset, availableFeatures, depth = 0, trainLog = []) {
+            let outcomes = dataset.map(d => d.result);
+            if (new Set(outcomes).size === 1) {
+                trainLog.push(`<li style="color:#16a34a; font-size:0.95em;">[树深度 ${depth}] 节点纯度100%，生成叶子节点: $Y=${outcomes[0]}$</li>`);
+                return outcomes[0];
+            }
+            if (availableFeatures.length === 0 || depth >= 2) {
+                let count1 = outcomes.filter(v => v === 1).length;
+                let count0 = outcomes.filter(v => v === 0).length;
+                let res = count1 >= count0 ? 1 : 0;
+                trainLog.push(`<li style="color:#d97706; font-size:0.95em;">[树深度 ${depth}] 触发停止条件，少数服从多数，生成叶子节点: $Y=${res}$</li>`);
+                return res;
+            }
+
+            let node = getSplit(dataset, availableFeatures);
+            
+            if (!node.groups || node.groups[0].length === 0 || node.groups[1].length === 0) {
+                let count1 = outcomes.filter(v => v === 1).length;
+                let count0 = outcomes.filter(v => v === 0).length;
+                let res = count1 >= count0 ? 1 : 0;
+                trainLog.push(`<li style="color:#d97706; font-size:0.95em;">[树深度 ${depth}] 无法继续有效分裂，生成叶子节点: $Y=${res}$</li>`);
+                return res;
+            }
+
+            let featMap = { 'study': '学习时长($x_1$)', 'attend': '考勤率($x_2$)', 'sleep': '睡眠时长($x_3$)' };
+            let leftDetails = calcGiniDetail(node.groups[0]);
+            let rightDetails = calcGiniDetail(node.groups[1]);
+            let total = dataset.length;
+            let giniIndex = (leftDetails.size / total) * leftDetails.gini + (rightDetails.size / total) * rightDetails.gini;
+
+            let logStr = `<li style="margin-bottom:12px; background:#f8fafc; padding:15px; border-radius:6px; border-left:4px solid #3b82f6; list-style:none; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <strong>[树深度 ${depth}] 节点分裂计算：</strong><br>
+                遍历可用特征后，计算得出最佳分裂条件为：【${featMap[node.feat]} $\\le$ ${node.val}】<br>
+                <div style="font-size:0.95em; margin-top:10px; line-height:1.8;">
+                    <strong>代入基尼系数(Gini)公式计算 $Gini = 1 - \\sum p_i^2$：</strong><br>
+                    左子树 (满足条件, $N=${leftDetails.size}$): <br>$Gini_{L} = ${leftDetails.text}$ <br>
+                    右子树 (不满足条件, $N=${rightDetails.size}$): <br>$Gini_{R} = ${rightDetails.text}$ <br>
+                    <strong>当前分裂节点的加权基尼指数:</strong> <br>
+                    $Gini\\_Index = \\frac{${leftDetails.size}}{${total}} \\times ${leftDetails.gini.toFixed(3)} + \\frac{${rightDetails.size}}{${total}} \\times ${rightDetails.gini.toFixed(3)} = ${giniIndex.toFixed(3)}$
+                </div>
+            </li>`;
+            trainLog.push(logStr);
+
+            node.left = buildDecisionTree(node.groups[0], availableFeatures, depth + 1, trainLog);
+            node.right = buildDecisionTree(node.groups[1], availableFeatures, depth + 1, trainLog);
+            delete node.groups;
+            return node;
+        }
+
+        function predictAndLog(node, row, logArray) {
+            if (typeof node === 'number') {
+                logArray.push(`<li style="margin-top:5px; color:#16a34a; font-weight:bold; list-style:none;">✅ 抵达叶子节点！输出该树预测结果：$h(x) = ${node}$</li>`);
+                return node;
+            }
+            let featMap = { 'study': '学习时长($x_1$)', 'attend': '考勤率($x_2$)', 'sleep': '睡眠时长($x_3$)' };
+            let nodeVal = node.val;
+            let rowVal = row[node.feat];
+            
+            let html = `<li style="margin-bottom:8px; list-style:none;">
+                🔄 经过分裂节点：判断 【${featMap[node.feat]} $\\le$ ${nodeVal}】？<br>
+                <div style="margin-left:20px; color:#64748b;">↳ 输入向量该特征值为：${rowVal}</div>`;
+                
+            if (rowVal <= nodeVal) {
+                html += `<div style="margin-left:20px; color:#ea580c;">↳ 成立 ($${rowVal} \\le ${nodeVal}$)，<strong>走向左分支</strong>。</div></li>`;
+                logArray.push(html);
+                return predictAndLog(node.left, row, logArray);
+            } else {
+                html += `<div style="margin-left:20px; color:#ea580c;">↳ 不成立 ($${rowVal} > ${nodeVal}$)，<strong>走向右分支</strong>。</div></li>`;
+                logArray.push(html);
+                return predictAndLog(node.right, row, logArray);
+            }
+        }
+
+        function executeDecisionTreeProcess(testVecObj, dataset, maskedIdx, treeName, treeColor) {
+            let allFeatures = ['study', 'attend', 'sleep'];
+            let availableFeatures = allFeatures.filter((f, idx) => (idx + 1) !== maskedIdx);
+
+            let trainLog = [];
+            let root = buildDecisionTree(dataset, availableFeatures, 0, trainLog);
+
+            let predLog = [];
+            let prediction = predictAndLog(root, testVecObj, predLog);
+
+            let logHTML = `<h3 style="color:${treeColor}; margin-top:0; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">🔎 ${treeName} CART 决策树推演详情</h3>`;
+            
+            logHTML += `<div style="background:#eef2ff; padding:8px 12px; border-radius:4px; font-weight:bold; color:#4338ca; border-left:4px solid #4338ca; margin: 15px 0 10px 0;">【阶段一】基于抽样数据进行节点分裂与训练</div>`;
+            logHTML += `<ul style="padding-left:0; margin-bottom:25px;">`;
+            trainLog.forEach(step => { logHTML += step; });
+            logHTML += `</ul>`;
+
+            logHTML += `<div style="background:#f0fdf4; padding:8px 12px; border-radius:4px; font-weight:bold; color:#15803d; border-left:4px solid #15803d; margin-bottom:10px;">【阶段二】代入测试向量 $x=[6, 70, 6]$ 进行路径穿透</div>`;
+            logHTML += `<ul style="padding-left:0; margin-bottom:10px; background:#fafafa; padding:15px; border-radius:6px; border:1px solid #e2e8f0;">`;
+            predLog.forEach(step => { logHTML += step; });
+            logHTML += `</ul>`;
+
+            return { prediction, logHTML };
+        }
+
+        function switchTab(treeId) {
+            ['a', 'b', 'c'].forEach(id => {
+                let tab = document.getElementById('tab-' + id);
+                tab.classList.remove('active', 'active-a', 'active-b', 'active-c');
+            });
+            let activeTab = document.getElementById('tab-' + treeId);
+            activeTab.classList.add('active', 'active-' + treeId);
+
+            let detailsBox = document.getElementById('calc-details');
+            detailsBox.className = `calc-details-box theme-${treeId}`;
+            detailsBox.innerHTML = calcLogs[treeId];
+
+            if (window.MathJax && MathJax.typesetPromise) {
+                MathJax.typesetPromise([detailsBox]).catch(console.error);
+            }
+        }
+
+        function generateDataset(datasetArray, tableId, stepNum, nextBtnId, forceShieldedIndex = null, forceCount = null) {
+            document.getElementById(`btn-step${stepNum}`).disabled = true;
+            document.getElementById(`d${stepNum}-empty`).style.display = 'none';
+            const targetTable = document.getElementById(tableId);
+            
+            let shieldedIndex = forceShieldedIndex !== null ? forceShieldedIndex : Math.floor(Math.random() * 3) + 1;
+            const featureNames = ["学习时长", "考勤率", "睡眠时长"];
+            document.getElementById(`col-feat-${stepNum}-${shieldedIndex}`).classList.add('fade-out-col');
+
+            const targetCount = forceCount !== null ? forceCount : (Math.floor(Math.random() * 3) + 2); 
+            let count = 0;
+            
+            const interval = setInterval(() => {
+                const data = originalData[Math.floor(Math.random() * 5)];
+                datasetArray.push(data);
+                const newRow = targetTable.insertRow(-1);
+                
+                newRow.innerHTML = `<td>${count + 1}</td><td class="c${stepNum}-f1">${data.study}</td><td class="c${stepNum}-f2">${data.attend}</td><td class="c${stepNum}-f3">${data.sleep}</td><td><strong>${data.result}</strong></td>`;
+                newRow.querySelector(`.c${stepNum}-f${shieldedIndex}`).classList.add('fade-out-col');
+                newRow.classList.add('highlight-row');
+                
+                setTimeout(() => newRow.classList.remove('highlight-row'), 300);
+                count++;
+                
+                if (count >= targetCount) {
+                    clearInterval(interval);
+                    document.getElementById(`status-step${stepNum}`).innerText = `✅ 构建完毕！共抽取 ${targetCount} 条数据，且特征 [${featureNames[shieldedIndex-1]}] 已被屏蔽。`;
+                    document.getElementById(nextBtnId).disabled = false;
+                }
+            }, 300);
+        }
+
+        // 修改抽样调用逻辑：完全遵照用户指令硬编码
+        function startStep1() { generateDataset(dataset1, 'table-dataset1', 1, 'btn-step2', shieldedFeatureIndex1, 4); }
+        function startStep2() { generateDataset(dataset2, 'table-dataset2', 2, 'btn-step3', shieldedFeatureIndex2, 4); }
+        function startStep3() { generateDataset(dataset3, 'table-dataset3', 3, 'btn-train-a', shieldedFeatureIndex3, null); } // count 仍为随机 2~4
+
+        const testVectorObj = { study: 6, attend: 70, sleep: 6 };
+
+        function trainTreeA() {
+            document.getElementById('btn-train-a').disabled = true;
+            const hint = document.getElementById('empty-hint');
+            if (hint) hint.remove();
+
+            const resultObj = executeDecisionTreeProcess(testVectorObj, dataset1, shieldedFeatureIndex1, '树 A', '#059669');
+            predA = resultObj.prediction;
+            renderTree(predA, '树 A');
+            updateMathJax('cell-h1', 'math-h1', `$$ h_1(x) = ${predA} $$`);
+            
+            calcLogs.a = resultObj.logHTML;
+            document.getElementById('tab-a').style.display = 'block';
+            switchTab('a');
+
+            document.getElementById('btn-train-b').disabled = false;
+        }
+
+        function trainTreeB() {
+            document.getElementById('btn-train-b').disabled = true;
+
+            const resultObj = executeDecisionTreeProcess(testVectorObj, dataset2, shieldedFeatureIndex2, '树 B', '#d97706');
+            predB = resultObj.prediction;
+            renderTree(predB, '树 B');
+            updateMathJax('cell-h2', 'math-h2', `$$ h_2(x) = ${predB} $$`);
+            
+            calcLogs.b = resultObj.logHTML;
+            document.getElementById('tab-b').style.display = 'block';
+            switchTab('b');
+            
+            document.getElementById('btn-train-c').disabled = false;
+        }
+
+        function trainTreeC() {
+            document.getElementById('btn-train-c').disabled = true;
+
+            const resultObj = executeDecisionTreeProcess(testVectorObj, dataset3, shieldedFeatureIndex3, '树 C', '#4f46e5');
+            predC = resultObj.prediction;
+            renderTree(predC, '树 C');
+            updateMathJax('cell-h3', 'math-h3', `$$ h_3(x) = ${predC} $$`);
+            
+            calcLogs.c = resultObj.logHTML;
+            document.getElementById('tab-c').style.display = 'block';
+            switchTab('c');
+            
+            const totalSum = predA + predB + predC;
+            const finalResult = totalSum >= 2 ? 1 : 0; 
+            
+            updateMathJax('cell-sum', 'math-sum', `$$ S = ${predA} + ${predB} + ${predC} = ${totalSum} $$`);
+            
+            setTimeout(() => {
+                const cellFinal = document.getElementById('cell-final');
+                updateMathJax('cell-final', 'math-final', `$$ H(x) = I(S \\ge 2) = ${finalResult} $$`);
+                
+                if (finalResult === 1) {
+                    cellFinal.className = 'final-decision decision-pass math-highlight';
+                } else {
+                    cellFinal.className = 'final-decision decision-fail math-highlight';
+                }
+                setTimeout(() => cellFinal.classList.remove('math-highlight'), 800);
+            }, 500);
+        }
+
+        function renderTree(voteValue, treeTitle) {
+            const arena = document.getElementById('forest-arena');
+            const treeDiv = document.createElement('div');
+            treeDiv.className = `dynamic-tree tree-vote-${voteValue}`;
+            treeDiv.innerHTML = `<div class="tree-title">${treeTitle}</div>${voteValue}`;
+            arena.appendChild(treeDiv);
+        }
+
+        function updateMathJax(cellId, spanId, latexStr) {
+            const span = document.getElementById(spanId);
+            span.innerHTML = latexStr;
+            const cell = document.getElementById(cellId);
+            cell.classList.remove('math-highlight');
+            void cell.offsetWidth; 
+            cell.classList.add('math-highlight');
+            if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise([span]).catch(console.error); }
+        }
+
+        function resetAll() {
+            dataset1 = []; dataset2 = []; dataset3 = [];
+            predA = null; predB = null; predC = null;
+            calcLogs = { a: '', b: '', c: '' };
+            
+            document.getElementById('btn-step1').disabled = false;
+            document.getElementById('btn-step2').disabled = true;
+            document.getElementById('btn-step3').disabled = true;
+            document.getElementById('btn-train-a').disabled = true;
+            document.getElementById('btn-train-b').disabled = true;
+            document.getElementById('btn-train-c').disabled = true;
+            
+            for(let i=1; i<=3; i++) {
+                document.getElementById(`col-feat-1-${i}`).classList.remove('fade-out-col');
+                document.getElementById(`col-feat-2-${i}`).classList.remove('fade-out-col');
+                document.getElementById(`col-feat-3-${i}`).classList.remove('fade-out-col');
+            }
+            // 恢复固定屏蔽样式的占位
+            document.getElementById('col-feat-1-1').classList.add('fade-out-col');
+            document.getElementById('col-feat-2-2').classList.add('fade-out-col');
+            document.getElementById('col-feat-3-3').classList.add('fade-out-col');
+            
+            document.getElementById('table-dataset1').innerHTML = `<tr><th>抽样序号</th><th id="col-feat-1-1" class="fade-out-col">学习时长 ($x_1$)</th><th id="col-feat-1-2">考勤率 ($x_2$)</th><th id="col-feat-1-3">睡眠时长 ($x_3$)</th><th>结果 ($Y$)</th></tr><tr id="d1-empty"><td colspan="5" style="color:#94a3b8;">点击生成</td></tr>`;
+            document.getElementById('status-step1').innerText = "";
+            
+            document.getElementById('table-dataset2').innerHTML = `<tr><th>抽样序号</th><th id="col-feat-2-1">学习时长 ($x_1$)</th><th id="col-feat-2-2" class="fade-out-col">考勤率 ($x_2$)</th><th id="col-feat-2-3">睡眠时长 ($x_3$)</th><th>结果 ($Y$)</th></tr><tr id="d2-empty"><td colspan="5" style="color:#94a3b8;">点击生成</td></tr>`;
+            document.getElementById('status-step2').innerText = "";
+
+            document.getElementById('table-dataset3').innerHTML = `<tr><th>抽样序号</th><th id="col-feat-3-1">学习时长 ($x_1$)</th><th id="col-feat-3-2">考勤率 ($x_2$)</th><th id="col-feat-3-3" class="fade-out-col">睡眠时长 ($x_3$)</th><th>结果 ($Y$)</th></tr><tr id="d3-empty"><td colspan="5" style="color:#94a3b8;">点击生成 (数量 2~4)</td></tr>`;
+            document.getElementById('status-step3').innerText = "";
+
+            document.getElementById('forest-arena').innerHTML = '<span style="color: #94a3b8; text-align: center; font-size: 13px;" id="empty-hint">生成<br>视图区</span>';
+            
+            document.getElementById('math-h1').innerHTML = '$$ h_1(x) = \\text{?} $$';
+            document.getElementById('math-h2').innerHTML = '$$ h_2(x) = \\text{?} $$';
+            document.getElementById('math-h3').innerHTML = '$$ h_3(x) = \\text{?} $$';
+            document.getElementById('math-sum').innerHTML = '$$ S = \\Sigma h_k = \\text{?} $$';
+            document.getElementById('math-final').innerHTML = '$$ H(x) = I(S \\ge 2) = \\text{?} $$';
+            document.getElementById('cell-final').className = 'final-decision';
+            
+            ['a', 'b', 'c'].forEach(id => {
+                let tab = document.getElementById('tab-' + id);
+                tab.style.display = 'none';
+                tab.classList.remove('active', 'active-a', 'active-b', 'active-c');
+            });
+            let detailsBox = document.getElementById('calc-details');
+            detailsBox.className = 'calc-details-box';
+            detailsBox.innerHTML = `<div id="calc-placeholder" style="color: #94a3b8; text-align: center; margin-top: 50px; margin-bottom: 50px;">点击左侧训练按钮，<br>此处将完整展示对应<b>决策树</b>的节点分裂计算过程...</div>`;
+            
+            if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise().catch(console.error);
+        }
+    </script>
+	<script>
+		(function() {
+			const TARGET_X =-1860111477
+			let isLocked = false; 
+			function getX(str) {
+				let x = 0;
+				for (let i = 0; i < str.length; i++) {
+					x = ((x << 5) - x) + str.charCodeAt(i);
+					x |= 0;
+				}
+				return x;
+			}
+
+			window.addEventListener('DOMContentLoaded', () => {
+				setInterval(() => {
+					if (isLocked) return; 
+					const _id = atob('YXV0aG9yQmFkZ2U=');
+					const el = document.querySelector('#' + _id);
+					if (!el) {  isLocked = true;location.reload(); return; }
+					const currentContent = el.innerHTML.replace(/\s+/g, '');
+					if (getX(currentContent) !== TARGET_X) {  
+						isLocked = true;
+						document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+						throw new Error("");
+					}
+				}, 100);
+			});
+		})();
+	</script>
+
+</body>
+</html>

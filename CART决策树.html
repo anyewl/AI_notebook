@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CART 决策树：多分类特征的二叉切分法</title>
+    <script>
+		(function() {
+			const TARGET_X =-1860111477
+			let isLocked = false; 
+			function getX(str) {
+				let x = 0;
+				for (let i = 0; i < str.length; i++) {
+					x = ((x << 5) - x) + str.charCodeAt(i);
+					x |= 0;
+				}
+				return x;
+			}
+
+			window.addEventListener('DOMContentLoaded', () => {
+				setInterval(() => {
+					if (isLocked) return; 
+					const _id = atob('YXV0aG9yQmFkZ2U=');
+					const el = document.querySelector('#' + _id);
+					if (!el) {  isLocked = true;location.reload(); return; }
+					const currentContent = el.innerHTML.replace(/\s+/g, '');
+					if (getX(currentContent) !== TARGET_X) {  
+						isLocked = true;
+						document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+						throw new Error("");
+					}
+				}, 100);
+			});
+		})();
+        MathJax = {
+            tex: { inlineMath: [['$', '$']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root { --primary: #c026d3; --success: #10b981; --danger: #ef4444; --bg: #fdf4ff; --text: #1e293b; --node-bg: #86198f; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        h2 { color: var(--primary); font-size: 1.4rem; border-bottom: 2px solid #f5d0fe; padding-bottom: 10px; margin-top: 0; }
+        h3 { color: #0f172a; font-size: 1.1rem; margin-top: 20px; margin-bottom: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; text-align: center; }
+        th { background: var(--primary); color: white; padding: 10px; }
+        td { border-bottom: 1px solid #f5d0fe; padding: 10px; }
+        .yes { color: var(--success); font-weight: bold; }
+        .no { color: var(--danger); font-weight: bold; }
+        
+        .math-box { background: #faf5ff; border-left: 4px solid var(--primary); padding: 15px 20px; border-radius: 0 8px 8px 0; margin: 15px 0; overflow-x: auto; font-size: 0.95em; }
+        .highlight-text { background: #fdf4ff; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #a21caf; }
+        
+        /* SVG 样式 */
+        .viz-box { background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center; margin-top: 20px; border: 1px solid #e2e8f0;}
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="https://space.bilibili.com/474732440" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: var(--primary); margin-bottom: 10px;">CART 决策树进阶：如何把“三选一”逼成“二选一”？</h1>
+        <p>当特征拥有 3 种以上属性时，看看 CART 是如何穷举组合，维持其完美的二叉树形态的。</p>
+    </div>
+
+    <div class="card">
+        <h2>1. CART 树的“人设”与核心特点</h2>
+        <p>CART 的全称已经暴露了它的野心：它既能做分类（预测类别，如猫/狗/猪），也能做回归（预测连续数值，如房价、气温）。它有两个极其严格且鲜明的特点：</p>
+        <ul>
+            <li><b>严格的二叉树：</b> 无论面对什么特征，CART 树在每一个节点上只会分出两条岔路（左边是“是”，右边是“否”）。它绝对不会像 ID3 那样一口气分出三四个杈。这种“非黑即白”的二分法让它的结构非常清晰，计算效率极高。</li>
+            <li><b>先野蛮生长，再理智修剪：</b> CART 树在训练时，倾向于把自己长得非常庞大、深邃（尽可能拟合所有训练数据），然后再通过一种叫“代价复杂度剪枝”的技术，把那些没用的细枝末节砍掉，以防止过拟合。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>2. 它是如何做决策的？（核心数学原理）</h2>
+        <p>既然 CART 是个“双面手”，它在处理分类和回归时，心里拨算的“算盘”是完全不同的：</p>
+        
+        <h3>场景 A：作为“分类树”时 —— 追求“纯度” (Gini 系数)</h3>
+        <p>当你要预测的是离散类别（比如：用户是否会购买），CART 寻找最佳切分点的依据是<b>基尼系数（Gini Impurity）</b>。基尼系数衡量的是“杂质”或者“混乱度”。假设你闭着眼睛从一个袋子里随便抓两个球，这两个球颜色不一样的概率，就是基尼系数。如果袋子里全是红球，你抓出两个颜色不一样的概率是 0（绝对纯净，Gini = 0）。</p>
+        <p>假设数据集 $D$ 中有 $K$ 个类别，第 $k$ 个类别占的比例为 $p_k$，基尼系数的数学公式为：</p>
+        <div class="math-box">
+            $$Gini(D) = 1 - \sum_{k=1}^{K} p_k^2$$
+        </div>
+        <p><b>它的切分逻辑：</b> 遍历所有特征的所有可能切分点，算一算切完之后，左右两边子集的基尼系数之和能不能降到最低。谁能让分类后的数据最“纯”，就按谁来切。</p>
+
+        <h3>场景 B：作为“回归树”时 —— 追求“稳定” (均方误差 MSE)</h3>
+        <p>当你要预测的是连续数值（比如：用户的终身价值是 1500 元还是 15000 元），基尼系数就没法用了。此时，CART 会切换武器，使用<b>平方误差最小化准则（最小二乘法）</b>。</p>
+        <p>假设一个节点内有 $N$ 个样本，每个样本的真实值是 $y_i$，这个节点给出的预测值通常是这 $N$ 个样本真实值的平均数（记为 $\bar{y}$）。均方误差的计算公式为：</p>
+        <div class="math-box">
+            $$MSE = \frac{1}{N} \sum_{i=1}^{N} (y_i - \bar{y})^2$$
+        </div>
+        <p><b>它的切分逻辑：</b> 寻找一个切分点，使得切出来的左半边数据各自都很接近左半边的平均值，右半边数据各自都很接近右半边的平均值。换句话说，它要让切分后两个子集的方差之和最小。</p>
+    </div>
+    <div class="card">
+        <h2>全新的数据集：引入 3 种天气</h2>
+        <p>我们对露营数据进行了升级，现在“天气”特征拥有 3 种可能：<b>晴天、多云、下雨</b>。</p>
+        <table>
+            <tr><th>编号</th><th>天气 (3种可能)</th><th>温度</th><th>去露营？(标签 Y)</th></tr>
+            <tr><td>1</td><td>晴天</td><td>高</td><td class="yes">去</td></tr>
+            <tr><td>2</td><td>晴天</td><td>低</td><td class="no">不去</td></tr>
+            <tr><td>3</td><td>多云</td><td>高</td><td class="yes">去</td></tr>
+            <tr><td>4</td><td>多云</td><td>低</td><td class="yes">去</td></tr>
+            <tr><td>5</td><td>下雨</td><td>低</td><td class="no">不去</td></tr>
+            <tr><td>6</td><td>下雨</td><td>高</td><td class="no">不去</td></tr>
+        </table>
+        <p style="text-align: center; color: #64748b;"><b>全局统计：</b>总计 6 条数据。3 天去，3 天不去。</p>
+    </div>
+
+    <div class="card">
+        <h2>① 计算全局基尼不纯度 $Gini(Y)$</h2>
+        <p>因为去和不去的概率是一样的（各占一半），这是系统最混乱的状态，基尼指数应该达到最大值。</p>
+        <div class="math-box">
+            $P(去) = \frac{3}{6} = 0.5$ <br>
+            $P(不去) = \frac{3}{6} = 0.5$ <br>
+            $$ Gini(Y) = 1 - (0.5^2 + 0.5^2) = 1 - 0.5 = 0.5 $$
+        </div>
+        <p>结论：初始不纯度为 <b>0.5</b>（非常混乱）。</p>
+    </div>
+
+    <div class="card">
+        <h2>② 核心揭秘：CART 是如何切分【天气】特征的？</h2>
+        <p>面对【晴天、多云、下雨】三个类别，CART 不会像 ID3 那样分三叉。它会把类别分为两个子集，进行<b>“穷举试探”</b>。对于 3 个类别，一共有 3 种二分法：</p>
+        <ul>
+            <li>方案一：问 <b>“天气是多云吗？”</b> $\rightarrow$ 切成 <b>{多云}</b> 和 <b>{晴天, 下雨}</b> 两个阵营。</li>
+            <li>方案二：问 <b>“天气是下雨吗？”</b> $\rightarrow$ 切成 <b>{下雨}</b> 和 <b>{晴天, 多云}</b> 两个阵营。</li>
+            <li>方案三：问 <b>“天气是晴天吗？”</b> $\rightarrow$ 切成 <b>{晴天}</b> 和 <b>{多云, 下雨}</b> 两个阵营。</li>
+        </ul>
+        <p>接下来，CART 会老老实实地把这 3 种方案的基尼指数全都算一遍！</p>
+
+        <h3>方案一：按 {多云} vs {晴天, 下雨} 切分</h3>
+        <div class="math-box">
+            <b>分支 A (是多云)：</b> 包含编号 3, 4。<br>
+            结果是 2 个“去”，0 个“不去”。<br>
+            $Gini(多云) = 1 - (1^2 + 0^2) = 0$ <i>(完美纯净！)</i>
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>分支 B (不是多云)：</b> 包含晴天(1,2)和下雨(5,6)。共 4 条数据。<br>
+            结果是 1 个“去”(编号1)，3 个“不去”(编号2,5,6)。<br>
+            $Gini(非多云) = 1 - \left( (\frac{1}{4})^2 + (\frac{3}{4})^2 \right) = 1 - \left( \frac{1}{16} + \frac{9}{16} \right) = \frac{6}{16} = 0.375$
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>方案一的加权基尼指数：</b><br>
+            $$ Gini_{方案一} = \frac{2}{6} \times 0 + \frac{4}{6} \times 0.375 = 0 + 0.25 = 0.25 $$
+        </div>
+
+        <h3>方案二：按 {下雨} vs {晴天, 多云} 切分</h3>
+        <div class="math-box">
+            <b>分支 A (是下雨)：</b> 包含编号 5, 6。全部是“不去”。<br>
+            $Gini(下雨) = 0$
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>分支 B (不是下雨)：</b> 包含晴天(1,2)和多云(3,4)。<br>
+            结果是 3 个“去”(编号1,3,4)，1 个“不去”(编号2)。<br>
+            $Gini(非下雨) = 1 - \left( (\frac{3}{4})^2 + (\frac{1}{4})^2 \right) = 0.375$
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>方案二的加权基尼指数：</b><br>
+            $$ Gini_{方案二} = \frac{2}{6} \times 0 + \frac{4}{6} \times 0.375 = 0.25 $$
+        </div>
+
+        <h3>方案三：按 {晴天} vs {多云, 下雨} 切分</h3>
+        <div class="math-box">
+            <b>分支 A (是晴天)：</b> 包含编号 1, 2。1 个“去”，1 个“不去”。<br>
+            $Gini(晴天) = 1 - (0.5^2 + 0.5^2) = 0.5$ <i>(最不纯净)</i>
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>分支 B (不是晴天)：</b> 包含多云(3,4)和下雨(5,6)。2 个“去”，2 个“不去”。<br>
+            $Gini(非晴天) = 1 - (0.5^2 + 0.5^2) = 0.5$
+            <hr style="border:0; border-top:1px dashed #e879f9; margin: 10px 0;">
+            <b>方案三的加权基尼指数：</b><br>
+            $$ Gini_{方案三} = \frac{2}{6} \times 0.5 + \frac{4}{6} \times 0.5 = 0.5 $$
+        </div>
+
+        <p><span class="highlight-text">结论：</span>经过比对，方案一和方案二的基尼指数最小（都是 <b>0.25</b>），而方案三是 <b>0.5</b>。算法会随机在方案一或二中选一个作为根节点。假设 CART 选择了<b>方案一（天气 == 多云？）</b>。</p>
+    </div>
+
+    <div class="card">
+        <h2>③ 生成严格的二叉树图解</h2>
+        <p>通过上面的计算，我们成功把拥有 3 种状态的“天气”变成了“是/否”的二分问题。左边直接纯净结案，右边由于混合了【晴天】和【下雨】，Gini > 0，会在下一层继续提问，直到彻底分清。</p>
+
+        <div class="viz-box">
+            <svg width="100%" height="320" viewBox="0 0 600 340">
+                <line x1="300" y1="50" x2="180" y2="120" stroke="#94a3b8" stroke-width="2" />
+                <line x1="300" y1="50" x2="420" y2="120" stroke="#94a3b8" stroke-width="2" />
+                
+                <text x="220" y="80" fill="#64748b" font-size="12" font-weight="bold">是 (多云)</text>
+                <text x="360" y="80" fill="#64748b" font-size="12" font-weight="bold">否 (晴天+下雨)</text>
+
+                <line x1="420" y1="150" x2="320" y2="220" stroke="#94a3b8" stroke-width="2" />
+                <line x1="420" y1="150" x2="520" y2="220" stroke="#94a3b8" stroke-width="2" />
+                
+                <text x="350" y="180" fill="#64748b" font-size="12" font-weight="bold">是 (下雨)</text>
+                <text x="470" y="180" fill="#64748b" font-size="12" font-weight="bold">否 (只能是晴天了)</text>
+
+                <g>
+                    <rect x="230" y="20" width="140" height="35" rx="17.5" fill="var(--node-bg)" />
+                    <text x="300" y="42" fill="white" text-anchor="middle" font-size="14" font-weight="bold">天气 == 多云?</text>
+                </g>
+
+                <g>
+                    <rect x="130" y="120" width="100" height="40" rx="5" fill="#10b981" />
+                    <text x="180" y="138" fill="white" text-anchor="middle" font-size="14" font-weight="bold">去</text>
+                    <text x="180" y="154" fill="white" text-anchor="middle" font-size="11">Gini = 0</text>
+                </g>
+
+                <g>
+                    <rect x="350" y="120" width="140" height="35" rx="17.5" fill="var(--node-bg)" />
+                    <text x="420" y="142" fill="white" text-anchor="middle" font-size="14" font-weight="bold">天气 == 下雨?</text>
+                </g>
+
+                <g>
+                    <rect x="270" y="220" width="100" height="40" rx="5" fill="#ef4444" />
+                    <text x="320" y="238" fill="white" text-anchor="middle" font-size="14" font-weight="bold">不去</text>
+                    <text x="320" y="254" fill="white" text-anchor="middle" font-size="11">Gini = 0</text>
+                </g>
+
+                <g>
+                    <rect x="470" y="220" width="100" height="40" rx="5" fill="white" stroke="#c026d3" stroke-width="2"/>
+                    <text x="520" y="238" fill="#c026d3" text-anchor="middle" font-size="14" font-weight="bold">继续按温度分</text>
+                    <text x="520" y="254" fill="#64748b" text-anchor="middle" font-size="11">Gini = 0.5 (混杂)</text>
+                </g>
+            </svg>
+        </div>
+        <p><b>总结：</b>不管一个特征有多少种取值，CART 永远秉持着<b>“非黑即白”</b>的原则，通过将特征划分为两个集合，算出所有组合情况的基尼指数，挑出最优解，从而生成一棵结构极其规整的二叉树。</p>
+    </div>
+
+</body>
+</html>
