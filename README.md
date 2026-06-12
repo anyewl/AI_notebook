@@ -9,7 +9,7 @@
 微信： liziyun_2000 \
 Bilibili： [点击访问作者 B 站主页](https://space.bilibili.com/474732440) \
 GitHub 开源地址： https://github.com/anyewl/AI_notebook \
-在线访问：  https://www.axureshow.com/project/3V4X1wfF/
+在线访问：  https:ai0321.com
 
 # 笔记效果示例
 <img width="1523" height="875" alt="image" src="https://github.com/user-attachments/assets/4d1e4782-e553-491a-8f06-c84d02c48f3b" />
