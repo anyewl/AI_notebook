@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI小白也能懂的CNN：卷积与池化原理及实战</title>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady().then(() => {
+                        renderConvStep();
+                        renderPoolStep();
+                        initAdvanced3DSync(); 
+                        updateSolveMode(); // 页面加载完初始化动态公式选项
+                    });
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 保持原有的所有样式不变 */
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 40px;}
+        h2 { color: #2980b9; margin-top: 30px; }
+        .card { background: #f9f9f9; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .flex-row { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; margin-top: 20px;}
+        
+        .data-table { border-collapse: collapse; text-align: center; margin: 10px 0; background: white;}
+        .data-table td { width: 40px; height: 40px; border: 1px solid #bdc3c7; font-weight: bold; font-size: 16px; }
+        
+        .grid-container { display: grid; gap: 2px; border: 2px solid #2c3e50; padding: 2px; background: #2c3e50; width: fit-content; }
+        .grid-cell { width: 50px; height: 50px; background: white; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; transition: background 0.3s; }
+        
+        .highlight-conv { background-color: #f1c40f !important; color: #d35400;} 
+        .highlight-pool { background-color: #3498db !important; color: white;} 
+        .highlight-result { background-color: #2ecc71 !important; color: white;} 
+        
+        .formula-box { background: #e8f6f3; padding: 15px; border-radius: 8px; border-left: 5px solid #1abc9c; min-height: 100px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 15px;}
+        .note { font-size: 0.9em; color: #7f8c8d; }
+
+        .btn-group { margin: 15px 0; display: flex; gap: 15px; }
+        button { padding: 10px 20px; font-size: 16px; font-weight: bold; color: white; background-color: #34495e; border: none; border-radius: 5px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #2c3e50; }
+        .btn-restart { background-color: #e74c3c; }
+        .btn-restart:hover { background-color: #c0392b; }
+
+        pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: Consolas, Monaco, monospace; font-size: 15px;}
+        .code-comment { color: #6a9955; }
+        .code-keyword { color: #569cd6; }
+        .code-string { color: #ce9178; }
+
+        .tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-right: 8px; color: white;}
+        .tag-type { background-color: #8e44ad; }
+        .tag-star { background-color: #f39c12; }
+        .question-box { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px dashed #ccc; }
+        .question-box:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+        .pad-input-group { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; transition: all 0.3s;}
+        .pad-input-group label { font-weight: bold; }
+        .pad-input-group input { width: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center; }
+        
+        .mode-selector { margin-bottom: 20px; background: #ecf0f1; padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px;}
+        .mode-selector label { font-weight: bold; color: #2c3e50; }
+
+        /* ================= 两层卷积 9x9 垂直贴合布局版 ================= */
+        .adv-sync-container { display: flex; flex-direction: column; gap: 20px; background: transparent; padding: 0; margin: 30px 0; }
+        .adv-vis-row { display: flex; flex-direction: column; gap: 0; justify-content: center; align-items: center; background: #fff; border-radius: 12px; border: 1px solid #e5e0d8; box-shadow: 0 8px 30px rgba(0,0,0,0.06); padding: 20px 0 30px 0; position: relative;}
+        .stage-3d, .stage-nn { width: 100%; max-width: 1100px; position: relative; background: transparent; display: grid; grid-template-columns: 1fr 1fr 1fr; justify-items: center; align-items: start; box-sizing: border-box;}
+        .stage-3d { height: 250px; perspective: 1800px; padding: 40px 20px 0px 20px; z-index: 2; }
+        .stage-nn { height: 400px; padding: 10px 20px 20px 20px; z-index: 1; }
+        .stage-title { position: absolute; left: 20px; font-weight: bold; color: #7f8c8d; font-size: 14px; }
+        .stage-3d .stage-title { top: 15px; }
+        .stage-nn .stage-title { top: 0px; }
+        
+        .volume { position: relative; transform-style: preserve-3d; transform: rotateX(60deg) rotateZ(-45deg); transition: transform 0.5s; margin-top: 10px;}
+        .slice { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; gap: 1px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(0,0,0,0.1); }
+        .slice-cell { background: rgba(255, 255, 255, 0.6); border: 1px solid rgba(0,0,0,0.1); transition: all 0.2s ease; }
+        
+        .vol-input { width: 130px; height: 130px; }
+        .vol-input .slice { grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); }
+        .vol-input .slice-1 { transform: translateZ(0px); border-color: rgba(231, 76, 60, 0.4); } 
+        .vol-input .slice-2 { transform: translateZ(40px); border-color: rgba(46, 204, 113, 0.4); }
+        .vol-input .slice-3 { transform: translateZ(80px); border-color: rgba(52, 152, 219, 0.4); }
+
+        .vol-hidden { width: 100px; height: 100px; }
+        .vol-hidden .slice { grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(7, 1fr); }
+        .vol-hidden .slice-1 { transform: translateZ(0px); border-color: rgba(241, 196, 15, 0.5); }
+        .vol-hidden .slice-2 { transform: translateZ(40px); border-color: rgba(26, 188, 156, 0.5); }
+
+        .vol-output { width: 70px; height: 70px; }
+        .vol-output .slice { grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); }
+        .vol-output .slice-1 { transform: translateZ(0px); border-color: rgba(230, 126, 34, 0.6); } 
+        .vol-output .slice-2 { transform: translateZ(40px); border-color: rgba(155, 89, 182, 0.6); }
+
+        .active-in { box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+        .active-in.c0 { background: #fadbd8 !important; border-color: #e74c3c !important; }
+        .active-in.c1 { background: #d5f5e3 !important; border-color: #2ecc71 !important; }
+        .active-in.c2 { background: #d6eaf8 !important; border-color: #3498db !important; }
+
+        .active-hid.c0 { background: #f9e79f !important; border-color: #f39c12 !important; }
+        .active-hid.c1 { background: #a3e4d7 !important; border-color: #1abc9c !important; }
+
+        .active-out.c0 { background: #f5cba7 !important; border-color: #e67e22 !important; box-shadow: 0 0 10px rgba(230,126,34,0.8); }
+        .active-out.c1 { background: #d2b4de !important; border-color: #9b59b6 !important; box-shadow: 0 0 10px rgba(155,89,182,0.8); }
+
+        .vol-label { position: absolute; bottom: -35px; left: 50%; transform: translateX(-50%) rotateZ(45deg) rotateX(-60deg); font-weight: bold; color: #2c3e50; font-size: 14px; white-space: nowrap; text-align: center;}
+
+        .nn-svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;}
+        .nn-group { display: flex; flex-direction: column; gap: 8px; z-index: 2; width: fit-content; margin-top: 10px;}
+        .nn-grid-box { display: grid; gap: 1px; background: #f0f3f4; padding: 4px; border-radius: 4px; border: 1px solid #bdc3c7;}
+        .nn-grid-box.grid-9 { grid-template-columns: repeat(9, 1fr); }
+        .nn-grid-box.grid-7 { grid-template-columns: repeat(7, 1fr); }
+        .nn-grid-box.grid-5 { grid-template-columns: repeat(5, 1fr); }
+        
+        .nn-dot { background: #fff; border: 1px solid #bdc3c7; border-radius: 50%; transition: all 0.2s; }
+        .nn-dot.dot-9 { width: 7px; height: 7px; }
+        .nn-dot.dot-7 { width: 10px; height: 10px; }
+        .nn-dot.dot-5 { width: 14px; height: 14px; }
+
+        .control-panel { width: 100%; display: flex; justify-content: center; gap: 20px; align-items: center; margin-top: 15px; background: #fff; padding: 15px; border-radius: 8px;}
+        .step-slider { width: 400px; cursor: pointer; }
+
+        .neuron-counter-panel { background: #e8f6f3; padding: 15px 30px; border-radius: 8px; border: 2px solid #1abc9c; margin-bottom: 20px; display: flex; justify-content: space-around; align-items: center; }
+        .counter-box { text-align: center; }
+        .counter-num { font-size: 26px; font-weight: bold; color: #16a085; display: block; margin: 2px 0; }
+        .counter-desc { font-size: 13px; color: #7f8c8d; }
+        
+        line { transition: opacity 0.3s ease-in-out; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+
+<div class="container">
+    <h1>一、 从“大局观”看神经网络：什么是卷积层和池化层？</h1>
+    <div class="card">
+        <p>假设你现在是一个侦探，你的任务是判断一张照片里是不是一只<strong>“猫”</strong>。</p>
+        <ul>
+            <li><strong>卷积层（Convolutional Layer）—— 放大镜找线索：</strong> 你不会一开始就盯着整张大照片看，因为信息太多了。你会拿着一个放大镜（我们称之为<strong>“卷积核/滤波器”</strong>），在照片上一点点滑动。放大镜扫过的地方，如果发现了“尖尖的耳朵”、“圆圆的眼睛”，它就会把这些特征记录下来。这就是卷积在做的事：<strong>提取局部特征</strong>。</li>
+            <li><strong>池化层（Pooling Layer）—— 总结并去粗取精：</strong> 放大镜扫完后，你得到了一大堆线索，笔记写了好几页，太复杂了！怎么办？你开始抓重点（比如2x2的区域里，只保留最明显的一个特征），把次要的细节丢掉。这就是池化在做的事：<strong>压缩数据，保留主要特征，减少计算量</strong>。</li>
+        </ul>
+        <p><strong>整个神经网络的工作流就是：</strong> 图像输入 $\rightarrow$ 放大镜提取特征(卷积) $\rightarrow$ 提取重点缩小体积(池化) $\rightarrow$ 再次提取更高级特征(卷积) $\rightarrow$ 再次缩小(池化) $\rightarrow$ 最后得出结论(这是一只猫！)。</p>
+    </div>
+
+    <h1>★ 核心概念解析：卷积、卷积核、步长与填充</h1>
+    <div class="card">
+        <p>为了在后面的动态计算和代码实战中不迷路，我们先系统且通俗地把 CNN 的四大核心组件的具体意义与作用理清楚：</p>
+
+        <h3 style="color: #2980b9; margin-top: 25px;">1. 卷积层（Convolutional Layer）的意义和作用</h3>
+        <p></p>
+        <ul>
+            <li><strong>意义：</strong> 它是深度学习网络在处理图像时的“核心视觉系统”。它取代了传统的全连接层，通过“局部连接”的方式来理解图像的空间结构。</li>
+            <li><strong>作用：</strong> <strong>自动提取特征与压缩参数。</strong> 
+                <ul>
+                    <li>浅层（前几层）的卷积层负责提取最基础的几何信息，比如图像的边缘、线条、颜色斑块等。</li>
+                    <li>深层（后几层）的卷积层会将这些线条组合起来，提取出极具辨识度的高级语义特征（比如“人脸的轮廓”、“汽车的轮胎”）。</li>
+                    <li>它利用<strong>权重共享（Parameter Sharing）</strong>机制，让整张图片共用同一套提取规则，极大地减少了模型所需的参数量，让庞大的运算成为可能。</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3 style="color: #2980b9; margin-top: 25px;">2. 卷积核（Convolutional Kernel / Filter）的意义和作用</h3>
+        <p></p>
+        <ul>
+            <li><strong>意义：</strong> 它是寻找特定特征的“专属探测器”。在数学上，它本质上是一个带有权重的小型矩阵（例如最常见的 $3 \times 3$ 矩阵）。不同的卷积核内部具有不同的数字排列模式。</li>
+            <li><strong>作用：</strong> <strong>局部模式匹配。</strong> 它在输入图像上像滑块一样移动，每移动一次，就和图像局部的像素点进行乘法和加法运算（点乘）。如果局部的图像纹理与该卷积核内部的数字模式高度吻合，就会在输出结果中产生一个非常大的激活值。在实际训练中，神经网络会自动学习并优化这些卷积核里的数字，让它们自动成为寻找“最有效特征”的绝佳工具。</li>
+        </ul>
+
+        <h3 style="color: #2980b9; margin-top: 25px;">3. 步长（Stride，记为 $S$）的意义和作用</h3>
+        <p></p>
+        <ul>
+            <li><strong>意义：</strong> 指的是卷积核在图像矩阵上滑动扫描时，每次水平或垂直方向跨越的“像素步数”。</li>
+            <li><strong>作用：</strong> <strong>控制输出特征图的空间尺寸（主动降维）。</strong>
+                <ul>
+                    <li>当步长 $S=1$ 时：卷积核极其细致地逐个像素平移扫描，提取的信息最全面、最平滑，但输出的特征图尺寸较大，计算负担重。</li>
+                    <li>当步长 $S>1$（例如 $S=2$）时：卷积核在滑动时会跳过部分像素。这等同于在特征提取的同时进行了一次下采样（Downsampling）。它能使特征图的宽和高成比例缩小（通常减半），从而快速减少后续网络的计算量，并加速扩大感受野，但代价是会舍弃一些高度重叠区域的细微细节。</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3 style="color: #2980b9; margin-top: 25px;">4. 填充（Padding，记为 $P$）的意义和作用</h3>
+        <p></p>
+        <ul>
+            <li><strong>意义：</strong> 在执行正式的卷积操作之前，人为地在原始图像或输入特征图的四周边缘，向外扩充一圈或多圈虚拟的数值（在绝大多数情况下，填充的数值均为 $0$，称为 Zero-Padding）。</li>
+            <li><strong>作用：</strong> 
+                <ul>
+                    <li><strong>保护边缘信息不丢失：</strong> 如果不加任何填充，处于图像物理边缘的像素点只会被卷积核扫过极少次，而中心的像素会被扫过许多次。这会导致边缘的重要信息在特征提取中被无形弱化。加上填充后，原本的“边缘”变为了相对“内部”，使得边缘特征能够被充分且公平地提取。</li>
+                    <li><strong>维持空间维度的稳定：</strong> 每进行一次常规卷积，特征图的尺寸都会“缩水”一圈（比如 $5 \times 5$ 的图经过 $3 \times 3$ 卷积会变成 $3 \times 3$）。如果不加以控制，经过几十层网络后，图像可能就缩没成几个像素了。通过巧妙设置填充大小 $P$，我们可以强行让卷积后的输出尺寸与输入尺寸保持一致（这被称为 Same Padding），这为搭建极深的现代化网络（如 ResNet）奠定了基础。</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    <h1>二、 卷积层（Convolution）：它是如何工作的？</h1>
+    <div class="card">
+        <p><strong>核心动作：滑动 + 乘加运算（点乘）</strong></p>
+        <p>我们用具体的数据来演示。假设我们有一张 $4 \times 4$ 像素的极简图像（数据如左表），我们使用一个 $3 \times 3$ 的“特征探测器”（即卷积核，数据如右表）。</p>
+        
+        <div class="flex-row">
+            <div>
+                <strong>输入图像数据 ($4 \times 4$)</strong>
+                <table class="data-table">
+                    <tr><td>1</td><td>2</td><td>0</td><td>1</td></tr>
+                    <tr><td>0</td><td>1</td><td>2</td><td>1</td></tr>
+                    <tr><td>1</td><td>0</td><td>1</td><td>0</td></tr>
+                    <tr><td>2</td><td>1</td><td>0</td><td>1</td></tr>
+                </table>
+            </div>
+            <div>
+                <strong>卷积核/滤波器 ($3 \times 3$)</strong><br>
+                <span class="note">（你可以把它当成一个专门寻找斜线的探测器）</span>
+                <table class="data-table">
+                    <tr><td style="color:#e74c3c">1</td><td>0</td><td>1</td></tr>
+                    <tr><td>0</td><td style="color:#e74c3c">1</td><td>0</td></tr>
+                    <tr><td>1</td><td>0</td><td style="color:#e74c3c">1</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 30px;">🎬 手动推出演算过程：卷积核的滑动侦测</h3>
+        <p>点击“下一步”观察黄色区域（放大镜）的移动。对应的像素会和卷积核上的数字<strong>一一对应相乘，然后相加</strong>，填入输出特征图。</p>
+        
+        <div class="btn-group">
+            <button onclick="nextConvStep()">下一步 (Next Step)</button>
+            <button class="btn-restart" onclick="resetConv()">重新开始 (Restart)</button>
+        </div>
+
+        <div class="flex-row">
+            <div>
+                <strong>正在扫描的图像</strong>
+                <div class="grid-container" id="conv-image" style="grid-template-columns: repeat(4, 50px);">
+                </div>
+            </div>
+            
+            <div style="flex:1;">
+                <strong>动态数学演算过程</strong>
+                <div class="formula-box" id="conv-formula">
+                    正在等待推导...
+                </div>
+            </div>
+
+            <div>
+                <strong>输出的特征图 ($2 \times 2$)</strong>
+                <div class="grid-container" id="conv-output" style="grid-template-columns: repeat(2, 50px);">
+                    <div class="grid-cell" id="cout-0">?</div>
+                    <div class="grid-cell" id="cout-1">?</div>
+                    <div class="grid-cell" id="cout-2">?</div>
+                    <div class="grid-cell" id="cout-3">?</div>
+                </div>
+            </div>
+        </div>
+
+        <hr style="margin: 40px 0; border: 0; border-top: 1px dashed #ccc;">
+        
+        <h3 style="margin-top: 30px;">🧩 进阶：Padding 填充与特征图尺寸动态推导</h3>
+        <p>为了控制输出特征图的大小或保留图像边缘的特征，我们经常会在原始图像的周围填充零（Padding，$P$）。这里为你提供一个动态推导引擎，请选择你想要计算的未知变量：</p>
+
+        <div class="mode-selector">
+            <label>请选择你需要求解的目标变量：</label>
+            <select id="solve-target" onchange="updateSolveMode()" style="padding: 8px; font-size: 15px; border-radius: 4px; border: 1px solid #bdc3c7; cursor: pointer; outline: none;">
+                <option value="N">求解 输出特征图尺寸 (N)</option>
+                <option value="P">求解 填充大小 (P)</option>
+                <option value="W">求解 输入图片尺寸 (W)</option>
+                <option value="F">求解 卷积核尺寸 (F)</option>
+                <option value="S">求解 步长 (S)</option>
+            </select>
+        </div>
+
+        <div id="dynamic-formula" class="formula-box">
+            
+        </div>
+
+        <div class="pad-input-group" id="dynamic-inputs">
+            <label id="lbl-W">原图尺寸 $W$: <input type="number" id="val-W" value="5" min="1"></label>
+            <label id="lbl-F">卷积核尺寸 $F$: <input type="number" id="val-F" value="3" min="1"></label>
+            <label id="lbl-S">步长 $S$: <input type="number" id="val-S" value="1" min="1"></label>
+            <label id="lbl-P">填充 $P$: <input type="number" id="val-P" value="0" min="0"></label>
+            <label id="lbl-N" style="display: none;">目标输出 $N$: <input type="number" id="val-N" value="5" min="1"></label>
+            
+            <button onclick="runCalculation()" style="background-color: #e67e22;">执行推导与演示</button>
+        </div>
+
+        <div id="shared-result" style="margin-top: 15px; font-size: 18px; color: #2980b9; font-weight: bold; min-height: 40px;"></div>
+
+        <div class="flex-row">
+            <div>
+                <strong>网格矩阵与滑动视野</strong>
+                <div id="shared-anim-container" style="position:relative; margin-top:10px; display: none;"></div>
+            </div>
+            <div style="flex:1; min-width: 200px;">
+                <strong>动态生成的特征图</strong>
+                <div id="shared-output-container" style="display: none; margin-top:10px;"></div>
+            </div>
+        </div>
+    </div>
+<script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+    <h1>★ 核心进阶：多维度卷积与感受野的本质映射</h1>
+    <div class="card">
+        <h2>突破 2D 限制：真正的多通道特征提取</h2>
+        <p>真实的神经网络是非常立体的。一张 $9 \times 9$ 分辨率的彩色图片，其实是一个 $9 \times 9 \times 3$ 的三维张量（共 $243$ 个输入神经元）。</p>
+        
+        <div class="formula-box">
+            <div class="note" style="margin-bottom: 5px; font-weight: bold;">3D Convolution Mathematical Formulation:</div>
+            $$Y^{(k)}_{i, j} = \sum_{c=1}^{C_{in}} \sum_{m=1}^{F} \sum_{n=1}^{F} X_{c, i+m-1, j+n-1} \cdot W^{(k)}_{c, m, n} + b^{(k)}$$
+            <p class="note" style="margin-top: 10px;">公式解析：每一次滑动，不仅在空间（宽高）上乘加，还会对**所有输入通道**进行深度叠加求和。</p>
+        </div>
+
+        <h3 style="margin-top: 30px;">🎬 宏观透视：两层卷积网络的全景连线（退化为稀疏全连接）</h3>
+        <p>在业界流传着一句话：“<strong>卷积层本质上就是被强制稀疏断开、且强制共享权重的全连接层。</strong>” 下方动画为你呈现了一个完整的两层卷积网络：</p>
+        <ul style="font-size: 14px; color: #444;">
+            <li><strong>Layer 0 (Input):</strong> $9 \times 9$ 像素的 RGB 图像，包含 $9 \times 9 \times 3 = 243$ 个原始神经元。</li>
+            <li><strong>Layer 1 (Conv1):</strong> 2 个 $3 \times 3 \times 3$ 卷积核扫描，输出 $7 \times 7$ 尺寸，2 个通道，共 $7 \times 7 \times 2 = 98$ 个隐藏神经元。</li>
+            <li><strong>Layer 2 (Conv2):</strong> 2 个 $3 \times 3 \times 2$ 卷积核扫描，最终输出 $5 \times 5$ 尺寸，2 个通道，共 $5 \times 5 \times 2 = 50$ 个高级神经元。</li>
+        </ul>
+        <p>点击播放，观察右侧拓扑图。你会发现输出层的一个节点，逆向追溯到输入层时，其<strong>感受野（Receptive Field）</strong>已经扩大到了惊人的 $5 \times 5 \times 3 = 75$ 个像素！这就叫特征的全局化整合。如果使用传统的全连接，从 243 个输入连到 98 个隐藏层需要 **23,814** 根线，但在此处的卷积操作中，它被极其优雅地“稀疏化”了。</p>
+
+        <div class="neuron-counter-panel">
+            <div class="counter-box">
+                <span style="font-weight: bold; color: #2c3e50;">Layer 0 (Input Nodes)</span>
+                <span class="counter-num">243</span>
+                <span class="counter-desc">$$N_0 = 9 \times 9 \times 3$$</span>
+            </div>
+            <div style="font-size: 24px; color: #bdc3c7;">$\rightarrow$</div>
+            <div class="counter-box">
+                <span style="font-weight: bold; color: #2c3e50;">Layer 1 (Hidden Nodes)</span>
+                <span class="counter-num">98</span>
+                <span class="counter-desc">$$N_1 = 7 \times 7 \times 2$$</span>
+            </div>
+            <div style="font-size: 24px; color: #bdc3c7;">$\rightarrow$</div>
+            <div class="counter-box">
+                <span style="font-weight: bold; color: #2c3e50;">Layer 2 (Output Nodes)</span>
+                <span class="counter-num" style="color: #e74c3c;">50</span>
+                <span class="counter-desc">$$N_2 = 5 \times 5 \times 2$$</span>
+            </div>
+        </div>
+
+        <div class="adv-sync-container">
+            <div class="adv-vis-row">
+                
+                <div class="stage-3d">
+                    <div class="stage-title">张量空间三维透视</div>
+                    
+                    <div class="volume vol-input" id="adv-vol-in">
+                        <div class="slice slice-3" id="adv-in-b"></div> <div class="slice slice-2" id="adv-in-g"></div> <div class="slice slice-1" id="adv-in-r"></div> 
+                        <div class="vol-label">Input $X_{9 \times 9 \times 3}$</div>
+                    </div>
+
+                    <div class="volume vol-hidden" id="adv-vol-hid">
+                        <div class="slice slice-2" id="adv-hid-2"></div> <div class="slice slice-1" id="adv-hid-1"></div> 
+                        <div class="vol-label" style="color:#f39c12;">Conv1 $H_{7 \times 7 \times 2}$</div>
+                    </div>
+
+                    <div class="volume vol-output" id="adv-vol-out">
+                        <div class="slice slice-2" id="adv-out-2"></div> <div class="slice slice-1" id="adv-out-1"></div> 
+                        <div class="vol-label" style="color:#e74c3c;">Conv2 $Y_{5 \times 5 \times 2}$</div>
+                    </div>
+                </div>
+
+                <div class="stage-nn">
+                    <div class="stage-title">等价稀疏神经网络（感受野追踪）</div>
+                    <svg class="nn-svg-layer" id="adv-nn-svg"></svg>
+                    
+                    <div class="nn-group">
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#3498db;">Ch B</div>
+                        <div class="nn-grid-box grid-9" id="nn-in-b"></div>
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#2ecc71;">Ch G</div>
+                        <div class="nn-grid-box grid-9" id="nn-in-g"></div>
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#e74c3c;">Ch R</div>
+                        <div class="nn-grid-box grid-9" id="nn-in-r"></div>
+                    </div>
+
+                    <div class="nn-group">
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#1abc9c;">Hidden 2</div>
+                        <div class="nn-grid-box grid-7" id="nn-hid-f2"></div>
+                        <div style="height: 10px;"></div>
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#f39c12;">Hidden 1</div>
+                        <div class="nn-grid-box grid-7" id="nn-hid-f1"></div>
+                    </div>
+
+                    <div class="nn-group">
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#9b59b6;">Out F2</div>
+                        <div class="nn-grid-box grid-5" id="nn-out-f2"></div>
+                        <div style="height: 30px;"></div>
+                        <div style="text-align:center; font-size:11px; font-weight:bold; color:#e67e22;">Out F1</div>
+                        <div class="nn-grid-box grid-5" id="nn-out-f1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <button onclick="toggleAdvSyncPlay()" id="adv-sync-play-btn" style="background-color: #2c3e50;">自动追踪感受野映射</button>
+                <input type="range" id="adv-sync-slider" class="step-slider" min="0" max="24" value="0" step="1" oninput="advSyncUpdate(this.value)">
+                <span id="adv-sync-step-label" style="font-weight:bold; color:#2c3e50; min-width: 150px; font-size:13px; text-align: center;"></span>
+            </div>
+        </div>
+
+        <h4 style="margin-top: 40px; color: #2980b9;">💻 附加代码：用 PyTorch 还原上述两层卷积网络</h4>
+        <p>下面这段代码严格对应了上面的动画过程：从 $9 \times 9 \times 3$ 的输入，经过两次无填充（Padding=0）的 $3 \times 3$ 卷积，最终输出 $5 \times 5 \times 2$ 的张量。</p>
+        <pre><code><span class="code-keyword">import</span> torch
+<span class="code-keyword">import</span> torch.nn <span class="code-keyword">as</span> nn
+
+<span class="code-comment"># 定义与动图严格对应的两层卷积网络</span>
+<span class="code-keyword">class</span> TwoLayerConvNet(nn.Module):
+    <span class="code-keyword">def</span> __init__(self):
+        <span class="code-keyword">super</span>(TwoLayerConvNet, self).__init__()
+        <span class="code-comment"># Layer 1: 输入通道 3 (RGB), 输出通道 2, 卷积核 3x3</span>
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=2, kernel_size=3, stride=1, padding=0)
+        <span class="code-comment"># Layer 2: 输入通道 2 (来自上一层), 输出通道 2, 卷积核 3x3</span>
+        self.conv2 = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=3, stride=1, padding=0)
+
+    <span class="code-keyword">def</span> forward(self, x):
+        <span class="code-comment"># 依次经过第一层和第二层卷积 (此处省略激活函数以便直观对应动图计算)</span>
+        <span class="code-keyword">return</span> self.conv2(self.conv1(x))
+
+<span class="code-comment"># 1. 准备输入数据 (对应动画左侧的 9x9x3 图像)</span>
+<span class="code-comment"># PyTorch 张量格式必须为: (BatchSize, Channels, Height, Width)</span>
+input_tensor = torch.randn(1, 3, 9, 9)
+<span class="code-keyword">print</span>(<span class="code-string">"Layer 0 - 输入张量尺寸 (Input):"</span>, input_tensor.shape)  <span class="code-comment"># 输出: [1, 3, 9, 9]</span>
+
+<span class="code-comment"># 2. 实例化网络</span>
+net = TwoLayerConvNet()
+
+<span class="code-comment"># 3. 逐层观察维度坍缩与感受野变化过程</span>
+hidden_tensor = net.conv1(input_tensor)
+<span class="code-keyword">print</span>(<span class="code-string">"Layer 1 - 第一层卷积后尺寸 (Hidden):"</span>, hidden_tensor.shape) <span class="code-comment"># 输出: [1, 2, 7, 7]</span>
+
+output_tensor = net.conv2(hidden_tensor)
+<span class="code-keyword">print</span>(<span class="code-string">"Layer 2 - 第二层卷积后尺寸 (Output):"</span>, output_tensor.shape) <span class="code-comment"># 输出: [1, 2, 5, 5]</span></code></pre>
+    </div>
+
+    <h1>三、 池化层（Pooling）：它是如何压缩的？</h1>
+    <div class="card">
+        <p><strong>核心动作：分块 + 选老大（通常选最大值，叫 Max Pooling）</strong></p>
+        <p>经过卷积层后，我们可能得到了很多特征数据。为了防止电脑运算爆炸，我们需要压缩。最常用的方法是把数据分成 $2 \times 2$ 的小块，然后在每个小块里<strong>只保留最大的那个数字</strong>，其他的丢弃。<strong>核心作用：降维，保留重要特征，防止过拟合!</strong></p>
+
+        <h3 style="margin-top: 30px;">🎬 手动推出演算过程：2x2 最大池化</h3>
+        <p>假设下方左侧是我们经过卷积后得到的特征图。我们设定池化窗口大小为 $2 \times 2$，并且每次移动 2 步（不重叠）。</p>
+
+        <div class="btn-group">
+            <button onclick="nextPoolStep()">下一步 (Next Step)</button>
+            <button class="btn-restart" onclick="resetPool()">重新开始 (Restart)</button>
+        </div>
+
+        <div class="flex-row">
+            <div>
+                <strong>输入特征图 ($4 \times 4$)</strong>
+                <div class="grid-container" id="pool-image" style="grid-template-columns: repeat(4, 50px);">
+                </div>
+            </div>
+            
+            <div style="flex:1;">
+                <strong>动态数学演算过程</strong>
+                <div class="formula-box" id="pool-formula">
+                    正在等待推导...
+                </div>
+            </div>
+
+            <div>
+                <strong>池化后输出 ($2 \times 2$)</strong>
+                <div class="grid-container" id="pool-output" style="grid-template-columns: repeat(2, 50px);">
+                    <div class="grid-cell" id="pout-0">?</div>
+                    <div class="grid-cell" id="pout-1">?</div>
+                    <div class="grid-cell" id="pout-2">?</div>
+                    <div class="grid-cell" id="pout-3">?</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h1>四、 PyTorch 实战：用代码还原上述过程</h1>
+    <div class="card">
+        <p>上面我们在网页里手动计算的矩阵变化，在现代深度学习框架中只需要调用几个 API 即可完成。这里为你提供了一段完整的、可以直接在 Jupyter Notebook 中运行的 PyTorch 代码。</p>
+        <p><strong>注意：</strong>在 PyTorch 中，图像数据必须转换为连续的 4 维张量格式 <code>(Batch, Channel, Height, Width)</code> 才能送入网络。</p>
+        <pre><code><span class="code-keyword">import</span> torch
+<span class="code-keyword">import</span> torch.nn.functional <span class="code-keyword">as</span> F
+
+<span class="code-keyword">print</span>(<span class="code-string">"\n=== 2. 池化层 (Max Pooling) ==="</span>)
+pool_data = torch.tensor([
+    [3, 8, 1, 4],
+    [2, 5, 0, 2],
+    [4, 1, 9, 3],
+    [0, 2, 6, 7]
+], dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+
+pool_output = F.max_pool2d(pool_data, kernel_size=2)
+<span class="code-keyword">print</span>(<span class="code-string">"最大池化输出特征图尺寸:"</span>, pool_output.shape)
+<span class="code-keyword">print</span>(pool_output.squeeze())</code></pre>
+    </div>
+
+    <h1>五、 巩固与进阶：CNN 核心面试题 8 问</h1>
+    <div class="card">
+        <p>在深度学习算法岗位的面试中，卷积、池化的基本原理以及相关维度的计算是绝对的高频考点。这里为你整理了 8 道经典面试题供自测：</p>
+
+        <div class="question-box">
+            <span class="tag tag-type">架构对比</span><span class="tag tag-star">★★★★★</span>
+            <strong style="color: #2c3e50;">1. 相比于传统的全连接层，为什么图像处理更倾向于使用卷积层？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 主要有两大核心机制。首先是<strong>局部感受野（Local Receptive Field）</strong>，卷积核只关注图像局部的空间特征（如边缘、角点），更符合图像的空间局部相关性；其次是<strong>参数共享（Parameter Sharing）</strong>，同一个卷积核扫过整张图像时使用的是同一组权重，这大幅度减少了网络模型需要学习的参数量，在降低计算资源消耗的同时也有效防止了过拟合。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">数学计算</span><span class="tag tag-star">★★★★★</span>
+            <strong style="color: #2c3e50;">2. 给定正方形输入图像的边长为 $W$，卷积核尺寸为 $F$，滑动步长为 $S$，并在四周填充大小为 $P$ 的 Padding，输出特征图的边长 $N$ 计算公式是什么？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 这是笔试必考的基础计算公式：<br>
+            $$ N = \lfloor \frac{W - F + 2P}{S} \rfloor + 1 $$<br>
+            计算结果通常需要向下取整（除非特别说明）。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">核心机制</span><span class="tag tag-star">★★★★☆</span>
+            <strong style="color: #2c3e50;">3. 池化层（Pooling Layer）在网络中主要起到什么作用？Max Pooling 和 Average Pooling 分别侧重于什么？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 池化层的主要作用是<strong>降维（减少特征图的尺寸）</strong>，在减少网络后续参数计算量的同时，还能提供一定程度的平移不变形（Translation Invariance）。<br>
+            Max Pooling 提取的是局部区域内的最大值，侧重于保留最显著的特征（如边缘或纹理突出点）；Average Pooling 提取的是平均值，侧重于保留整体背景信息，平滑局部特征。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">空间透视</span><span class="tag tag-star">★★★★☆</span>
+            <strong style="color: #2c3e50;">4. 什么是感受野（Receptive Field）？随着网络层数加深，感受野是如何变化的？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 感受野指的是在卷积神经网络中，当前层的某一个神经元在<strong>原始输入图像</strong>上所能看到的（或者说被影响的）区域大小。随着网络层数不断加深（经历更多次卷积和池化），越靠后的神经元对应的感受野会呈指数级扩大，意味着它能捕捉到更宏观的全局语义信息。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">维度理解</span><span class="tag tag-star">★★★★☆</span>
+            <strong style="color: #2c3e50;">5. 在处理包含 RGB 三个通道的彩色图像时，我们的卷积核是 2D 的还是 3D 的？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 是 3D 的。对于输入通道数为 $C_{in}$ 的张量，每一个卷积核必须具有匹配的深度。因此，处理 RGB 图像（$C_{in}=3$）时，即便我们称其为 2D 卷积（因为它只在宽和高两个维度上滑动），其卷积核的实际物理结构是 $F \times F \times 3$ 的三维张量。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">数学计算</span><span class="tag tag-star">★★★★★</span>
+            <strong style="color: #2c3e50;">6. 假设一个卷积层的输入通道数为 $C_{in}$，输出通道数为 $C_{out}$，使用的卷积核尺寸为 $F \times F$。如果包含偏置项（Bias），该层一共包含多少个可学习参数？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> 每一个输出通道都对应一个独立的三维卷积核和一个偏置项。因此总参数量计算公式为：<br>
+            $$ Param = (F \times F \times C_{in} + 1) \times C_{out} $$
+            </p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">工程实战</span><span class="tag tag-star">★★★☆☆</span>
+            <strong style="color: #2c3e50;">7. 在 PyTorch 框架中，图像数据传入 `nn.Conv2d` 之前，必须保证张量（Tensor）是按照哪四个维度的顺序排列的？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> PyTorch 默认要求图像张量的形状为 <code>(N, C, H, W)</code>。即：<br>
+            N：批次大小（Batch Size）<br>
+            C：通道数（Channels）<br>
+            H：高度（Height）<br>
+            W：宽度（Width）<br>
+            如果你使用 OpenCV 或 PIL 读取的图片通常是 <code>(H, W, C)</code>，需要使用代码做维度置换（如 `permute` 或 `transpose`）。</p>
+        </div>
+
+        <div class="question-box">
+            <span class="tag tag-type">权重初始化</span><span class="tag tag-star">★★★★★</span>
+            <strong style="color: #2c3e50;">8. 在搭建深层卷积神经网络且使用 ReLU 激活函数时，为什么通常推荐使用 Kaiming (He) 初始化而不是 Xavier 初始化？</strong>
+            <p style="margin-top: 8px;"><strong>解答：</strong> Xavier 初始化假设激活函数是线性的，在经过网络层后能保持输入和输出的方差一致。但是 ReLU 函数会将所有的负数直接置零，导致每经过一层 ReLU，数据的方差就会减半。如果深层卷积网络继续使用 Xavier 初始化，前向传播的信号方差会迅速衰减，反向传播的梯度也会消失。Kaiming (He) 初始化专门通过数学代入，在方差的计算中引入了 2 的倍数（为了抵消 ReLU 砍掉的一半数据），从而保证了深层卷积网络在初始化阶段的信号流动连续性。</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 第一部分与第三部分的推导逻辑保持不变
+    // ==========================================
+
+    const imgData = [[1, 2, 0, 1], [0, 1, 2, 1], [1, 0, 1, 0], [2, 1, 0, 1]];
+    const filterData = [[1, 0, 1], [0, 1, 0], [1, 0, 1]];
+    const convContainer = document.getElementById('conv-image');
+    for(let r=0; r<4; r++){
+        for(let c=0; c<4; c++){
+            let cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.id = `cimg-${r}-${c}`;
+            cell.innerText = imgData[r][c];
+            convContainer.appendChild(cell);
+        }
+    }
+    const convPositions = [{r: 0, c: 0, outIdx: 0}, {r: 0, c: 1, outIdx: 1}, {r: 1, c: 0, outIdx: 2}, {r: 1, c: 1, outIdx: 3}];
+    let convStep = 0, isConvFinished = false;
+    
+    function renderConvStep() {
+        if(isConvFinished) return;
+        document.querySelectorAll('#conv-image .grid-cell').forEach(el => el.classList.remove('highlight-conv'));
+        document.querySelectorAll('#conv-output .grid-cell').forEach(el => el.classList.remove('highlight-result'));
+        let pos = convPositions[convStep];
+        let sum = 0;
+        let latexStr = "$$ \\begin{aligned} Y &= ";
+        let calcTerms = [];
+        for(let fr=0; fr<3; fr++){
+            for(let fc=0; fc<3; fc++){
+                let r = pos.r + fr; let c = pos.c + fc;
+                let val = imgData[r][c]; let fVal = filterData[fr][fc];
+                document.getElementById(`cimg-${r}-${c}`).classList.add('highlight-conv');
+                sum += val * fVal;
+                calcTerms.push(`(${val} \\times ${fVal})`);
+            }
+        }
+        latexStr += calcTerms.slice(0,3).join(" + ") + " \\\\ &+ " + calcTerms.slice(3,6).join(" + ") + " \\\\ &+ " + calcTerms.slice(6,9).join(" + ") + " \\\\ &= " + sum + " \\end{aligned} $$";
+        let outCell = document.getElementById(`cout-${pos.outIdx}`);
+        outCell.innerText = sum; outCell.classList.add('highlight-result');
+        let formulaBox = document.getElementById('conv-formula');
+        formulaBox.innerHTML = latexStr;
+        MathJax.typesetPromise([formulaBox]);
+    }
+    
+    function nextConvStep() {
+        if(isConvFinished) { alert("卷积推导已完成！你可以点击【重新开始】再看一遍。"); return; }
+        convStep++;
+        if (convStep >= convPositions.length) { isConvFinished = true; alert("推导完成！这就是 2x2 特征图产生的设计全过程。"); } else { renderConvStep(); }
+    }
+    
+    function resetConv() {
+        convStep = 0; isConvFinished = false;
+        for(let i=0; i<4; i++){
+            let outCell = document.getElementById(`cout-${i}`);
+            outCell.innerText = "?"; outCell.classList.remove('highlight-result');
+        }
+        renderConvStep();
+    }
+
+    // ==========================================
+    // 进阶部分：全新改版的动态多模式推导逻辑
+    // ==========================================
+    function updateSolveMode() {
+        const target = document.getElementById('solve-target').value;
+        const vars = ['W', 'F', 'S', 'P', 'N'];
+        
+        // 控制输入框的显示与隐藏 (隐藏被设定为待求解的那个变量)
+        vars.forEach(v => {
+            const lbl = document.getElementById(`lbl-${v}`);
+            if (v === target) {
+                lbl.style.display = 'none';
+            } else {
+                lbl.style.display = ''; 
+            }
+        });
+
+        // 根据选择的变量，切换代数推导公式
+        let latexStr = '';
+        if (target === 'N') {
+            latexStr = `$$N = \\lfloor \\frac{W - F + 2P}{S} \\rfloor + 1$$`;
+        } else if (target === 'P') {
+            latexStr = `$$P = \\frac{S \\cdot (N - 1) - W + F}{2}$$`;
+        } else if (target === 'W') {
+            latexStr = `$$W = S \\cdot (N - 1) + F - 2P$$`;
+        } else if (target === 'F') {
+            latexStr = `$$F = W + 2P - S \\cdot (N - 1)$$`;
+        } else if (target === 'S') {
+            latexStr = `$$S = \\frac{W - F + 2P}{N - 1}$$`;
+        }
+        
+        const formulaBox = document.getElementById('dynamic-formula');
+        formulaBox.innerHTML = `<div class="note" style="margin-bottom: 5px; font-weight: bold;">[ Target: ${target} ] Derivation Formula:</div>` + latexStr;
+        MathJax.typesetPromise([formulaBox]);
+        
+        // 切换后清除上一次的渲染动画与结果
+        document.getElementById('shared-result').innerHTML = '';
+        hideAnimation();
+    }
+
+    function runCalculation() {
+        const target = document.getElementById('solve-target').value;
+        const resDiv = document.getElementById('shared-result');
+        
+        // 读取当前所有的输入值
+        let W = parseInt(document.getElementById('val-W').value) || 0;
+        let F = parseInt(document.getElementById('val-F').value) || 0;
+        let S = parseInt(document.getElementById('val-S').value) || 0;
+        let P = parseInt(document.getElementById('val-P').value) || 0;
+        let N = parseInt(document.getElementById('val-N').value) || 0;
+        
+        let latexRes = '';
+        
+        try {
+            if (target === 'N') {
+                if (W <= 0 || F <= 0 || S <= 0 || P < 0) throw new Error("W, F, S 必须为正数，P 必须为非负数。");
+                N = Math.floor((W - F + 2 * P) / S) + 1;
+                if (N <= 0) throw new Error("计算得 N &le; 0，当前参数无法生成有效的特征图！");
+                latexRes = `$$N = \\lfloor \\frac{${W} - ${F} + 2 \\times ${P}}{${S}} \\rfloor + 1 = ${N}$$`;
+            } else if (target === 'P') {
+                if (W <= 0 || F <= 0 || S <= 0 || N <= 0) throw new Error("除 P 外，所有输入项必须为严格正数。");
+                P = (S * (N - 1) - W + F) / 2;
+                if (!Number.isInteger(P) || P < 0) throw new Error(`根据给定参数计算得 P = ${P}，P 必须是非负整数，请调整参数组合！`);
+                latexRes = `$$P = \\frac{${S} \\cdot (${N} - 1) - ${W} + ${F}}{2} = ${P}$$`;
+            } else if (target === 'W') {
+                if (F <= 0 || S <= 0 || P < 0 || N <= 0) throw new Error("输入的特征参数有误。");
+                W = S * (N - 1) + F - 2 * P;
+                if (W <= 0) throw new Error(`计算出原始图像 W = ${W}，图像尺寸必须为正数！`);
+                latexRes = `$$W = ${S} \\cdot (${N} - 1) + ${F} - 2 \\times ${P} = ${W}$$`;
+            } else if (target === 'F') {
+                if (W <= 0 || S <= 0 || P < 0 || N <= 0) throw new Error("输入的特征参数有误。");
+                F = W + 2 * P - S * (N - 1);
+                if (F <= 0 || F > W + 2 * P) throw new Error(`计算得卷积核大小 F = ${F}，尺寸无效或超出填充后的感受范围！`);
+                latexRes = `$$F = ${W} + 2 \\times ${P} - ${S} \\cdot (${N} - 1) = ${F}$$`;
+            } else if (target === 'S') {
+                if (W <= 0 || F <= 0 || P < 0 || N <= 1) throw new Error("目标尺寸 N 必须大于 1 且其余参数有效。");
+                S = (W - F + 2 * P) / (N - 1);
+                if (!Number.isInteger(S) || S <= 0) throw new Error(`计算得步长 S = ${S}，步长必须是能完美滑动的正整数！`);
+                latexRes = `$$S = \\frac{${W} - ${F} + 2 \\times ${P}}{${N} - 1} = ${S}$$`;
+            }
+
+            // 输出公式结果并执行渲染动画
+            resDiv.innerHTML = `Calculation Result：${latexRes}`;
+            MathJax.typesetPromise([resDiv]).then(() => { 
+                renderAnimationEngine(W, F, S, P, N); 
+            });
+            
+        } catch (e) {
+            resDiv.innerHTML = `<span style="color:#e74c3c">参数解析错误：${e.message}</span>`;
+            hideAnimation();
+        }
+    }
+
+    function hideAnimation() {
+        document.getElementById('shared-anim-container').style.display = 'none'; document.getElementById('shared-output-container').style.display = 'none';
+        if (window.sharedAnimInterval) clearInterval(window.sharedAnimInterval);
+    }
+    
+    function renderAnimationEngine(w, f, s, p, n) {
+        const paddedSize = w + 2 * p; const cellSize = 35;
+        const container = document.getElementById('shared-anim-container'); container.innerHTML = ''; container.style.display = 'grid'; container.style.gridTemplateColumns = `repeat(${paddedSize}, ${cellSize}px)`; container.style.gap = '2px'; container.style.background = '#2c3e50'; container.style.padding = '2px'; container.style.width = 'fit-content'; container.style.position = 'relative';
+        for (let r = 0; r < paddedSize; r++) {
+            for (let c = 0; c < paddedSize; c++) {
+                let cell = document.createElement('div'); cell.style.width = `${cellSize}px`; cell.style.height = `${cellSize}px`; cell.style.display = 'flex'; cell.style.justifyContent = 'center'; cell.style.alignItems = 'center'; cell.style.fontSize = '14px'; cell.style.fontWeight = 'bold';
+                if (r < p || r >= p + w || c < p || c >= p + w) { cell.style.background = '#d5dbdb'; cell.innerText = '0'; cell.style.color = '#7f8c8d'; } else { cell.style.background = '#aed6f1'; cell.innerText = 'X'; cell.style.color = '#2980b9'; }
+                container.appendChild(cell);
+            }
+        }
+        const outContainer = document.getElementById('shared-output-container'); outContainer.innerHTML = ''; outContainer.style.display = 'grid'; outContainer.style.gridTemplateColumns = `repeat(${n}, ${cellSize}px)`; outContainer.style.gap = '2px'; outContainer.style.background = '#2c3e50'; outContainer.style.padding = '2px'; outContainer.style.width = 'fit-content';
+        for (let r = 0; r < n; r++) {
+            for (let c = 0; c < n; c++) {
+                let cell = document.createElement('div'); cell.style.width = `${cellSize}px`; cell.style.height = `${cellSize}px`; cell.style.background = '#fff'; cell.style.display = 'flex'; cell.style.justifyContent = 'center'; cell.style.alignItems = 'center'; cell.style.fontWeight = 'bold'; cell.style.transition = 'background 0.3s'; cell.id = `sharedout-${r}-${c}`; outContainer.appendChild(cell);
+            }
+        }
+        const overlay = document.createElement('div'); overlay.style.position = 'absolute'; overlay.style.border = '3px solid #e74c3c'; overlay.style.backgroundColor = 'rgba(241, 196, 15, 0.4)'; overlay.style.width = `${f * (cellSize + 2) - 2}px`; overlay.style.height = `${f * (cellSize + 2) - 2}px`; overlay.style.transition = 'all 0.4s ease-in-out'; overlay.style.pointerEvents = 'none'; overlay.style.boxSizing = 'border-box'; overlay.style.top = '2px'; overlay.style.left = '2px'; overlay.style.zIndex = '10'; container.appendChild(overlay);
+        
+        let frames = []; for (let r = 0; r < n; r++) { for (let c = 0; c < n; c++) { frames.push({ top: r * s * (cellSize + 2) + 2, left: c * s * (cellSize + 2) + 2, outR: r, outC: c }); } }
+        let frameIdx = 0; if (window.sharedAnimInterval) clearInterval(window.sharedAnimInterval);
+        window.sharedAnimInterval = setInterval(() => {
+            if (frameIdx >= frames.length) {
+                clearInterval(window.sharedAnimInterval); let prev = frames[frameIdx - 1]; if(prev) { document.getElementById(`sharedout-${prev.outR}-${prev.outC}`).style.background = '#2ecc71'; document.getElementById(`sharedout-${prev.outR}-${prev.outC}`).style.color = '#fff'; } return;
+            }
+            let frame = frames[frameIdx]; overlay.style.top = frame.top + 'px'; overlay.style.left = frame.left + 'px';
+            if(frameIdx > 0) { let prev = frames[frameIdx - 1]; let prevCell = document.getElementById(`sharedout-${prev.outR}-${prev.outC}`); prevCell.style.background = '#2ecc71'; prevCell.style.color = '#fff'; }
+            let currOut = document.getElementById(`sharedout-${frame.outR}-${frame.outC}`); currOut.style.background = '#f1c40f'; currOut.innerText = '✓'; frameIdx++;
+        }, 500);
+    }
+
+    // 池化层
+    const poolData = [[3, 8, 1, 4], [2, 5, 0, 2], [4, 1, 9, 3], [0, 2, 6, 7]];
+    const poolContainer = document.getElementById('pool-image');
+    for(let r=0; r<4; r++){ for(let c=0; c<4; c++){ let cell = document.createElement('div'); cell.className = 'grid-cell'; cell.id = `pimg-${r}-${c}`; cell.innerText = poolData[r][c]; poolContainer.appendChild(cell); } }
+    const poolPositions = [{r: 0, c: 0, outIdx: 0}, {r: 0, c: 2, outIdx: 1}, {r: 2, c: 0, outIdx: 2}, {r: 2, c: 2, outIdx: 3}];
+    let poolStep = 0, isPoolFinished = false;
+    
+    function renderPoolStep() {
+        if(isPoolFinished) return;
+        document.querySelectorAll('#pool-image .grid-cell').forEach(el => el.classList.remove('highlight-pool')); document.querySelectorAll('#pool-output .grid-cell').forEach(el => el.classList.remove('highlight-result'));
+        let pos = poolPositions[poolStep]; let maxVal = -Infinity; let vals = [];
+        for(let fr=0; fr<2; fr++){
+            for(let fc=0; fc<2; fc++){
+                let r = pos.r + fr; let c = pos.c + fc; let val = poolData[r][c]; vals.push(val); if(val > maxVal) maxVal = val;
+                document.getElementById(`pimg-${r}-${c}`).classList.add('highlight-pool');
+            }
+        }
+        let latexStr = `$$MaxPool = \\max(${vals.join(", ")}) = ${maxVal}$$`;
+        let outCell = document.getElementById(`pout-${pos.outIdx}`); outCell.innerText = maxVal; outCell.classList.add('highlight-result');
+        let formulaBox = document.getElementById('pool-formula'); formulaBox.innerHTML = latexStr; MathJax.typesetPromise([formulaBox]);
+    }
+    
+    function nextPoolStep() {
+        if(isPoolFinished) { alert("池化推导已完成！你可以点击【重新开始】再看一遍。"); return; }
+        poolStep++;
+        if (poolStep >= poolPositions.length) { isPoolFinished = true; alert("最大池化提取完毕！数据被完美压缩了。"); } else { renderPoolStep(); }
+    }
+    
+    function resetPool() { poolStep = 0; isPoolFinished = false; for(let i=0; i<4; i++){ let outCell = document.getElementById(`pout-${i}`); outCell.innerText = "?"; outCell.classList.remove('highlight-result'); } renderPoolStep(); }
+
+    // ==========================================
+    // 两层卷积转化核心逻辑 (9x9x3 -> 7x7x2 -> 5x5x2)
+    // ==========================================
+    
+    function initAdvanced3DSync() {
+        const inChannels = ['r', 'g', 'b'];
+        const hidChannels = ['1', '2'];
+
+        // 1. 构建 3D 节点
+        inChannels.forEach((ch, zIdx) => {
+            const layer = document.getElementById(`adv-in-${ch}`);
+            for(let i=0; i<81; i++) {
+                let cell = document.createElement('div'); cell.className = `slice-cell`; cell.id = `vol-in-${zIdx}-${i}`;
+                layer.appendChild(cell);
+            }
+        });
+        hidChannels.forEach((ch, zIdx) => {
+            const layer = document.getElementById(`adv-hid-${ch}`);
+            for(let i=0; i<49; i++) {
+                let cell = document.createElement('div'); cell.className = `slice-cell`; cell.id = `vol-hid-${zIdx}-${i}`;
+                layer.appendChild(cell);
+            }
+        });
+        for(let f=1; f<=2; f++) {
+            const layer = document.getElementById(`adv-out-${f}`);
+            for(let i=0; i<25; i++) {
+                let cell = document.createElement('div'); cell.className = `slice-cell`; cell.id = `vol-out-${f}-${i}`;
+                layer.appendChild(cell);
+            }
+        }
+
+        // 2. 构建 NN 节点
+        inChannels.forEach((ch, zIdx) => {
+            const box = document.getElementById(`nn-in-${ch}`);
+            for(let r=0; r<9; r++) {
+                for(let c=0; c<9; c++) {
+                    let dot = document.createElement('div'); dot.className = 'nn-dot dot-9'; dot.id = `nn-dot-in-${zIdx}-${r}-${c}`;
+                    box.appendChild(dot);
+                }
+            }
+        });
+        for(let f=1; f<=2; f++) {
+            const box = document.getElementById(`nn-hid-f${f}`);
+            for(let r=0; r<7; r++) {
+                for(let c=0; c<7; c++) {
+                    let dot = document.createElement('div'); dot.className = 'nn-dot dot-7'; dot.id = `nn-dot-hid-${f-1}-${r}-${c}`;
+                    box.appendChild(dot);
+                }
+            }
+        }
+        for(let f=1; f<=2; f++) {
+            const box = document.getElementById(`nn-out-f${f}`);
+            for(let r=0; r<5; r++) {
+                for(let c=0; c<5; c++) {
+                    let dot = document.createElement('div'); dot.className = 'nn-dot dot-5'; dot.id = `nn-dot-out-${f-1}-${r}-${c}`;
+                    box.appendChild(dot);
+                }
+            }
+        }
+
+        setTimeout(() => advSyncUpdate(0), 150);
+    }
+
+    function advSyncUpdate(step) {
+        step = parseInt(step);
+        document.getElementById('adv-sync-slider').value = step;
+        
+        const r = Math.floor(step / 5);
+        const c = step % 5;
+
+        document.getElementById('adv-sync-step-label').innerHTML = `追踪 Output 位点: <br>(${(r)}, ${(c)})，感受野扩张推导`;
+
+        document.querySelectorAll('.active-in, .active-hid, .active-out').forEach(el => {
+            el.classList.remove('active-in', 'active-hid', 'active-out', 'c0', 'c1', 'c2');
+        });
+        document.querySelectorAll('.nn-dot').forEach(el => {
+            el.style.backgroundColor = '#fff'; el.style.borderColor = '#bdc3c7'; el.style.boxShadow = 'none';
+        });
+        
+        const svg = document.getElementById('adv-nn-svg');
+        svg.innerHTML = ''; 
+
+        const outColors = ['#e67e22', '#9b59b6'];
+        const inColors = ['#e74c3c', '#2ecc71', '#3498db'];
+        const svgRect = svg.getBoundingClientRect();
+
+        function drawLine(startEl, endEl, color, opacity, width) {
+            const sRect = startEl.getBoundingClientRect();
+            const eRect = endEl.getBoundingClientRect();
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', sRect.left - svgRect.left + sRect.width/2);
+            line.setAttribute('y1', sRect.top - svgRect.top + sRect.height/2);
+            line.setAttribute('x2', eRect.left - svgRect.left + eRect.width/2);
+            line.setAttribute('y2', eRect.top - svgRect.top + eRect.height/2);
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', width); 
+            line.style.opacity = '0';
+            svg.appendChild(line);
+            setTimeout(() => { line.style.opacity = opacity; }, 10);
+        }
+
+        let activeOutNodes = [];
+        for(let k=0; k<2; k++) {
+            let volOutIdx = r * 5 + c;
+            document.getElementById(`vol-out-${k+1}-${volOutIdx}`).classList.add('active-out', `c${k}`);
+            
+            let outNN = document.getElementById(`nn-dot-out-${k}-${r}-${c}`);
+            outNN.style.backgroundColor = outColors[k];
+            outNN.style.borderColor = outColors[k];
+            outNN.style.boxShadow = `0 0 10px ${outColors[k]}`;
+            activeOutNodes.push(outNN);
+        }
+
+        let activeHiddenNodes = [];
+        for(let m=0; m<2; m++) {
+            for(let hr=r; hr<r+3; hr++) {
+                for(let hc=c; hc<c+3; hc++) {
+                    let volHidIdx = hr * 7 + hc;
+                    document.getElementById(`vol-hid-${m}-${volHidIdx}`).classList.add('active-hid', `c${m}`);
+                    
+                    let hidNN = document.getElementById(`nn-dot-hid-${m}-${hr}-${hc}`);
+                    hidNN.style.backgroundColor = m === 0 ? '#f9e79f' : '#a3e4d7';
+                    hidNN.style.borderColor = m === 0 ? '#f39c12' : '#1abc9c';
+                    
+                    for(let k=0; k<2; k++) {
+                        drawLine(hidNN, activeOutNodes[k], outColors[k], '0.6', '1.5');
+                    }
+                    activeHiddenNodes.push({el: hidNN, hr: hr, hc: hc, m: m});
+                }
+            }
+        }
+
+        for(let z=0; z<3; z++) {
+            for(let ir=r; ir<r+5; ir++) {
+                for(let ic=c; ic<c+5; ic++) {
+                    let volInIdx = ir * 9 + ic;
+                    document.getElementById(`vol-in-${z}-${volInIdx}`).classList.add('active-in', `c${z}`);
+                    
+                    let inNN = document.getElementById(`nn-dot-in-${z}-${ir}-${ic}`);
+                    inNN.style.backgroundColor = `${inColors[z]}40`;
+                    inNN.style.borderColor = inColors[z];
+
+                    activeHiddenNodes.forEach(hid => {
+                        if(ir >= hid.hr && ir < hid.hr + 3 && ic >= hid.hc && ic < hid.hc + 3) {
+                            drawLine(inNN, hid.el, inColors[z], '0.25', '0.8');
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    let advSyncInterval = null;
+    function toggleAdvSyncPlay() {
+        const btn = document.getElementById('adv-sync-play-btn');
+        if(advSyncInterval) {
+            clearInterval(advSyncInterval);
+            advSyncInterval = null;
+            btn.innerText = "自动追踪感受野映射";
+        } else {
+            btn.innerText = "暂停追踪";
+            advSyncInterval = setInterval(() => {
+                let s = parseInt(document.getElementById('adv-sync-slider').value);
+                s = (s + 1) % 25; 
+                advSyncUpdate(s);
+            }, 1000); 
+        }
+    }
+</script>
+</body>
+</html>

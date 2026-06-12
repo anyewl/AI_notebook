@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小白也能懂的 Batch Normalization 教学</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+
+    <style>
+        /* 核心约束：容器宽度 1400px */
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px 0; }
+        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-radius: 12px; }
+        
+        h1, h2, h3 { color: #2c3e50; border-bottom: 2px solid #e0e6ed; padding-bottom: 10px; }
+        h1 { font-size: 2.2em; text-align: center; border: none; color: #1a73e8; }
+        .highlight { color: #e74c3c; font-weight: bold; }
+        
+        /* 神经网络层级结构动图 CSS */
+        .network-pipeline { display: flex; align-items: center; justify-content: space-between; background: #f8f9fa; padding: 30px; border-radius: 10px; margin: 20px 0; }
+        .layer { padding: 15px 25px; border-radius: 8px; font-weight: bold; text-align: center; color: white; background-color: #34495e; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+        .layer-bn { background-color: #e74c3c; animation: pulse 2s infinite; font-size: 1.1em; transform: scale(1.1); }
+        .arrow { font-size: 24px; color: #7f8c8d; font-weight: bold; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        /* 数据表格样式 */
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 1.1em; }
+        th, td { padding: 12px 15px; border: 1px solid #ddd; text-align: center; }
+        th { background-color: #1a73e8; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+
+        /* 动画演示区域 */
+        .animation-box { text-align: center; margin: 30px 0; padding: 20px; border: 2px dashed #bdc3c7; border-radius: 10px; background: #fafbfc; }
+        .data-point { display: inline-block; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; background: #3498db; color: white; font-weight: bold; margin: 0 10px; transition: all 1s ease-in-out; position: relative; }
+        .btn-play { padding: 10px 20px; font-size: 16px; background: #2ecc71; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 20px; }
+        .btn-play:hover { background: #27ae60; }
+
+        /* 代码块调整 */
+        pre { border-radius: 8px; padding: 15px; font-size: 1.05em; }
+        .info-box { background-color: #eef2f5; border-left: 5px solid #1a73e8; padding: 15px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>🚀 批量归一化 (Batch Normalization) 到底在干嘛？</h1>
+
+    <div class="info-box">
+        <strong>💡 通俗理解：</strong><br>
+        想象一个班级里有三门课的老师，英语老师打分满分是100分（大家都考80-90分），数学老师打分满分是10分（大家都考5-8分），体育老师打分是A/B/C。校长（神经网络）要综合评估学生，看到这些标准不一的分数直接<strong>懵了</strong>。<br><br>
+        <strong>Batch Normalization（简称BN层）就是教务处！</strong>它在校长看分数前，强制把所有科目的分数转换为<strong>“标准分”</strong>（平均分为0，方差为1）。这样校长就能一目了然地看出谁是尖子生，谁在拖后腿，学习（训练网络）的速度就会大大提升！
+    </div>
+
+    <h2>一、 它在神经网络的哪个环节干的？</h2>
+    <p>通常情况下，BN 层放在<strong>线性计算（如卷积或全连接层）之后，激活函数（如 ReLU）之前</strong>。请看下方的网络流向动图，闪烁的红色部分就是教务处（BN层）发挥作用的地方：</p>
+    
+    <div class="network-pipeline">
+        <div class="layer">输入数据 (Input)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">线性/卷积层<br>(计算 wx+b)</div>
+        <div class="arrow">➔</div>
+        <div class="layer layer-bn">🌟 Batch Norm 层 🌟<br>(统一标准)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">激活函数<br>(如 ReLU)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">输出结果</div>
+    </div>
+
+    <h2>二、 核心公式是什么？（拒绝死记硬背）</h2>
+    <p>其实它的底层逻辑仅仅只有四步：</p>
+    <ol>
+        <li><strong>求平均值 (Mean)：</strong> 算出这个批次 (Batch) 数据的平均分。公式：$$ \mu = \frac{1}{m} \sum_{i=1}^{m} x_i $$</li>
+        <li><strong>求方差 (Variance)：</strong> 算算大家的分数波动有多大。公式：$$ \sigma^2 = \frac{1}{m} \sum_{i=1}^{m} (x_i - \mu)^2 $$</li>
+        <li><strong>标准化 (Normalize)：</strong> 重点来了！用每个人的分数减去平均分，再除以标准差（加个微小的 $\epsilon$ 防止除以0）。公式：$$ \hat{x}_i = \frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}} $$</li>
+        <li><strong>缩放与平移 (Scale and Shift)：</strong> 机器有时候发现，完全标准的正态分布可能不利于后续学习。所以它给自己留了后路，用两个可学习的参数 $\gamma$（拉伸）和 $\beta$（平移）来微调。公式：$$ y_i = \gamma \hat{x}_i + \beta $$</li>
+    </ol>
+
+    <h2>三、 具体数据案例代入与动态演示</h2>
+    <p>假设我们提取了 <strong>3 个样本</strong>（也就是代码中的 Batch Size = 3）的某个特征（比如数学成绩）。数据如下：</p>
+
+    <table>
+        <tr>
+            <th>样本编号</th>
+            <th>原始特征值 ($x$)</th>
+            <th>标准化后的值 ($\hat{x}$) - 也就是模型真正吃进去的数值</th>
+        </tr>
+        <tr>
+            <td>样本 1</td>
+            <td>60</td>
+            <td id="res-1">?</td>
+        </tr>
+        <tr>
+            <td>样本 2</td>
+            <td>70</td>
+            <td id="res-2">?</td>
+        </tr>
+        <tr>
+            <td>样本 3</td>
+            <td>80</td>
+            <td id="res-3">?</td>
+        </tr>
+    </table>
+
+    <div class="animation-box">
+        <h3>👇 点击按钮，观看这三个数字是如何被“教务处”标准化的</h3>
+        <div id="balls-container">
+            <div class="data-point" id="ball-1">60</div>
+            <div class="data-point" id="ball-2">70</div>
+            <div class="data-point" id="ball-3">80</div>
+        </div>
+        <br>
+        <button class="btn-play" onclick="playAnimation()">▶️ 开始动态计算与演示</button>
+        
+        <div id="calc-steps" style="display:none; text-align: left; margin-top: 20px; font-size: 1.1em; background: white; padding: 15px; border-radius: 8px;">
+            <p><strong>第一步 (算均值):</strong> $\mu = \frac{60 + 70 + 80}{3} = 70$</p>
+            <p><strong>第二步 (算方差):</strong> $\sigma^2 = \frac{(60-70)^2 + (70-70)^2 + (80-70)^2}{3} = \frac{100 + 0 + 100}{3} \approx 66.67$</p>
+            <p><strong>第三步 (求标准差):</strong> $\sqrt{\sigma^2} = \sqrt{66.67} \approx 8.16$</p>
+            <p><strong>第四步 (带入归一化):</strong> 
+                <br>样本1：$(60 - 70) / 8.16 \approx -1.22$
+                <br>样本2：$(70 - 70) / 8.16 = 0$
+                <br>样本3：$(80 - 70) / 8.16 \approx 1.22$
+            </p>
+        </div>
+    </div>
+
+    <h2>四、 结合你的 PyTorch 代码深入解析</h2>
+    <p>现在，带着上面“算平均分”和“除以标准差”的直观感觉，我们来看你提供的代码块：</p>
+
+    <h3>1. 一维样本 (通常用于全连接层 `Linear`)</h3>
+    <pre><code class="language-python">import torch
+import torch.nn as nn
+
+# 1. 创建散点特征样本 (Batch=2人，Features=4门课)
+input = torch.randn(size=(2, 4)) 
+
+# 2. 创建线性层 (输出变为5门课的成绩)
+linear = nn.Linear(in_features=4, out_features=5)
+z = linear(input)
+
+# 3. 创建BN层 (教务处对这5门课进行归一化)
+# 注意：BatchNorm1d 的参数 5 代表特征数(通道数)，它会在 Batch 维度(也就是这2个人之间)对每门课分别求均值和方差！
+bn = nn.BatchNorm1d(num_features=5)  
+z_bn = bn(z)
+
+# 你可以打印看看：
+# print(z_bn.mean(0)) -> 结果会无限接近于 0
+# print(z_bn.std(0))  -> 结果会无限接近于 1
+# 这就是它把数据强制拉回到标准正态分布的魔力！
+
+# 4. 激活
+h = torch.relu(z_bn)</code></pre>
+
+    <h3>2. 二维样本 (通常用于图像和卷积层 `Conv2d`)</h3>
+    <pre><code class="language-python"># 1. 创建图像样本：Batch=2张图，Channels=3(红绿蓝)，4*4像素点
+input = torch.randn(size=(2, 3, 4, 4)) 
+z = input # 假设过了卷积层
+
+# 3. 创建BN层, 进行归一化处理
+# 此时教务处怎么算？它会在 Batch(2张图) + Height(4) + Width(4) 这三个维度上同时算！
+# 也就是说，对于【红色通道】，它会把 2 * 4 * 4 = 32 个像素点全拉过来，算出 1 个均值和 1 个方差！
+bn = nn.BatchNorm2d(num_features=3)
+z_bn = bn(z)
+
+# 4. 激活
+h = torch.relu(z_bn)</code></pre>
+
+</div>
+
+<script>
+    function playAnimation() {
+        // 1. 改变球的显示数值和位置以模拟标准化过程
+        const ball1 = document.getElementById('ball-1');
+        const ball2 = document.getElementById('ball-2');
+        const ball3 = document.getElementById('ball-3');
+        
+        // 减去均值阶段 (展示偏离度)
+        setTimeout(() => {
+            ball1.innerText = "-10";
+            ball1.style.transform = "translateX(-30px)";
+            ball1.style.backgroundColor = "#e74c3c";
+            
+            ball2.innerText = "0";
+            ball2.style.backgroundColor = "#2ecc71";
+            
+            ball3.innerText = "+10";
+            ball3.style.transform = "translateX(30px)";
+            ball3.style.backgroundColor = "#e74c3c";
+        }, 500);
+
+        // 除以方差阶段 (归一化到-1.22 ~ 1.22)
+        setTimeout(() => {
+            ball1.innerText = "-1.22";
+            ball1.style.transform = "translateX(-15px) scale(0.9)";
+            
+            ball2.innerText = "0";
+            ball2.style.transform = "scale(0.9)";
+            
+            ball3.innerText = "1.22";
+            ball3.style.transform = "translateX(15px) scale(0.9)";
+        }, 2000);
+
+        // 2. 显示背后的数学计算过程
+        setTimeout(() => {
+            document.getElementById('calc-steps').style.display = "block";
+            // 通知 MathJax 重新渲染新出现的公式
+            if (window.MathJax) {
+                MathJax.typesetPromise([document.getElementById('calc-steps')]);
+            }
+            
+            // 填充表格
+            document.getElementById('res-1').innerHTML = "<strong>-1.22</strong>";
+            document.getElementById('res-2').innerHTML = "<strong>0</strong>";
+            document.getElementById('res-3').innerHTML = "<strong>1.22</strong>";
+        }, 2500);
+    }
+	
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+
+</script>
+
+</body>
+</html>

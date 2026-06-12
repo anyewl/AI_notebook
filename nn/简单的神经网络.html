@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深度学习：二分类神经网络（Sigmoid 输出版）</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            chtml: {
+                displayAlign: 'center'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        :root {
+            --input-color: #3498db;
+            --hidden-color: #9b59b6;
+            --output-color: #2ecc71;
+            --accent-color: #e74c3c;
+            --bg-dark: #1e272e;
+            --bg-panel: #2c3e50;
+        }
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background-color: #f4f6f9; margin: 0; padding: 15px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 25px 35px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: var(--bg-dark); margin: 0 0 20px 0; font-size: 26px; }
+        .intro-box { background: #eef7ff; padding: 20px; border-left: 6px solid var(--input-color); margin-bottom: 20px; border-radius: 4px; }
+        .theory-box { background: #fffcf5; padding: 20px 25px; margin-bottom: 25px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.04); border-left: 5px solid #f39c12; }
+        .theory-box h2 { margin-top: 0; color: #2c3e50; font-size: 20px; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: center; }
+        th { background: var(--bg-dark); color: white; }
+        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; font-size: 15px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; background: var(--bg-panel); color: white; transition: all 0.2s; }
+        .btn:hover { background: var(--input-color); transform: translateY(-2px); }
+        .viz-container { display: flex; gap: 20px; background: var(--bg-dark); padding: 25px; border-radius: 10px; color: #fff; min-height: 400px; }
+        .network-wrapper { flex: 0 0 450px; position: relative; background: rgba(0,0,0,0.2); border-radius: 8px; }
+        .node { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; z-index: 10; transition: all 0.3s; background: var(--bg-panel); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .node .val { font-size: 16px; color: #f1c40f; font-family: monospace; }
+        .node-label { position: absolute; top: -22px; font-size: 12px; color: #bdc3c7; white-space: nowrap; }
+        .weight-label { position: absolute; background: var(--bg-dark); color: #a4b0be; font-size: 11px; padding: 2px 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); z-index: 5; font-family: monospace; transform: translate(-50%, -50%); }
+        .link { stroke: rgba(255,255,255,0.15); stroke-width: 2; transition: all 0.3s; }
+        .link.active { stroke: var(--accent-color); stroke-width: 4; stroke-dasharray: 8; animation: dash 0.8s linear infinite; }
+        @keyframes dash { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+        .math-panel { flex: 1; background: rgba(255,255,255,0.03); padding: 15px 25px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; justify-content: center; }
+        .math-step { margin-bottom: 15px; }
+        .math-step h4 { color: var(--input-color); margin: 0 0 8px 0; font-size: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
+        mjx-container[display="true"] { margin: 3px 0 !important; }
+        .divider { border-top: 1px dashed rgba(255,255,255,0.1); margin: 8px 0; }
+        /* 面试题模块样式 */
+        .interview-card { background: #fff; border: 2px solid #3498db; padding: 20px; border-radius: 8px; margin-top: 30px; }
+        .interview-card h3 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .q-item { margin-bottom: 20px; }
+        .q-item strong { color: #e67e22; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>神经网络动态推导 (二分类：买还是不买)</h1>
+    
+    <div class="intro-box">
+        <strong>导师寄语：</strong> 在二分类任务中，我们希望输出结果落在 0 到 1 之间，代表“购买概率”。为此，我们使用 <strong>Sigmoid 激活函数</strong>，将输出层的得分平滑映射为概率。
+    </div>
+
+    <div class="theory-box" style="border-left-color: #3498db; background-color: #f0f8ff;">
+        <h2>补充说明：神经网络的三大核心结构</h2>
+        <p>在下方进行操作推导前，让我们先结合动图里的节点，理清神经网络的基本“骨架”：</p>
+        <ul style="line-height: 1.8;">
+            <li><strong style="color: var(--input-color);">输入层 (Input Layer - 蓝色节点)：</strong> 负责“看”和“听”。它是数据的入口，负责接收外界传入的原始数据（本例中就是具体的“甜度”和“珍珠量”数值）。<strong>注意：输入层只负责搬运数据，不进行任何加工或数学计算。</strong></li>
+            <li><strong style="color: var(--hidden-color);">隐藏层 (Hidden Layer - 紫色节点)：</strong> 负责“思考”和“总结”。它是输入层与输出层之间的夹层。为什么叫“隐藏”？因为外界看不见里面的运算，它像是网络内部的黑盒。在这里，神经元们通过互连的权重（Weight）和激活函数，疯狂提取并组合出像“高甜度+少珍珠=容易腻”这样深层次的规律。</li>
+            <li><strong style="color: var(--output-color);">输出层 (Output Layer - 绿色节点)：</strong> 负责“做决定”。它是网络的最后一站，负责将隐藏层提炼好的复杂特征，转化为最终我们要的答案。本例中，它结合计算得出一个 0~1 的“购买概率”。</li>
+        </ul>
+    </div>
+    <div class="theory-box">
+        <h2>原理：为什么用 Sigmoid？</h2>
+        <p><strong>输出层 Sigmoid：</strong>当我们把奶茶的“口感”和“负罪感”传给输出层后，得到一个原始得分 $z$。Sigmoid 函数 $\sigma(z) = \frac{1}{1+e^{-z}}$ 能将这个得分转化为概率。</p>
+        <ul>
+            <li>如果结果 > 0.5：预测为“买”(1)</li>
+            <li>如果结果 < 0.5：预测为“不买”(0)</li>
+        </ul>
+    </div>
+
+    <h3>场景数据：三款奶茶购买预测</h3>
+    <table>
+        <thead>
+            <tr><th>编号</th><th>甜度 ($x_1$)</th><th>珍珠量 ($x_2$)</th><th>预测逻辑</th><th>输出 $P$ (购买概率)</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1号</td><td>9</td><td>2</td><td>极高甜，低珍珠</td><td><strong>$\approx 0.9$ (买)</strong></td></tr>
+            <tr><td>2号</td><td>2</td><td>8</td><td>低甜，多珍珠</td><td><strong>$\approx 0.1$ (不买)</strong></td></tr>
+            <tr><td>3号</td><td>5</td><td>5</td><td>中规中矩</td><td><strong>$\approx 0.5$ (临界)</strong></td></tr>
+        </tbody>
+    </table>
+
+    <div class="controls">
+        <button class="btn" onclick="calculate(0)">计算 1号</button>
+        <button class="btn" onclick="calculate(1)">计算 2号</button>
+        <button class="btn" onclick="calculate(2)">计算 3号</button>
+    </div>
+
+    <div class="viz-container">
+        <div class="network-wrapper" id="network">
+            <svg id="svg-links" width="100%" height="100%" style="position:absolute; top:0; left:0;"></svg>
+            <div class="node" id="in-1" style="left:30px; top:60px; border-color: var(--input-color);"><div class="node-label">甜度</div><div class="val" id="v-in-1">-</div></div>
+            <div class="node" id="in-2" style="left:30px; top:240px; border-color: var(--input-color);"><div class="node-label">珍珠</div><div class="val" id="v-in-2">-</div></div>
+            <div class="node" id="hid-1" style="left:200px; top:60px; border-color: var(--hidden-color);"><div class="node-label">特征1</div><div class="val" id="v-hid-1">-</div></div>
+            <div class="node" id="hid-2" style="left:200px; top:240px; border-color: var(--hidden-color);"><div class="node-label">特征2</div><div class="val" id="v-hid-2">-</div></div>
+            <div class="node" id="out-1" style="left:350px; top:150px; border-color: var(--output-color); width: 70px; height: 70px;"><div class="node-label">买的概率</div><div class="val" id="v-out-1" style="font-size:20px;">-</div></div>
+        </div>
+        <div class="math-panel" id="math-panel">
+            <div style="text-align:center; color:#888;">👈 选择数据进行动态推导</div>
+        </div>
+    </div>
+
+	    <div class="interview-card" style="border-color: #2ecc71;">
+        <h3 style="color: #27ae60;">💻 补充：Python 代码实现（与动态推导完全一致）</h3>
+        <p>你可以直接复制以下 Python 代码在本地运行，底层参数与上述前向传播（Forward Propagation）的数学过程和计算结果<strong>完全一致</strong>：</p>
+        <pre style="background: #1e272e; color: #a4b0be; padding: 15px; border-radius: 8px; overflow-x: auto; font-family: monospace; font-size: 14px; line-height: 1.5;"><code>import numpy as np
+
+# 1. 定义激活函数
+def relu(x):
+    return np.maximum(0, x)
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+# 2. 初始化网络参数 (与网页动图的边权重完全对应)
+# 隐藏层 (输入维度2，输出维度2)
+wL1 = np.array([[0.7, -0.3],   # 对应 隐藏层节点1 (接收甜度、珍珠)
+                [0.1,  0.8]])  # 对应 隐藏层节点2 (接收甜度、珍珠)
+bL1 = np.array([-1.0, -2.0])   # 隐藏层偏置项
+
+# 输出层 (输入维度2，输出维度1)
+wL2 = np.array([0.9, -0.6])    # 对应 输出层节点 (接收特征1、特征2)
+bL2 = 0.5                      # 输出层偏置项
+
+# 3. 定义测试场景 (3款奶茶的数据)
+scenarios = [
+    {"name": "1号奶茶", "x": np.array([9, 2])},
+    {"name": "2号奶茶", "x": np.array([2, 8])},
+    {"name": "3号奶茶", "x": np.array([5, 5])}
+]
+
+# 4. 执行前向传播计算
+for item in scenarios:
+    x = item["x"]
+    
+    # --- 第一层：隐藏层计算 (Linear + ReLU) ---
+    z_hidden = np.dot(wL1, x) + bL1
+    a_hidden = relu(z_hidden)
+    
+    # --- 第二层：输出层计算 (Linear + Sigmoid) ---
+    z_out = np.dot(wL2, a_hidden) + bL2
+    p_out = sigmoid(z_out)
+    
+    # 打印结果，保留与页面一致的小数位数
+    print(f"--- {item['name']} (甜度:{x[0]}, 珍珠:{x[1]}) ---")
+    print(f"隐藏层特征 (a1, a2) : [{a_hidden[0]:.1f}, {a_hidden[1]:.1f}]")
+    print(f"输出层得分 (z_out)  : {z_out:.2f}")
+    print(f"最终购买概率 (P)    : {p_out:.3f}\n")
+</code></pre>
+    </div>
+	
+
+    <div class="interview-card">
+        <h3>面试问题补充：神经网络基础</h3>
+        <div class="q-item">
+            <strong>1. 什么是神经网络 (Neural Network)？</strong>
+            <p>神经网络是一种模拟人脑神经元连接方式的数学模型，它通过多层级的计算来处理复杂的信息。简单来说，它由大量的“神经元”（节点）连接而成，每个连接都有一个“权重”（Weight）。数据输入后，通过逐层加权求和并经过激活函数处理，最终输出结果。其核心能力在于通过反向传播算法（Backpropagation）根据误差自动优化权重，从而学会处理复杂的模式识别、预测等任务。</p>
+        </div>
+        <div class="q-item">
+            <strong>2. 为什么要使用激活函数 (Activation Function)？</strong>
+            <p>如果没有激活函数，神经网络的每一层本质上都是线性变换（$z=wx+b$）。无论叠加多少层，线性变换的组合依然是线性的。使用激活函数（如 ReLU, Sigmoid, Tanh）引入了<strong>非线性因素</strong>，使得神经网络能够拟合复杂的非线性函数，从而具备解决实际复杂问题的能力。</p>
+        </div>
+        <div class="q-item">
+            <strong>3. 什么是“反向传播” (Backpropagation)？</strong>
+            <p>这是训练神经网络的核心算法。它利用链式法则（Chain Rule），从输出层开始，计算预测结果与真实标签之间的误差（Loss），然后将这个误差沿着网络向回传，计算出每一层权重对误差的贡献（梯度）。最后，利用梯度下降法更新权重，让误差变小。</p>
+        </div>
+		<div class="q-item">
+            <strong>4. 神经网络为什么时候变深？什么时候变宽？ (Backpropagation)？</strong>
+            <p>什么时候需要变宽？ 当你的输入数据本身包含海量且互不相关的低级特征时。你需要足够的“工位”去捕捉这些平行的信息，防止信息在早期网络层就因为维度太低而产生丢失（信息瓶颈）。</p>
+			<p>什么时候需要变深？ 当你的任务逻辑非常复杂，需要高度抽象的理解时（比如图像识别、自然语言处理）。你需要网络能够一步步抽丝剥茧，将底层的像素/字符组合成高层的语义/逻辑。</p>
+	   </div>
+    </div>
+
+
+</div>
+
+<script>
+
+	(function() {
+		const TARGET_X = -143040716
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+
+    const net = {
+        scenarios: [
+            { x1: 9, x2: 2, name: "1号奶茶" },
+            { x1: 2, x2: 8, name: "2号奶茶" },
+            { x1: 5, x2: 5, name: "3号奶茶" }
+        ],
+        wL1: [[0.7, -0.3], [0.1, 0.8]], bL1: [-1, -2],
+        wL2: [0.9, -0.6], bL2: [0.5]
+    };
+
+    function initLinks() {
+        const wrapper = document.getElementById('network');
+        const svg = document.getElementById('svg-links');
+        const r = 33; 
+        const pos = { 'in-1': {x: 30+r, y: 60+r}, 'in-2': {x: 30+r, y: 240+r}, 'hid-1': {x: 200+r, y: 60+r}, 'hid-2': {x: 200+r, y: 240+r}, 'out-1': {x: 350+r+5, y: 150+r+5} };
+        const lines = [
+            { id: 0, from: 'in-1', to: 'hid-1', w: '0.7' }, { id: 1, from: 'in-1', to: 'hid-2', w: '0.1' },
+            { id: 2, from: 'in-2', to: 'hid-1', w: '-0.3' }, { id: 3, from: 'in-2', to: 'hid-2', w: '0.8' },
+            { id: 4, from: 'hid-1', to: 'out-1', w: '0.9' }, { id: 5, from: 'hid-2', to: 'out-1', w: '-0.6' }
+        ];
+        lines.forEach(link => {
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.id = `line-${link.id}`; line.className.baseVal = "link";
+            line.setAttribute("x1", pos[link.from].x); line.setAttribute("y1", pos[link.from].y);
+            line.setAttribute("x2", pos[link.to].x); line.setAttribute("y2", pos[link.to].y);
+            svg.appendChild(line);
+            const label = document.createElement('div'); label.className = 'weight-label';
+            label.innerText = `w=${link.w}`;
+            label.style.left = ((pos[link.from].x + pos[link.to].x) / 2) + 'px';
+            label.style.top = ((pos[link.from].y + pos[link.to].y) / 2 + (link.id==1?-15:link.id==2?15:0)) + 'px';
+            wrapper.appendChild(label);
+        });
+    }
+
+    async function calculate(idx) {
+        const data = net.scenarios[idx];
+        const panel = document.getElementById('math-panel');
+        
+        document.getElementById('v-in-1').innerText = data.x1;
+        document.getElementById('v-in-2').innerText = data.x2;
+        
+        // 1. 隐藏层 (ReLU)
+        let z1 = data.x1 * net.wL1[0][0] + data.x2 * net.wL1[0][1] + net.bL1[0];
+        let a1 = Math.max(0, z1);
+        let z2 = data.x1 * net.wL1[1][0] + data.x2 * net.wL1[1][1] + net.bL1[1];
+        let a2 = Math.max(0, z2);
+        
+        panel.innerHTML = `<div class="math-step"><h4>1. 隐藏层 (ReLU)</h4>$$ a_1 = \\max(0, ${z1.toFixed(1)}) = ${a1.toFixed(1)} $$$$ a_2 = \\max(0, ${z2.toFixed(1)}) = ${a2.toFixed(1)} $$</div>`;
+        MathJax.typesetPromise();
+        
+        document.getElementById('v-hid-1').innerText = a1.toFixed(1);
+        document.getElementById('v-hid-2').innerText = a2.toFixed(1);
+        
+        // 2. 输出层 (Sigmoid)
+        let z_out = a1 * net.wL2[0] + a2 * net.wL2[1] + net.bL2[0];
+        let p_out = 1 / (1 + Math.exp(-z_out)); // Sigmoid 公式
+        
+        await new Promise(r => setTimeout(r, 600));
+        panel.innerHTML += `
+            <div class="math-step">
+                <h4>2. 输出层 (Sigmoid)</h4>
+                $$ z_{out} = ${z_out.toFixed(2)} $$
+                $$ P = \\sigma(z_{out}) = \\frac{1}{1+e^{-${z_out.toFixed(2)}}} \\approx \\mathbf{${p_out.toFixed(3)}} $$
+            </div>`;
+        MathJax.typesetPromise();
+        document.getElementById('v-out-1').innerText = p_out.toFixed(2);
+    }
+
+    window.onload = initLinks;
+</script>
+</body>
+</html>

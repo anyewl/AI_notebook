@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小白也能懂的 Batch Normalization 教学</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+
+    <style>
+        /* ================= 原有批量归一化基础样式 ================= */
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px 0; }
+        .container { max-width: 1400px; margin: 0 auto; background: #fff; padding: 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-radius: 12px; }
+        
+        h1, h2, h3 { color: #2c3e50; border-bottom: 2px solid #e0e6ed; padding-bottom: 10px; }
+        h1 { font-size: 2.2em; text-align: center; border: none; color: #1a73e8; }
+        .highlight { color: #e74c3c; font-weight: bold; }
+        
+        /* 神经网络层级结构动图 CSS */
+        .network-pipeline { display: flex; align-items: center; justify-content: space-between; background: #f8f9fa; padding: 30px; border-radius: 10px; margin: 20px 0; }
+        .layer { padding: 15px 25px; border-radius: 8px; font-weight: bold; text-align: center; color: white; background-color: #34495e; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+        .layer-bn { background-color: #e74c3c; animation: pulse 2s infinite; font-size: 1.1em; transform: scale(1.1); }
+        .arrow { font-size: 24px; color: #7f8c8d; font-weight: bold; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        /* 数据表格样式 */
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 1.1em; }
+        th, td { padding: 12px 15px; border: 1px solid #ddd; text-align: center; }
+        th { background-color: #1a73e8; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+
+        /* 动画演示区域 */
+        .animation-box { text-align: center; margin: 30px 0; padding: 20px; border: 2px dashed #bdc3c7; border-radius: 10px; background: #fafbfc; }
+        .data-point { display: inline-block; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; background: #3498db; color: white; font-weight: bold; margin: 0 10px; transition: all 1s ease-in-out; position: relative; }
+        
+        /* 代码块调整 */
+        pre { border-radius: 8px; padding: 15px; font-size: 1.05em; background: #282c34; color: #abb2bf; }
+        .info-box { background-color: #eef2f5; border-left: 5px solid #1a73e8; padding: 15px; margin: 20px 0; }
+
+        /* ================= 引入的交互沙盒专属样式 ================= */
+        .edu-control-panel { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; background: #f8f9fa; padding: 15px 20px; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 25px; }
+        .slider-group { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 5px; text-align: left; }
+        .slider-group label { font-size: 0.9rem; font-weight: bold; }
+        .highlight-val { color: #e67e22; font-weight: bold; }
+        .edu-main-layout { display: flex; flex-wrap: wrap; gap: 25px; margin-top: 20px; text-align: left; }
+        .edu-left { flex: 1; min-width: 400px; display: flex; flex-direction: column; align-items: center; }
+        .edu-right { flex: 1.2; min-width: 450px; }
+        .canvas-title, .table-title { font-weight: bold; color: #2c3e50; margin-bottom: 10px; font-size: 1rem; text-align: center; }
+        #eduCanvas { border: 1px solid #dcdde1; background: #fafbfc; border-radius: 8px; box-shadow: inset 0 2px 6px rgba(0,0,0,0.02); }
+        .canvas-legend { font-size: 0.8rem; color: #7f8c8d; margin-top: 8px; text-align: center; }
+        .edu-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; margin: 0; }
+        .edu-table th, .edu-table td { border: 1px solid #e1e8ed; padding: 10px; text-align: center; }
+        .edu-table th { background-color: #f1f2f6; color: #2c3e50; font-weight: bold; }
+        .edu-table tr:hover { background-color: #f8f9fa; }
+        .edu-summary-box { margin-top: 15px; background: #ebf5fb; border-left: 4px solid #3498db; padding: 12px; border-radius: 0 6px 6px 0; font-size: 0.85rem; color: #2c3e50; line-height: 1.6; }
+        .btn { background-color: #3498db; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: background 0.3s; font-weight: bold; }
+        .btn:hover { background-color: #2980b9; }
+
+        /* 面试题标签样式 */
+        .tag-type { background-color: #34495e; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.8em; margin-right: 5px; }
+        .tag-star { color: #f1c40f; margin-right: 10px; font-weight: bold;}
+        .interview-q { margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e1e8ed; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .interview-q h4 { margin: 0 0 10px 0; color: #2c3e50; }
+
+        /* ================= 内部协变量偏移沙盒专属样式 ================= */
+        .sandbox-wrapper {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            margin: 40px 0;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-radius: 12px;
+            border: 2px dashed #bdc3c7;
+        }
+        .sandbox-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.06);
+            padding: 30px;
+            max-width: 1000px;
+            width: 100%;
+        }
+        .sandbox-container h2 { text-align: center; color: #1a73e8; margin-bottom: 5px; border-bottom: none; }
+        .sandbox-container .desc { text-align: center; color: #7f8c8d; font-size: 0.95em; margin-bottom: 20px; }
+        
+        .control-panel {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            background: #f1f3f5;
+            padding: 15px 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .btn-run { background-color: #3498db; color: white; box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2); }
+        .btn-run:hover { background-color: #2980b9; transform: translateY(-1px); box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3); }
+        .btn-run:disabled { background-color: #95a5a6; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        /* 全新设计的直观状态开关 */
+        .switch-wrapper { display: flex; align-items: center; font-weight: bold; font-size: 1.05em; color: #34495e; }
+        .custom-toggle { position: relative; display: inline-block; width: 130px; height: 38px; margin-left: 15px; }
+        .custom-toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #e74c3c; transition: .4s cubic-bezier(0.4, 0.0, 0.2, 1); border-radius: 40px;
+            display: flex; align-items: center; overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .toggle-slider:before {
+            position: absolute; content: ""; height: 30px; width: 30px; left: 4px; bottom: 4px;
+            background-color: white; transition: .4s cubic-bezier(0.4, 0.0, 0.2, 1); border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 2;
+        }
+        .custom-toggle input:checked + .toggle-slider { background-color: #2ecc71; }
+        .custom-toggle input:checked + .toggle-slider:before { transform: translateX(92px); }
+
+        .toggle-text { position: absolute; z-index: 1; transition: opacity 0.3s; font-size: 14px; color: white; font-weight: bold; white-space: nowrap; }
+        .toggle-off { right: 12px; opacity: 1; }
+        .toggle-on { left: 12px; opacity: 0; }
+        .custom-toggle input:checked + .toggle-slider .toggle-off { opacity: 0; }
+        .custom-toggle input:checked + .toggle-slider .toggle-on { opacity: 1; }
+
+        #simCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+
+        .math-panel {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8fbff;
+            border-left: 5px solid #3498db;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            justify-content: space-around;
+            font-size: 1.1em;
+        }
+        .dynamic-val { font-weight: bold; color: #e67e22; font-family: monospace; font-size: 1.2em; }
+        .layer-indicator { text-align: center; font-size: 1.2em; font-weight: bold; color: #34495e; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚀 批量归一化 (Batch Normalization) 到底在干嘛？</h1>
+
+    <div class="info-box">
+        <strong>💡 通俗理解：</strong><br>
+        想象一个班级里有三门课的老师，英语老师打分满分是100分（大家都考80-90分），数学老师打分满分是10分（大家都考5-8分），体育老师打分是A/B/C。校长（神经网络）要综合评估学生，看到这些标准不一的分数直接<strong>懵了</strong>。<br><br>
+        <strong>Batch Normalization（简称BN层）就是教务处！</strong>它在校长看分数前，强制把所有科目的分数转换为<strong>“标准分”</strong>（平均分为0，方差为1）。这样校长就能一目了然地看出谁是尖子生，谁在拖后腿，学习（训练网络）的速度就会大大提升！
+    </div>
+
+    <h2>一、 它在神经网络的哪个环节干的？</h2>
+    <p>通常情况下，BN 层放在<strong>线性计算（如卷积或全连接层）之后，激活函数（如 ReLU）之前</strong>。请看下方的网络流向动图，闪烁的红色部分就是教务处（BN层）发挥作用的地方：</p>
+    
+    <div class="network-pipeline">
+        <div class="layer">输入数据 (Input)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">线性/卷积层<br>(计算 wx+b)</div>
+        <div class="arrow">➔</div>
+        <div class="layer layer-bn">🌟 Batch Norm 层 🌟<br>(统一标准)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">激活函数<br>(如 ReLU)</div>
+        <div class="arrow">➔</div>
+        <div class="layer">输出结果</div>
+    </div>
+
+    <h2>二、 核心公式是什么？（拒绝死记硬背）</h2>
+    <p>其实它的底层逻辑仅仅只有四步：</p>
+    <ol>
+        <li><strong>求均值 (Mean)：</strong> 算出这个批次 (Batch) 数据的平均分。公式：$$ \mu_B = \frac{1}{m} \sum_{i=1}^{m} x_i $$</li>
+        <li><strong>求方差 (Variance)：</strong> 算算大家的分数波动有多大。公式：$$ \sigma_B^2 = \frac{1}{m} \sum_{i=1}^{m} (x_i - \mu_B)^2 $$</li>
+        <li><strong>标准化 (Normalize)：</strong> 重点来了！用每个人的分数减去平均分，再除以标准差（加个微小的 $\epsilon$ 防止除以0）。公式：$$ \hat{x}_i = \frac{x_i - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} $$</li>
+        <li><strong>缩放与平移 (Scale and Shift)：</strong> 机器有时候发现，完全标准的正态分布可能不利于后续学习。所以它给自己留了后路，用两个可学习的参数 $\gamma$（拉伸）和 $\beta$（平移）来微调。公式：$$ y_i = \gamma \hat{x}_i + \beta $$</li>
+    </ol>
+
+    <h2>三、 动态演算沙盒与数学计算同步拆解</h2>
+    <p>请随意拖动下方参数，或者点击随机生成。下方动态推演面板会<strong>严格抓取物理引擎中的实时数据</strong>，为您进行数学推演演示：</p>
+
+    <div class="animation-box">
+        <div class="edu-control-panel">
+            <div class="slider-group">
+                <label>缩放因子 $\gamma$ (Gamma): <span id="gamma-val" class="highlight-val">1.0</span></label>
+                <input type="range" id="slider-gamma" min="0.1" max="3.0" step="0.1" value="1.0">
+            </div>
+            <div class="slider-group">
+                <label>平移偏移 $\beta$ (Beta): <span id="beta-val" class="highlight-val">0.0</span></label>
+                <input type="range" id="slider-beta" min="-3.0" max="3.0" step="0.1" value="0.0">
+            </div>
+            <button class="btn" id="btn-rand-batch" style="background-color: #27ae60;">🎲 随机生成一波新 Batch 数据</button>
+        </div>
+
+        <div class="edu-main-layout">
+            <div class="edu-left">
+                <div class="canvas-title">一维特征数轴动态过渡视窗</div>
+                <canvas id="eduCanvas" width="450" height="350"></canvas>
+                <div class="canvas-legend">
+                    🔹 蓝球: 原始输入 $x_i$ | 🟢 绿圈: 标准分布范围 $\pm 1$ | 🔸 橙球: 最终输出 $y_i$
+                </div>
+            </div>
+            <div class="edu-right">
+                <div class="table-title">实时张量数值跟踪矩阵 (Mini-batch size $m=4$)</div>
+                <table class="edu-table">
+                    <thead>
+                        <tr>
+                            <th>样本</th>
+                            <th>初始 $x_i$</th>
+                            <th>去均值 $x_i - \mu_B$</th>
+                            <th>归一化 $\hat{x}_i$</th>
+                            <th>最终输出 $y_i$</th>
+                        </tr>
+                    </thead>
+                    <tbody id="edu-table-body">
+                    </tbody>
+                </table>
+                <div class="edu-summary-box" id="edu-summary">
+                    加载中...
+                </div>
+            </div>
+        </div>
+
+        <div id="calc-steps" style="text-align: left; margin-top: 30px; font-size: 1.1em; background: white; padding: 25px; border-radius: 8px; border: 1px solid #ddd;">
+        </div>
+    </div>
+
+    <div class="sandbox-wrapper">
+        <div class="sandbox-container">
+            <h2>内部协变量偏移 (ICS) 动态诊断仪</h2>
+            <div class="desc">背景高亮区域代表 Tanh 激活函数的“高梯度敏感区”。深色边缘为“梯度消失饱和区”。</div>
+
+            <div class="control-panel">
+                <div class="switch-wrapper">
+                    <span>BN 层架构状态：</span>
+                    <label class="custom-toggle">
+                        <input type="checkbox" id="bn-toggle">
+                        <span class="toggle-slider">
+                            <span class="toggle-text toggle-on">✅ 已开启</span>
+                            <span class="toggle-text toggle-off">🛑 已关闭</span>
+                        </span>
+                    </label>
+                </div>
+                <button class="btn btn-run" id="btn-run">▶ 连续推演 3 层网络</button>
+            </div>
+
+            <div class="layer-indicator" id="layer-text">当前状态: 初始输入 (Layer 0)</div>
+            
+            <canvas id="simCanvas" width="900" height="300"></canvas>
+
+            <div class="math-panel">
+                <div>
+                    <span>$$ \mu_{B} = \frac{1}{m}\sum_{i=1}^m x_i $$</span>
+                    <div style="text-align:center;">实时均值: <span class="dynamic-val" id="val-mu">0.00</span></div>
+                </div>
+                <div>
+                    <span>$$ \sigma_{B}^2 = \frac{1}{m}\sum_{i=1}^m (x_i - \mu_{B})^2 $$</span>
+                    <div style="text-align:center;">实时方差: <span class="dynamic-val" id="val-var">1.00</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <h2>四、 完整可运行的 PyTorch 实战验证代码</h2>
+    <p>为了让您对“底层数学公式”与“上层框架调用”有无缝的体感连接，这段代码手工复现了上述四步，并将其与 <code>nn.BatchNorm1d</code> 官方底层实现进行绝对误差断言验证（可直接复制并在本地运行）：</p>
+
+    <pre><code class="language-python">import torch
+import torch.nn as nn
+
+# 1. 初始化设置：锁定随机种子确保可复现，设定极小值防止除以 0
+torch.manual_seed(42)
+eps = 1e-5
+
+# 2. 模拟沙盒中的一维特征数据：Batch Size = 4, Features = 1
+# 对应沙盒中四个蓝色小球的数值状态
+x = torch.tensor([[1.2], [3.4], [-0.6], [2.0]], dtype=torch.float32)
+
+print("--- 1. 原始输入特征 x ---")
+print(x.squeeze())
+
+# =========================================================
+# 方式一：手工实现 Batch Normalization (遵循标准四步公式)
+# =========================================================
+
+# Step 1: 算均值 (在 batch 维度上求均值)
+mean_manual = x.mean(dim=0)
+
+# Step 2: 算方差 
+# 注意：PyTorch 的 var 默认是无偏估计(除以 m-1)
+# 为了和深度学习标准 BN 层的底层逻辑对齐，这里必须设置 unbiased=False (除以 m)
+var_manual = x.var(dim=0, unbiased=False)
+
+# Step 3: 标准化
+x_hat = (x - mean_manual) / torch.sqrt(var_manual + eps)
+
+# Step 4: 缩放与平移 (模拟网络学到的可调参数，设 gamma=1.0, beta=0.0)
+gamma = 1.0
+beta = 0.0
+y_manual = gamma * x_hat + beta
+
+print("\n--- 2. 手写推导的底层运算结果 ---")
+print(f"均值 (mu): {mean_manual.item():.4f}")
+print(f"方差 (sigma^2): {var_manual.item():.4f}")
+print("最终输出 y:")
+print(y_manual.squeeze())
+
+# =========================================================
+# 方式二：调用 PyTorch 官方 nn.BatchNorm1d 算子
+# =========================================================
+
+# num_features=1，因为我们的测试数据仅有 1 维特征
+bn = nn.BatchNorm1d(num_features=1, eps=eps)
+
+# 【核心机制】将网络置于训练模式！训练模式下才会强制计算当前 batch 的统计量
+bn.train() 
+
+y_pytorch = bn(x)
+
+print("\n--- 3. 官方 nn.BatchNorm1d 计算结果 ---")
+print(y_pytorch.squeeze())
+
+# =========================================================
+# 对齐验证
+# =========================================================
+diff = torch.abs(y_manual - y_pytorch).max().item()
+print(f"\n手工推导与官方算子输出的最大误差: {diff:.6e}")
+if diff < 1e-5:
+    print("✅ 验证成功！手写前向传播完全匹配底层架构实现。")
+</code></pre>
+
+    <h2>五、 大厂高频面试题 (Batch Normalization)</h2>
+    <p>检验学习成果的关键环节，以下是在算法工程师面试中关于 BN 的核心考察点：</p>
+
+    <div class="interview-q">
+        <h4><span class="tag-type">基础概念</span><span class="tag-star">⭐⭐⭐</span> 1. 为什么神经网络需要引入 Batch Normalization？解决了什么核心痛点？</h4>
+        <p><strong>核心解析：</strong> BN 主要解决了<strong>内部协变量偏移 (Internal Covariate Shift)</strong> 问题。在深层网络中，随着前层参数的更新，每一层输入数据的分布都在不断变化。这导致后层网络需要不断适应新的数据分布，极大降低了训练速度。BN 通过在每层输入前强制将数据拉回 $N(0, 1)$ 标准正态分布，保证了激活函数的输入始终位于敏感（梯度较大）区域，缓解了梯度消失问题，允许使用更大的学习率加速训练。</p>
+    </div>
+
+    <div class="interview-q">
+        <h4><span class="tag-type">参数机制</span><span class="tag-star">⭐⭐⭐</span> 2. BN 运算中的可学习参数 $\gamma$ 和 $\beta$ 有什么意义？如果去掉它们会怎样？</h4>
+        <p><strong>核心解析：</strong> 如果仅仅把数据强行归一化到标准正态分布，可能会<strong>破坏网络在此前已经学习到的特征表达</strong>（例如：某些激活函数如 ReLU 的非线性在均值为 0 时可能退化）。$\gamma$（缩放因子）和 $\beta$（平移偏置）赋予了网络“撤销”或微调归一化操作的自由度。如果网络认为原始分布更有利于降低 Loss，它可以自行学习 $\gamma = \sqrt{\sigma^2 + \epsilon}$ 和 $\beta = \mu$ 来恢复原始分布。</p>
+    </div>
+
+    <div class="interview-q">
+        <h4><span class="tag-type">工程架构</span><span class="tag-star">⭐⭐⭐⭐</span> 3. 在 PyTorch 中，BN 层在 <code>train()</code> 和 <code>eval()</code> 模式下有什么本质区别？推理阶段的均值和方差是从哪里来的？</h4>
+        <p><strong>核心解析：</strong> 
+            <br>• <strong>在 <code>train()</code> 模式下</strong>：BN 利用当前所在 Mini-batch 的实际均值和方差进行归一化。同时，它会在后台维持一个<strong>全局滑动平均值 (Running Mean/Var)</strong>。
+            <br>• <strong>在 <code>eval()</code> 模式下</strong>：推理阶段可能只有一个样本（Batch Size = 1），此时无法计算方差。因此 <code>eval()</code> 模式下，BN 会停止计算当前 batch 的均值和方差，而是直接调用训练期维护累加好的全局滑动均值和方差来进行标准化转换。
+        </p>
+    </div>
+
+    <div class="interview-q">
+        <h4><span class="tag-type">底层推导</span><span class="tag-star">⭐⭐⭐⭐</span> 4. 在算方差时，分母是用 $m$（有偏估计）还是 $m-1$（无偏估计）？PyTorch 是如何处理的？</h4>
+        <p><strong>核心解析：</strong> 这是一个极易踩坑的底层细节！在<strong>训练阶段</strong>的前向传播归一化计算时，除以的是 $m$（有偏估计）。但是在更新和维护用于推理阶段的全局滑动方差 (Running Variance) 时，为了保证全局估计的无偏性，PyTorch 底层使用的修正乘子是 $\frac{m}{m-1}$，也就是采用无偏估计的逻辑来累加记录全局状态。</p>
+    </div>
+
+    <div class="interview-q">
+        <h4><span class="tag-type">网络结构</span><span class="tag-star">⭐⭐</span> 5. Batch Normalization 应该放在激活函数 (如 ReLU) 之前还是之后？</h4>
+        <p><strong>核心解析：</strong> 这是一个学术界至今存在微弱争议的话题，但在工业界，绝大多数经典架构（如 ResNet）都将其放置在<strong>线性计算之后、激活函数之前</strong>（即 <code>Conv2D -> BN -> ReLU</code>）。原因是 BN 的设计初衷就是为了让送入激活函数的数据分布处于一个平稳区间，从而充分利用激活函数在其原点附近的梯度，避免梯度消失或者神经元坏死（Dead ReLU 现象）。</p>
+    </div>
+
+</div>
+
+<script>
+    // --- 隔离环境下的独立数学演绎沙盒脚本 ---
+    (function() {
+        const eduCanvas = document.getElementById('eduCanvas');
+        const eduCtx = eduCanvas.getContext('2d');
+
+        // 输入控制部件
+        const sliderGamma = document.getElementById('slider-gamma');
+        const sliderBeta = document.getElementById('slider-beta');
+        const lblGamma = document.getElementById('gamma-val');
+        const lblBeta = document.getElementById('beta-val');
+        const btnRand = document.getElementById('btn-rand-batch');
+        const tableBody = document.getElementById('edu-table-body');
+        const summaryBox = document.getElementById('edu-summary');
+        
+        let mathjaxTimeout = null; // 用于防抖控制重新渲染
+
+        // 固定一个批次 4 个样本的初始数值状态
+        let batchX = [1.2, 3.4, -0.6, 2.0]; 
+        let visualBalls = []; // 负责动画缓动插值的小球物体
+
+        function generateRandomBatch() {
+            batchX = [];
+            // 刻意制造出一些远离均值0、偏斜的非标准样本
+            const bias = (Math.random() * 4 - 2); 
+            const scale = (Math.random() * 1.5 + 0.5);
+            for(let i=0; i<4; i++) {
+                // Box-Muller 正态分布采样再平移
+                let u = Math.random() || 0.1, v = Math.random() || 0.1;
+                let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+                batchX.push(parseFloat((num * scale + bias).toFixed(2)));
+            }
+            initVisualBalls();
+            calcAndRender();
+        }
+
+        function initVisualBalls() {
+            visualBalls = batchX.map(val => ({
+                currentX: val, // 当前数轴上的逻辑横坐标
+                targetX: val
+            }));
+        }
+
+        // 核心一维坐标映射函数 (逻辑数轴区间 [-5, 5] 映射到 屏幕像素)
+        function mapAxisX(val) {
+            const padding = 40;
+            const availableWidth = eduCanvas.width - padding * 2;
+            return padding + ((val + 5) / 10) * availableWidth;
+        }
+
+        // ====== 新增：动态生成当前参数下的完整计算步骤 LaTeX 公式 ======
+        function updateDynamicMath(batchX, mean, variance, stdDev, gamma, beta) {
+            const container = document.getElementById('calc-steps');
+            const m = batchX.length;
+            
+            // 构造加法算式字符串 (保留2位小数)
+            let sumStr = batchX.map(v => v.toFixed(2)).join(' + ');
+            let diffStr = batchX.map(v => `(${v.toFixed(2)} - ${mean.toFixed(2)})^2`).join(' + ');
+            
+            // 采用纯净版 LaTeX 生成动态数值 (避免使用中文)
+            const step1 = `\\mu_B = \\frac{${sumStr}}{${m}} = ${mean.toFixed(2)}`;
+            const step2 = `\\sigma_B^2 = \\frac{${diffStr}}{${m}} = ${variance.toFixed(2)}`;
+            
+            // 取样本#1作为详细推导代入对象
+            const x1 = batchX[0];
+            const x_hat_1 = (x1 - mean) / stdDev;
+            const y_1 = gamma * x_hat_1 + beta;
+            
+            const step3 = `\\hat{x}_1 = \\frac{${x1.toFixed(2)} - ${mean.toFixed(2)}}{\\sqrt{${variance.toFixed(2)} + 10^{-5}}} = ${x_hat_1.toFixed(2)}`;
+            const step4 = `y_1 = ${gamma.toFixed(1)} \\times ${x_hat_1.toFixed(2)} + ${beta.toFixed(1)} = ${y_1.toFixed(2)}`;
+
+            container.innerHTML = `
+                <h3 style="margin-top: 0; color:#1a73e8;">📝 实时联动推演 (以当前样本 #1 的推导轨迹为例)</h3>
+                <p><strong>第一步 (均值):</strong> $$${step1}$$</p>
+                <p><strong>第二步 (方差):</strong> $$${step2}$$</p>
+                <p><strong>第三步 (标准化):</strong> $$${step3}$$</p>
+                <p><strong>第四步 (缩放偏移):</strong> $$${step4}$$</p>
+            `;
+
+            // 防抖机制，防止在密集拖拽滑动条时卡死浏览器
+            if (mathjaxTimeout) clearTimeout(mathjaxTimeout);
+            mathjaxTimeout = setTimeout(() => {
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    // 清理先前的数学缓存并重新渲染该容器
+                    MathJax.typesetClear([container]);
+                    MathJax.typesetPromise([container]);
+                }
+            }, 300);
+        }
+
+        function calcAndRender() {
+            const gamma = parseFloat(sliderGamma.value);
+            const beta = parseFloat(sliderBeta.value);
+
+            lblGamma.innerText = gamma.toFixed(1);
+            lblBeta.innerText = beta.toFixed(1);
+
+            // 1. 计算均值
+            const sum = batchX.reduce((a, b) => a + b, 0);
+            const mean = sum / batchX.length;
+
+            // 2. 计算方差
+            const squareDiffSum = batchX.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+            const variance = squareDiffSum / batchX.length;
+            const eps = 1e-5;
+            const stdDev = Math.sqrt(variance + eps);
+
+            // 3 & 4. 逐节点跟踪计算结果并渲染表格
+            let html = '';
+            batchX.forEach((x, idx) => {
+                const diff = x - mean;
+                const x_hat = diff / stdDev;
+                const y = gamma * x_hat + beta;
+
+                // 更新动图小球的目标坐标（展现最终输出y的位置）
+                if(visualBalls[idx]) {
+                    visualBalls[idx].targetX = y;
+                }
+
+                html += `<tr>
+                    <td><b>#${idx + 1}</b></td>
+                    <td style="color:#2980b9">${x.toFixed(2)}</td>
+                    <td>${diff >= 0 ? '+' : ''}${diff.toFixed(2)}</td>
+                    <td style="color:#27ae60; font-weight:bold;">${x_hat.toFixed(2)}</td>
+                    <td style="color:#d35400; font-weight:bold;">${y.toFixed(2)}</td>
+                </tr>`;
+            });
+            tableBody.innerHTML = html;
+
+            summaryBox.innerHTML = `
+                💡 <b>数据流微观洞察：</b><br>
+                本小批次输入特征的重心偏在 <b>μ_B = ${mean.toFixed(2)}</b>，发散程度 <b>σ_B² = ${variance.toFixed(2)}</b>。<br>
+                经过归一化后，所有的 <b>x̂_i</b> 均值会被暴力重置为 <b>0.00</b>，方差完美归为 <b>1.00</b>。<br>最后再由参数赋予代数增益 <b>γ = ${gamma.toFixed(1)}</b> 与偏置 <b>β = ${beta.toFixed(1)}</b>，重新调配分布！
+            `;
+
+            // 调用新的动态公式渲染
+            updateDynamicMath(batchX, mean, variance, stdDev, gamma, beta);
+        }
+
+        // 动画常驻渲染循环
+        function eduAnimate() {
+            // 清理画布
+            eduCtx.clearRect(0, 0, eduCanvas.width, eduCanvas.height);
+
+            const midY = eduCanvas.height / 2;
+
+            // --- A. 绘制基准一维数轴 ---
+            eduCtx.strokeStyle = '#95a5a6';
+            eduCtx.lineWidth = 2;
+            eduCtx.beginPath();
+            eduCtx.moveTo(20, midY);
+            eduCtx.lineTo(eduCanvas.width - 20, midY);
+            eduCtx.stroke();
+
+            // 绘制刻度线线与数字标签
+            eduCtx.fillStyle = '#7f8c8d';
+            eduCtx.font = '11px sans-serif';
+            eduCtx.textAlign = 'center';
+            for(let v = -5; v <= 5; v++) {
+                let px = mapAxisX(v);
+                eduCtx.beginPath();
+                eduCtx.moveTo(px, midY - 5);
+                eduCtx.lineTo(px, midY + 5);
+                eduCtx.stroke();
+                eduCtx.fillText(v, px, midY + 20);
+            }
+
+            // --- B. 绘制标准的方差正负1理想绿色分布区 ---
+            let leftBound = mapAxisX(-1);
+            let rightBound = mapAxisX(1);
+            eduCtx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+            eduCtx.fillRect(leftBound, midY - 60, rightBound - leftBound, 120);
+            eduCtx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+            eduCtx.setLineDash([4, 4]);
+            eduCtx.strokeRect(leftBound, midY - 60, rightBound - leftBound, 120);
+            eduCtx.setLineDash([]);
+
+            // 标注理想常态分布圈
+            eduCtx.fillStyle = '#27ae60';
+            eduCtx.fillText('理想平稳带 [ -1,  1 ]', eduCanvas.width / 2, midY - 70);
+
+            // --- C. 动态描绘数据粒子及连线轨迹 ---
+            batchX.forEach((origX, idx) => {
+                let ball = visualBalls[idx];
+                if(!ball) return;
+
+                // 物理惯性追随动画
+                ball.currentX += (ball.targetX - ball.currentX) * 0.1;
+
+                let pxOrig = mapAxisX(origX);
+                let pxCurr = mapAxisX(ball.currentX);
+
+                // 画出原始点与当前重塑点之间的联系虚线带
+                eduCtx.strokeStyle = 'rgba(149, 165, 166, 0.25)';
+                eduCtx.setLineDash([2, 2]);
+                eduCtx.beginPath();
+                eduCtx.moveTo(pxOrig, midY - 35);
+                eduCtx.lineTo(pxCurr, midY + 35);
+                eduCtx.stroke();
+                eduCtx.setLineDash([]);
+
+                // 1. 绘制初始蓝球输入点
+                eduCtx.beginPath();
+                eduCtx.arc(pxOrig, midY - 35, 7, 0, Math.PI * 2);
+                eduCtx.fillStyle = '#3498db';
+                eduCtx.fill();
+                eduCtx.strokeStyle = '#2980b9';
+                eduCtx.stroke();
+
+                // 2. 绘制最终经过BN缩放偏移加工后的橙色物理输出球
+                eduCtx.beginPath();
+                eduCtx.arc(pxCurr, midY + 35, 8, 0, Math.PI * 2);
+                eduCtx.fillStyle = '#e67e22';
+                eduCtx.fill();
+                eduCtx.strokeStyle = '#d35400';
+                eduCtx.stroke();
+
+                // 球体边缘附带序号
+                eduCtx.fillStyle = '#ffffff';
+                eduCtx.font = 'bold 9px sans-serif';
+                eduCtx.fillText(idx+1, pxCurr, midY + 38);
+            });
+
+            requestAnimationFrame(eduAnimate);
+        }
+
+        // 控制联动事件绑定
+        sliderGamma.addEventListener('input', calcAndRender);
+        sliderBeta.addEventListener('input', calcAndRender);
+        btnRand.addEventListener('click', generateRandomBatch);
+
+        // 初始化启动演绎场景
+        initVisualBalls();
+        calcAndRender();
+        eduAnimate();
+    })();
+
+    // --- 独立环境下的内部协变量偏移沙盒脚本 ---
+    (function() {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const btnRun = document.getElementById('btn-run');
+        const bnToggle = document.getElementById('bn-toggle');
+        const valMu = document.getElementById('val-mu');
+        const valVar = document.getElementById('val-var');
+        const layerText = document.getElementById('layer-text');
+
+        // 物理参数
+        const numParticles = 40;
+        let particles = [];
+        let isAnimating = false;
+        let currentLayer = 0;
+        const maxLayers = 3;
+        
+        // 初始化标准正态分布粒子 N(0,1)
+        function initParticles() {
+            particles = [];
+            for(let i=0; i<numParticles; i++) {
+                // Box-Muller 生成正态分布
+                let u = Math.random() || 0.1, v = Math.random() || 0.1;
+                let val = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+                particles.push({ 
+                    x: val, 
+                    targetX: val, 
+                    yOffset: (Math.random() - 0.5) * 80 // 纵向随机散开便于观察
+                });
+            }
+            currentLayer = 0;
+            updateStats();
+            drawScene();
+            layerText.innerText = `当前状态: 初始输入 (Layer 0)`;
+        }
+
+        // 将数学数值 [-8, 8] 映射到画布 X 坐标 [50, 850]
+        function mapX(val) {
+            return 450 + (val * 50); 
+        }
+
+        function drawScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const midY = canvas.height / 2;
+
+            // 1. 绘制 Tanh 激活函数的背景热力图
+            // 敏感区 [-2, 2] (绿色)
+            const safeStartX = mapX(-2);
+            const safeEndX = mapX(2);
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+            ctx.fillRect(safeStartX, 0, safeEndX - safeStartX, canvas.height);
+            
+            // 饱和区 (红色)
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+            ctx.fillRect(0, 0, safeStartX, canvas.height);
+            ctx.fillRect(safeEndX, 0, canvas.width - safeEndX, canvas.height);
+
+            // 标注
+            ctx.fillStyle = '#27ae60'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('✅ 高梯度区 (激活敏感)', 450, 30);
+            ctx.fillStyle = '#c0392b';
+            ctx.fillText('❌ 梯度消失 (饱和区)', 150, 30);
+            ctx.fillText('❌ 梯度消失 (饱和区)', 750, 30);
+
+            // 2. 绘制 X 轴
+            ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(canvas.width, midY); ctx.stroke();
+            
+            ctx.fillStyle = '#7f8c8d'; ctx.font = '12px sans-serif';
+            for(let v=-8; v<=8; v+=2) {
+                let px = mapX(v);
+                ctx.beginPath(); ctx.moveTo(px, midY - 5); ctx.lineTo(px, midY + 5); ctx.stroke();
+                ctx.fillText(v, px, midY + 20);
+            }
+
+            // 3. 绘制粒子流
+            particles.forEach(p => {
+                // 缓动动画
+                p.x += (p.targetX - p.x) * 0.08;
+                
+                ctx.beginPath();
+                ctx.arc(mapX(p.x), midY + p.yOffset, 6, 0, Math.PI * 2);
+                
+                // 根据位置变色：如果在危险区变红，安全区变蓝
+                if(p.x < -2 || p.x > 2) {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.strokeStyle = '#c0392b';
+                } else {
+                    ctx.fillStyle = '#3498db';
+                    ctx.strokeStyle = '#2980b9';
+                }
+                ctx.fill(); ctx.stroke();
+            });
+        }
+
+        // 实时计算当前粒子的均值和方差，并更新 DOM
+        function updateStats() {
+            let sum = 0;
+            particles.forEach(p => sum += p.targetX);
+            const mu = sum / numParticles;
+
+            let varSum = 0;
+            particles.forEach(p => varSum += Math.pow(p.targetX - mu, 2));
+            const variance = varSum / numParticles;
+
+            // 动态数字跳动
+            valMu.innerText = mu.toFixed(2);
+            valVar.innerText = variance.toFixed(2);
+            
+            // 视觉告警提醒
+            valMu.style.color = Math.abs(mu) > 1.5 ? '#e74c3c' : '#e67e22';
+            valVar.style.color = (variance > 3 || variance < 0.2) ? '#e74c3c' : '#e67e22';
+        }
+
+        // 核心网络演进逻辑
+        async function runNetwork() {
+            if(isAnimating) return;
+            isAnimating = true;
+            btnRun.disabled = true;
+            initParticles(); // 重置
+
+            const useBN = bnToggle.checked;
+
+            for(let l=1; l<=maxLayers; l++) {
+                currentLayer = l;
+                layerText.innerText = `正在处理: Layer ${l} 线性变换 (W*x + b)...`;
+                
+                // 步骤A：模拟线性层引发的特征偏移 (ICS)
+                // 随机产生权重 w 和偏置 b 导致数据向两端漂移
+                const w = 1.0 + (Math.random() * 0.5); 
+                const b = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random()); 
+                
+                particles.forEach(p => {
+                    p.targetX = (p.targetX * w) + b;
+                });
+                updateStats();
+                
+                // 等待线性漂移动画完成
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // 步骤B：如果开启了 BN，执行强行拉回操作
+                if(useBN) {
+                    layerText.innerText = `⚡ Layer ${l} 触发 Batch Normalization！强制标准化...`;
+                    
+                    // 严谨提取当前 batch 统计量
+                    let sum = 0;
+                    particles.forEach(p => sum += p.targetX);
+                    const currentMu = sum / numParticles;
+                    
+                    let varSum = 0;
+                    particles.forEach(p => varSum += Math.pow(p.targetX - currentMu, 2));
+                    const currentVar = varSum / numParticles;
+                    const stdDev = Math.sqrt(currentVar + 1e-5);
+                    
+                    // 执行归一化 x_hat = (x - mu) / std
+                    particles.forEach(p => {
+                        p.targetX = (p.targetX - currentMu) / stdDev;
+                    });
+                    updateStats();
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                } else {
+                    layerText.innerText = `Layer ${l} 无 BN 保护，数据直接进入激活函数！`;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
+            // 带有微积分推导的动态数学说明框（双向完整推导）
+            if(useBN) {
+                layerText.innerHTML += ` 🎉 推演结束！数据完美保持在敏感区，梯度健康。
+                    <div style="margin-top: 25px; padding: 20px; background: #f0fdf4; border: 1px solid #2ecc71; border-radius: 8px; font-size: 0.95em; text-align: left; color: #166534; line-height: 1.8; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                        <strong style="font-size: 1.1em; color: #15803d;">🌟 完美拯救：链式法则畅通无阻的数学本质</strong><br>
+                        1. 强制约束消除了特征偏移，将数据强行映射回标准正态分布：$x \\sim \\mathcal{N}(0, 1)$<br>
+                        2. 送入激活函数 $a = \\tanh(x)$，其对输入的导数公式为：$\\frac{\\partial a}{\\partial x} = 1 - a^2$<br>
+                        3. 由于 $x$ 被集中在原点附近（$x \\approx 0$），输出 $a \\approx 0$，此时该层局部导数达到峰值：$\\frac{\\partial a}{\\partial x} \\approx 1$<br>
+                        4. 反向传播更新权重 $W$ 时的链式法则公式：
+                        $$ \\frac{\\partial L}{\\partial W} = \\frac{\\partial L}{\\partial a} \\cdot \\frac{\\partial a}{\\partial x} \\cdot x $$
+                        由于核心连乘因子 $\\frac{\\partial a}{\\partial x} \\approx 1$，完美且无损地保留了上游传导下来的梯度，保证参数获得了高效且稳定的更新！
+                    </div>`;
+            } else {
+                layerText.innerHTML += ` 💀 推演结束！数据陷入饱和区，发生梯度消失。
+                    <div style="margin-top: 25px; padding: 20px; background: #fffbf0; border: 1px solid #f1c40f; border-radius: 8px; font-size: 0.95em; text-align: left; color: #856404; line-height: 1.8; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                        <strong style="font-size: 1.1em;">🔍 致命推导：链式法则断裂的数学本质</strong><br>
+                        1. 缺乏约束导致特征分布偏移，绝对值失控：$|x| \\gg 0$<br>
+                        2. 若送入激活函数 $a = \\tanh(x)$，其对输入的导数公式为：$\\frac{\\partial a}{\\partial x} = 1 - a^2$<br>
+                        3. 当 $|x| \\to \\infty$ 时，输出 $a \\to \\pm 1$，此时该层局部导数趋近于零：$\\frac{\\partial a}{\\partial x} \\to 0$<br>
+                        4. 反向传播更新权重 $W$ 时遵循微积分链式法则：
+                        $$ \\frac{\\partial L}{\\partial W} = \\frac{\\partial L}{\\partial a} \\cdot \\frac{\\partial a}{\\partial x} \\cdot x $$
+                        由于关键的连乘因子 $\\frac{\\partial a}{\\partial x} \\approx 0$，致使最终回传梯度 $\\frac{\\partial L}{\\partial W} \\to 0$，参数彻底假死！
+                    </div>`;
+            }
+                
+            // 重新调用 MathJax 渲染新插入进 DOM 的 LaTeX 源码
+            if (window.MathJax) {
+                MathJax.typesetPromise([layerText]);
+            }
+                
+            isAnimating = false;
+            btnRun.disabled = false;
+        }
+
+        // 动画循环
+        function loop() {
+            drawScene();
+            requestAnimationFrame(loop);
+        }
+
+        btnRun.addEventListener('click', runNetwork);
+        initParticles();
+        loop();
+    })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Dropout 反向传播与动图数据映射完整解析</title>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        /* ========== 通用与第一部分样式 ========== */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h1, h2, h3 { color: #1a252f; margin-top: 0; }
+        h1 { border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        .analogy-box {
+            background: #fff8e1;
+            padding: 20px 25px;
+            border-radius: 8px;
+            border-left: 6px solid #f39c12;
+            margin-bottom: 20px;
+            font-size: 16px;
+            line-height: 1.8;
+            color: #444;
+        }
+        .analogy-box h2 { margin-top: 0; color: #d35400; font-size: 22px; }
+        .analogy-box ul { padding-left: 20px; margin-bottom: 0;}
+        .analogy-box li { margin-bottom: 12px; }
+        .analogy-box strong { color: #d35400; font-weight: bold; }
+
+        .symbol-box {
+            background: #eef2ff;
+            padding: 20px 25px;
+            border-radius: 8px;
+            border-left: 6px solid #6366f1;
+            margin-top: 30px;
+            font-size: 15px;
+            line-height: 1.7;
+            color: #374151;
+        }
+        .symbol-box h2 { margin-top: 0; color: #4f46e5; font-size: 20px; margin-bottom: 15px;}
+        .symbol-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 15px;
+        }
+        .symbol-item {
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #c7d2fe;
+        }
+        .symbol-item span.sym {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #3730a3;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        .left-panel {
+            flex: 1;
+            min-width: 550px;
+        }
+        .right-panel {
+            flex: 1.2;
+            min-width: 600px;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .controls {
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            flex: 1;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button.dropout-btn { background-color: #e74c3c; }
+        button:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+        canvas {
+            display: block;
+            width: 100%;
+            background: #ffffff;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+        }
+
+        .math-box {
+            background: #ffffff;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 5px solid #3b82f6;
+            margin-bottom: 15px;
+            font-size: 15px;
+        }
+        .math-box.danger { border-left-color: #e74c3c; background: #fdf2f8; }
+        .math-box.success { border-left-color: #10b981; background: #ecfdf5; }
+        .math-box.warning { border-left-color: #f59e0b; background: #fffbeb; }
+
+        .highlight-red { color: #e74c3c; font-weight: bold; }
+        .highlight-green { color: #10b981; font-weight: bold; }
+
+        /* ========== 隔离的第二部分专属样式 ========== */
+        .controls-2 {
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .controls-2 .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .controls-2 select, .controls-2 input[type="range"] {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            font-size: 16px;
+        }
+        .controls-2 button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+            width: 100%;
+            flex: none;
+        }
+        .controls-2 button:hover { background-color: #c0392b; transform: translateY(-1px); filter: none;}
+        .controls-2 button:disabled { background-color: #94a3b8; cursor: not-allowed; transform: none;}
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: #fff;
+            text-align: center;
+            font-size: 15px;
+        }
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 12px 10px;
+        }
+        th { background-color: #e2e8f0; color: #334155; }
+        .highlight-green-2 { color: #16a34a; font-weight: bold; }
+        .sum-row { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1;}
+        .principle-text { font-size: 15px; color: #475569; line-height: 1.8; margin-top: 20px;}
+
+        /* ========== 新增：代码与面试题样式 ========== */
+        .section-title {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            color: #0f172a;
+            font-size: 24px;
+        }
+        .code-container {
+            background-color: #1e293b;
+            color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', Courier, monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+            margin-bottom: 30px;
+            border-left: 6px solid #3b82f6;
+        }
+        .code-comment { color: #64748b; font-style: italic; }
+        .code-keyword { color: #f43f5e; font-weight: bold; }
+        .code-builtin { color: #38bdf8; }
+        .code-string { color: #10b981; }
+        .code-font { color: #fcd34d; }
+        
+        .interview-box {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .interview-box h3 {
+            margin-bottom: 10px;
+            font-size: 18px;
+            color: #1e293b;
+        }
+        .tag-container {
+            margin-bottom: 12px;
+        }
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .tag-type { background-color: #dbeafe; color: #1e40af; }
+        .tag-importance { background-color: #fef3c7; color: #92400e; }
+        .answer-box {
+            background-color: #ffffff;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 0 4px 4px 0;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #334155;
+        }
+    </style>
+</head>
+<body>
+
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>反向传播深层逻辑：放大系数如何逼迫参数暴涨？</h1>
+    
+    <div class="analogy-box">
+        <h2>💡 核心思想：职场“摸鱼”启示录</h2>
+        <p>我们可以把一个神经网络的隐藏层想象成一个公司部门，而里面的神经元就是员工。</p>
+        <ul>
+            <li><strong>为什么要随机失活？</strong>在部门里，往往会有几个工作效率极高的“大佬”（参数极强的神经元），和一群喜欢“摸鱼”的普通员工（参数较弱的神经元）。只要大佬在，部门任务总能完成，但这导致普通员工过度依赖大佬，整个部门抗风险能力极差（模型过拟合）。Dropout 的做法是：<strong>每天随机强制让一部分员工“休假”（失活）。</strong>这就逼着那些平时偷懒的员工必须独立挑起大梁，<strong>最终所有人的业务能力都被迫变强了，整个团队更加全能。</strong></li>
+            <li><strong>为什么要乘以放大系数（Inverted Dropout）？</strong>部门每天要交付的<strong>总工作量（输出期望）是固定不变的。</strong>今天有 $p$ 比例的人去休假了（失活概率），为了保证今天交付给下一个部门的产出不变，<strong>留在工位上的人就必须爆发双倍的产能</strong>（即乘以放大系数，例如失活概率 $p=0.5$ 时，除以 $1-p = 0.5$ 就等于乘以 2 倍）。<br>
+            如果不乘以这个放大系数，网络为了填补工作量的严重缺失，就会在训练时死命地把个人的基础参数练得极其庞大；<strong>等到真正测试（全员复工）时，这群参数超标的人一起发力，整个部门的输出瞬间就会爆炸。</strong>因此，<strong>必须通过数学放大来强行补偿休假带来的期望差值！</strong></li>
+        </ul>
+    </div>
+
+    <div class="source2-wrapper" style="margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px dashed #cbd5e1;">
+        <h1>Dropout：动图节点与数据计算的完美映射</h1>
+        <p>请重点观察左侧动图中的 <strong>Hidden 1</strong> 这一列。这一次，我将右侧表格中的最终计算结果 $\tilde{a}_i^{(1)}$ <strong>直接打印在了动图的神经元下方</strong>。你可以逐个对比：动图上红色的 $0.0$，必然对应表格里的红色 $0.0$；动图上绿色的放大值，必然对应表格里的绿色放大值。</p>
+
+        <div class="layout">
+            <div class="left-panel">
+                <div class="controls-2">
+                    <div class="control-row">
+                        <label><strong>当前模式:</strong></label>
+                        <select id="modeSelect2" onchange="changeMode2()">
+                            <option value="train">训练阶段 (开启 Dropout)</option>
+                            <option value="inference">推理阶段 (关闭 Dropout)</option>
+                        </select>
+                    </div>
+                    <div class="control-row">
+                        <label><strong>保留概率 $p$: </strong><span id="pVal2">0.5</span></label>
+                        <input type="range" id="pSlider2" min="0.1" max="1.0" step="0.1" value="0.5" oninput="updateP2()">
+                    </div>
+                    <button id="forwardBtn2" onclick="forwardPass2()">执行一次前向传播 (重新抛硬币)</button>
+                </div>
+                
+                <canvas id="nnCanvas2" width="600" height="550"></canvas>
+            </div>
+
+            <div class="right-panel">
+                <h2>具体数据代入过程 (对照动图 Hidden 1)</h2>
+                <div class="math-box">
+                    <span style="font-size: 0.9em; color: #666;">底层张量计算公式（神经元失活并放大补偿）：</span>
+                    <p>$$\tilde{a}^{(1)} = \frac{a^{(1)} \circ r^{(1)}}{p} \quad , \quad r^{(1)} \sim Bernoulli(p)$$</p>
+                </div>
+
+                <div id="dynamic-data-table2">
+                    <p style="color:#64748b;">请点击左侧按钮进行计算...</p>
+                </div>
+
+                <div class="principle-text" id="principle-explanation2">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="layout">
+        <div class="left-panel">
+            <div class="controls">
+                <button onclick="runScenario('normal')">演示一：大佬正常上班 <br>(无 Dropout)</button>
+                <button class="dropout-btn" onclick="runScenario('dropout')">演示二：大佬休假 <br>(触发 Dropout 与放大)</button>
+                <button style="background-color:#94a3b8;" onclick="resetSimulation()">🔄 重置状态</button>
+            </div>
+            
+            <canvas id="nnCanvas" width="600" height="480"></canvas>
+        </div>
+
+        <div class="right-panel" id="math-panel">
+            <h2>计算面板：加载中...</h2>
+        </div>
+    </div>
+
+    <div class="symbol-box">
+        <h2>📘 数学符号白话速查表 (无痛理解公式)</h2>
+        <p>在看上方右侧的计算面板时，请先将这些数学符号与咱们的“职场比喻”对应起来，一旦建立映射，复杂的公式就变成简单的加减乘除了：</p>
+        <div class="symbol-grid">
+            <div class="symbol-item"><span class="sym">$p$</span><strong>失活概率 (Drop Probability)：</strong>代表部门里“被强制请假的员工比例”。</div>
+            <div class="symbol-item"><span class="sym">$1-p$</span><strong>保留概率 (Keep Probability)：</strong>留在工位上继续打工的员工比例。我们的放大系数就是 $\frac{1}{1-p}$。</div>
+            <div class="symbol-item"><span class="sym">$x$</span><strong>输入数据 (Input)：</strong>上一层传过来的数据，相当于老板最初派发给员工的“基础任务量”。</div>
+            <div class="symbol-item"><span class="sym">$w$</span><strong>权重参数 (Weight)：</strong>就是员工的“业务能力”或“工作效率”。$w_1$ 是大佬的能力，$w_2$ 是偷懒者的能力。</div>
+            <div class="symbol-item"><span class="sym">$\hat{y}$</span><strong>预测输出 (Predicted Output)：</strong>带有小帽子的 $y$。代表部门最终汇总交上去的“总工作量”。</div>
+            <div class="symbol-item"><span class="sym">$Target$</span><strong>真实标签 (Target)：</strong>目标值。老板心里预期的“标准总工作量”。</div>
+            <div class="symbol-item"><span class="sym">$Error$</span><strong>误差 (Loss)：</strong>即 $Target - \hat{y}$。预期与实际的差额，也就是将要降临到部门头上的“惩罚力度”。</div>
+            <div class="symbol-item"><span class="sym">$\eta$</span><strong>学习率 (Learning Rate)：</strong>读作 Eta。代表员工对惩罚的“敏感度”或反思能力。决定了挨骂后参数能涨多少。</div>
+            <div class="symbol-item"><span class="sym">$\Delta w$</span><strong>参数更新量：</strong>$\Delta$ (读作 Delta) 代表变化量。这就是员工经过反思后，能力获得提升的具体数值（比如暴涨了 $+0.8$）。</div>
+            <div class="symbol-item"><span class="sym">$r$</span><strong>随机掩码 (Random Mask)：</strong>决定某天某个员工到底上不上班的“考勤表”，只取 $0$ (休假) 或 $1$ (上班)。</div>
+            <div class="symbol-item"><span class="sym">$a$</span><strong>原始输出 (Activation)：</strong>没请假也没放大前，员工原本做出的工作量 ($x \times w$)。</div>
+            <div class="symbol-item"><span class="sym">$\tilde{a}$</span><strong>最终输出 (Scaled Activation)：</strong>波浪号代表“修改过”。即经过休假和放大后，最终真正交上去的工作量。</div>
+        </div>
+    </div>
+
+    <h2 class="section-title">🛠️ Requirement 1: PyTorch 核心计算逻辑完整实现</h2>
+    <p>以下代码完全复现了 HTML 文档中描述的“前向传播掩码放大”与“反向传播梯度加倍”的底层张量计算过程。代码无任何省略，可直接复制运行。</p>
+    <pre class="code-container"><code><span class="code-keyword">import</span> torch
+<span class="code-keyword">import</span> torch.nn <span class="code-keyword">as</span> nn
+
+<span class="code-comment"># 设置随机种子以保证结果可复现</span>
+torch.manual_seed(<span class="code-font">42</span>)
+
+<span class="code-keyword">class</span> <span class="code-builtin">ManualInvertedDropout</span>(nn.Module):
+    <span class="code-keyword">def</span> <span class="code-builtin">__init__</span>(self, p_drop=<span class="code-font">0.5</span>):
+        <span class="code-builtin">super</span>().__init__()
+        self.p_drop = p_drop
+        self.keep_rate = <span class="code-font">1.0</span> - p_drop
+<script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+    <span class="code-keyword">def</span> <span class="code-builtin">forward</span>(self, x, mask=None):
+        <span class="code-keyword">if</span> self.training:
+            <span class="code-keyword">if</span> mask <span class="code-keyword">is</span> <span class="code-keyword">None</span>:
+                <span class="code-comment"># 按照伯努利分布生成随机掩码（0代表失活，1代表保留）</span>
+                <span class="code-comment"># torch.rand_like 生成 0~1 均匀分布，大于 p_drop 的设为 1，即保留概率为 1-p_drop</span>
+                mask = (torch.rand_like(x) &gt; self.p_drop).float()
+            
+            <span class="code-comment"># Inverted Dropout 核心公式：失活并乘以放大系数 (1 / keep_rate)</span>
+            <span class="code-keyword">return</span> (x * mask) / self.keep_rate, mask
+        <span class="code-keyword">else</span>:
+            <span class="code-comment"># 推理阶段：不进行任何丢弃和放大，保持期望一致</span>
+            <span class="code-keyword">return</span> x, torch.ones_like(x)
+
+<span class="code-keyword">if</span> __name__ == <span class="code-string">"__main__"</span>:
+    <span class="code-builtin">print</span>(<span class="code-string">"=== 演示二：手动模拟文档中的 Dropout 行为与反向传播加倍 ==="</span>)
+    
+    <span class="code-comment"># 初始化输入数据与权重参数（对应文档：x=1.0, w2=0.1, 目标值=1.0, 学习率=0.5）</span>
+    x = torch.tensor([[<span class="code-font">1.0</span>]], requires_grad=<span class="code-keyword">True</span>)
+    w2 = torch.tensor([[<span class="code-font">0.1</span>]], requires_grad=<span class="code-keyword">True</span>)
+    target = torch.tensor([[<span class="code-font">1.0</span>]])
+    learning_rate = <span class="code-font">0.5</span>
+    
+    <span class="code-comment"># 初始化自定义的 Dropout 层</span>
+    dropout_layer = ManualInvertedDropout(p_drop=<span class="code-font">0.5</span>)
+    dropout_layer.train() <span class="code-comment"># 开启训练模式</span>
+    
+    <span class="code-comment"># 强制指定掩码：对应文档演示二中[大佬失活(0), 偷懒者保留(1)]的状态</span>
+    custom_mask = torch.tensor([[<span class="code-font">1.0</span>]])
+    
+    <span class="code-comment"># 1. 前向传播</span>
+    a2 = x * w2
+    y_pred, applied_mask = dropout_layer(a2, mask=custom_mask)
+    
+    <span class="code-comment"># 2. 误差计算 (Loss = 0.5 * Error^2 形式以便完美契合导数关系)</span>
+    <span class="code-comment"># 文档中 Error = Target - y_pred = 1.0 - 0.2 = 0.8</span>
+    error = target - y_pred
+    loss = <span class="code-font">0.5</span> * (error ** <span class="code-font">2</span>)
+    
+    <span class="code-builtin">print</span>(f<span class="code-string">"前向传播输出 y_pred: {y_pred.item():.2f} (由于除以了 0.5，原始输出 0.1 被放大了 2 倍变成 0.2)"</span>)
+    <span class="code-builtin">print</span>(f<span class="code-string">"计算得到的绝对误差 Error: {error.item():.2f}"</span>)
+    
+    <span class="code-comment"># 3. 反向传播</span>
+    loss.backward()
+    
+    <span class="code-comment"># 梯度推导验证：dLoss/dw2 = -Error * (x / keep_rate) = -0.8 * (1.0 / 0.5) = -1.6</span>
+    <span class="code-comment"># 权重更新量：delta_w2 = -learning_rate * dLoss/dw2 = -0.5 * (-1.6) = +0.8</span>
+    delta_w2 = -learning_rate * w2.grad.item()
+    
+    <span class="code-builtin">print</span>(f<span class="code-string">"PyTorch 自动求导计算出的梯度 w2.grad: {w2.grad.item():.2f}"</span>)
+    <span class="code-builtin">print</span>(f<span class="code-string">"根据学习率计算出的参数更新量 delta_w: {delta_w2:+.2f} (完美契合文档中的 +0.8 暴涨)"</span>)
+    
+    <span class="code-builtin">print</span>(<span class="code-string">"\n=== 演示三：对比 PyTorch 官方 nn.Dropout 在训练与推理阶段的行为 ==="</span>)
+    official_dropout = nn.Dropout(p=<span class="code-font">0.5</span>)
+    
+    <span class="code-comment"># 模拟一个隐藏层包含5个节点的张量（对应文档第二部分的原始输出 [2.0, 4.0, 6.0, 8.0, 10.0]）</span>
+    hidden_features = torch.tensor([[<span class="code-font">2.0</span>, <span class="code-font">4.0</span>, <span class="code-font">6.0</span>, <span class="code-font">8.0</span>, <span class="code-font">10.0</span>]])
+    
+    <span class="code-comment"># 开启训练模式</span>
+    official_dropout.train()
+    train_output = official_dropout(hidden_features)
+    <span class="code-builtin">print</span>(f<span class="code-string">"训练阶段官方输出 (部分失活且保留项乘以2):\n {train_output}"</span>)
+    <span class="code-builtin">print</span>(f<span class="code-string">"训练阶段特征总和: {train_output.sum().item():.1f} (期望保持在原始总和 30.0 附近)"</span>)
+    
+    <span class="code-comment"># 切换到评估模式</span>
+    official_dropout.eval()
+    eval_output = official_dropout(hidden_features)
+    <span class="code-builtin">print</span>(f<span class="code-string">"推理阶段官方输出 (全员复工，不进行任何丢弃与放大):\n {eval_output}"</span>)
+    <span class="code-builtin">print</span>(f<span class="code-string">"推理阶段特征总和: {eval_output.sum().item():.1f} (严格等于 30.0)"</span>)
+</code></pre>
+
+    <h2 class="section-title">🎯 Requirement 2: 经典工业级面试题深度剖析</h2>
+    <p>结合本文档中关于 Dropout 的正反向传播、期望补偿以及参数更新机制，提炼出以下5道大厂高频面试题。</p>
+    
+    <div class="interview-box">
+        <h3>1. 什么是 Inverted Dropout（反向随机失活）？为什么要引入这种机制？</h3>
+        <div class="tag-container">
+            <span class="tag tag-type">概念理解</span>
+            <span class="tag tag-importance">重要性：⭐⭐⭐⭐⭐</span>
+        </div>
+        <div class="answer-box">
+            <strong>标准答案：</strong><br>
+            传统的 Dropout 在训练时让神经元以概率 $p$ 失活，在测试阶段为了保持输入期望一致，必须在网络前向传播时将所有的权重乘以 $1-p$。这种传统的做法对推理阶段非常不友好，因为每次修改丢弃率都需要改变测试代码。<br><br>
+            <strong>Inverted Dropout</strong> 则是目前 PyTorch 等现代深度学习框架采用的标准做法。它的核心逻辑是在<strong>训练阶段</strong>进行期望补偿：在前向传播时，对没有失活的神经元输出直接除以保留概率 $1-p$（即乘以放大系数 $\frac{1}{1-p}$）。<br>
+            这样做的好处是保证了训练阶段和测试阶段每一层输出的数学期望在量级上完全一致，从而使得<strong>推理（测试）阶段可以不进行任何数学缩放，直接全员复工运行</strong>，实现了前向传播代码在工程上的解耦。
+        </div>
+    </div>
+
+    <div class="interview-box">
+        <h3>2. 请从反向传播和链式法则的角度，解释为什么 Dropout 能让被保留的神经元参数“被迫暴涨”？</h3>
+        <div class="tag-container">
+            <span class="tag tag-type">数学推导</span>
+            <span class="tag tag-importance">重要性：⭐⭐⭐⭐⭐</span>
+        </div>
+        <div class="answer-box">
+            <strong>标准答案：</strong><br>
+            根据 Inverted Dropout 的定义，前向传播时某层被保留神经元的激活值为：
+            $$\tilde{a} = \frac{x \cdot w}{1-p}$$
+            当误差信号回传，进行反向传播计算损失函数对权重 $w$ 的偏导时，根据多元复合函数求导的链式法则，常数项 $\frac{1}{1-p}$ 会被完整地保留下来并参与乘法：
+            $$\frac{\partial Loss}{\partial w} = \frac{\partial Loss}{\partial \tilde{a}} \cdot \frac{\partial \tilde{a}}{\partial w} = \frac{\partial Loss}{\partial \tilde{a}} \cdot \left( \frac{x}{1-p} \right)$$
+            这意味着，<strong>前向传播中用于放大激活值的系数 $\frac{1}{1-p}$，在反向传播时同样会等比例放大梯度的回传信号</strong>。再加上由于大量神经元失活导致的巨大网络误差（Loss 增加），两者的乘积使得留在工位上的神经元在单次梯度更新中吸收了巨额的更新量 $\Delta w$，从而逼迫其参数发生暴涨，大幅加快了独立承担特征提取任务的进化速度。
+        </div>
+    </div>
+
+    <div class="interview-box">
+        <h3>3. 为什么 Dropout 能有效抑制过拟合？请用“共适应（Co-adaptation）”的观点加以阐述。</h3>
+        <div class="tag-container">
+            <span class="tag tag-type">底层原理</span>
+            <span class="tag tag-importance">重要性：⭐⭐⭐⭐</span>
+        </div>
+        <div class="answer-box">
+            <strong>标准答案：</strong><br>
+            在没有 Dropout 的标准网络中，不同神经元之间容易产生<strong>“共适应（Co-adaptation）”</strong>现象。即某些复杂的特定特征高度依赖某几个神经元参数的精妙配合才能提取成功，或者普通的隐藏层节点过度依赖某一个“大佬”神经元的强力输出。这导致模型极易死记硬背训练集的噪声，抗风险能力差。<br><br>
+            引入 Dropout 后，每次迭代都会随机切断固定的协同关系。神经元无法预测和自己处于同一层的其他节点谁会突然失活，这打破了神经元之间的共适应依赖，迫使<strong>每一个神经元都必须学习提取具有鲁棒性的独立特征</strong>。用白话来说，就是“把大佬员工强制请假，逼着摸鱼员工独自挑起大梁”，最终使整个网络演化为高度冗余且泛化性能极强的鲁棒系统。
+        </div>
+    </div>
+
+    <div class="interview-box">
+        <h3>4. 在 PyTorch 中使用官方自带的 nn.Dropout 时，有哪些需要特别注意的工程坑点？</h3>
+        <div class="tag-container">
+            <span class="tag tag-type">工程实践</span>
+            <span class="tag tag-importance">重要性：⭐⭐⭐⭐⭐</span>
+        </div>
+        <div class="answer-box">
+            <strong>标准答案：</strong><br>
+            在工程实践中，有两个最关键的注意事项：
+            <ol>
+                <li><strong>必须严格显式调用显式切换：</strong>在训练循环开始前必须使用 <code>model.train()</code>，在测试/评估/模型推理前必须调用 <code>model.eval()</code>。这是因为 <code>nn.Dropout</code> 内部依赖当前模块的 <code>self.training</code> 状态布尔值。如果测试时忘记调用 <code>model.eval()</code>，模型在线上运行时仍会随机丢弃特征并放大输出，导致评估指标崩溃或预测结果严重失真。</li>
+                <li><strong>参数 $p$ 的定义差异：</strong>PyTorch 中 <code>nn.Dropout(p)</code> 的参数 $p$ 代表的是<strong>失活概率（Element to be zeroed）</strong>，而不是保留概率。如果在论文中看到“保留 80% 的节点”，在 PyTorch 中实例化时应传入 <code>p=0.2</code>。</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="interview-box">
+        <h3>5. 模型在过拟合和欠拟合状态下，我们应该如何针对性地调整 Dropout 的丢弃概率 $p$？</h3>
+        <div class="tag-container">
+            <span class="tag tag-type">调参策略</span>
+            <span class="tag tag-importance">重要性：⭐⭐⭐</span>
+        </div>
+        <div class="answer-box">
+            <strong>标准答案：</strong><br>
+             Dropout 的丢弃概率 $p$ 是调节模型容量和泛化能力的有力杠杆：
+            <ul>
+                <li><strong>当模型处于过拟合（Overfitting）时：</strong>表明模型容量过大，死记硬背了过多的训练集噪声。此时应该<strong>增大丢弃概率 $p$</strong>（例如从 0.2 调大到 0.5）。更高的失活率带来了更强的正则化惩罚，强力打破协同适应，限制网络容量，从而提升在测试集上的泛化表现。</li>
+                <li><strong>当模型处于欠拟合（Underfitting）时：</strong>表明模型连训练集的基础模式都无法拟合，特征提取能力不足。此时应该<strong>减小丢弃概率 $p$</strong>（例如调小到 0.1 甚至完全设为 0 以关闭 Dropout）。这能释放网络的全部计算容量，恢复节点间完整的前向信息流，帮助模型在训练集上充分拟合。</li>
+            </ul>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    /* =================================================================
+       第一部分（反向传播演示）的 JavaScript 代码
+       ================================================================= */
+    const canvas = document.getElementById('nnCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const target = 1.0;
+    const inputX = 1.0;
+    const learningRate = 0.5; 
+    const p_drop = 0.5; 
+    
+    let w1 = 0.9; 
+    let w2 = 0.1; 
+    let mask = [1, 1]; 
+
+    function drawNetwork(showBackprop = false, error = 0, updateW1 = 0, updateW2 = 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const inNode = {x: 80, y: 240};
+        const h1Node = {x: 300, y: 120}; 
+        const h2Node = {x: 300, y: 360}; 
+        const outNode = {x: 520, y: 240};
+
+        function drawEdge(start, end, weight, isActive, isBackprop) {
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            
+            if (!isActive) {
+                ctx.strokeStyle = 'rgba(236, 240, 241, 0.4)'; 
+                ctx.lineWidth = 1;
+            } else {
+                ctx.strokeStyle = '#34495e';
+                ctx.lineWidth = Math.max(1, weight * 10); 
+            }
+            ctx.stroke();
+
+            if (isBackprop && isActive && error !== 0) {
+                ctx.beginPath();
+                ctx.moveTo(end.x, end.y + 12);
+                ctx.lineTo(start.x, start.y + 12);
+                ctx.strokeStyle = '#e74c3c';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([6, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]); 
+            }
+        }
+
+        drawEdge(inNode, h1Node, w1, mask[0] === 1, false);
+        drawEdge(inNode, h2Node, w2, mask[1] === 1, false);
+        drawEdge(h1Node, outNode, w1, mask[0] === 1, showBackprop);
+        drawEdge(h2Node, outNode, w2, mask[1] === 1, showBackprop);
+
+        function drawNode(node, label, color, isActive) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = isActive ? color : '#ecf0f1';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = isActive ? '#ffffff' : '#bdc3c7';
+            ctx.stroke();
+
+            ctx.fillStyle = isActive ? '#ffffff' : '#95a5a6';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, node.x, node.y);
+        }
+
+        drawNode(inNode, 'x', '#3498db', true);
+        drawNode(h1Node, 'w1', '#8b5cf6', mask[0] === 1);
+        drawNode(h2Node, 'w2', '#f59e0b', mask[1] === 1);
+        drawNode(outNode, 'Out', '#2ecc71', true);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#34495e';
+        ctx.font = '14px Arial';
+        ctx.fillText('大佬神经元', h1Node.x, h1Node.y - 75);
+        ctx.fillStyle = mask[0]===1 ? '#8b5cf6' : '#95a5a6';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`当前参数: ${w1.toFixed(2)}`, h1Node.x, h1Node.y - 50);
+        if(updateW1 !== 0) {
+            ctx.fillStyle = '#10b981';
+            ctx.fillText(`(+${updateW1.toFixed(2)})`, h1Node.x + 75, h1Node.y - 50);
+        }
+
+        ctx.fillStyle = '#34495e';
+        ctx.font = '14px Arial';
+        ctx.fillText('偷懒神经元', h2Node.x, h2Node.y + 55);
+        ctx.fillStyle = mask[1]===1 ? '#f59e0b' : '#95a5a6';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`当前参数: ${w2.toFixed(2)}`, h2Node.x, h2Node.y + 75);
+        if(updateW2 !== 0) {
+            ctx.fillStyle = '#10b981';
+            ctx.fillText(`(+${updateW2.toFixed(2)})`, h2Node.x + 75, h2Node.y + 75);
+        }
+
+        ctx.fillStyle = '#34495e';
+        ctx.font = '14px Arial';
+        ctx.fillText(`输入=${inputX.toFixed(1)}`, inNode.x, inNode.y - 40);
+        ctx.fillText(`目标=${target.toFixed(1)}`, outNode.x, outNode.y - 40);
+
+        if (showBackprop && error !== 0) {
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`梯度回传！`, outNode.x - 70, outNode.y + 50);
+        }
+    }
+
+    function runScenario(type) {
+        let mathHTML = '';
+        let update1 = 0;
+        let update2 = 0;
+        const keep_rate = 1.0 - p_drop; 
+
+        if (type === 'normal') {
+            mask = [1, 1];
+            let out1 = inputX * w1;
+            let out2 = inputX * w2;
+            let y_pred = out1 + out2; 
+            let error = target - y_pred; 
+
+            mathHTML = `
+                <h2>演示一：无 Dropout (共适应的温床)</h2>
+                <div class="math-box">
+                    <strong>1. 前向传播：</strong>
+                    <p>总输出 $\\hat{y} = (1.0 \\times 0.9) + (1.0 \\times 0.1) = 1.0$</p>
+                </div>
+                <div class="math-box success">
+                    <strong>2. 误差计算：</strong>
+                    <p>$$Error = Target - \\hat{y} = 1.0 - 1.0 = 0.0$$</p>
+                    <p>大佬带飞了全队，误差为 0，没有受到任何惩罚。</p>
+                </div>
+                <div class="math-box">
+                    <strong>3. 反向传播：</strong>
+                    <p>$$\\Delta w_2 = \\eta \\times Error \\times x = 0$$</p>
+                    <p><strong>结论：</strong>偷懒者根本不需要改变，永远保持 0.1，系统对其极度依赖大佬的状态视而不见。</p>
+                </div>
+            `;
+            drawNetwork(true, error, 0, 0);
+
+        } else if (type === 'dropout') {
+            mask = [0, 1];
+            
+            let out1 = 0; 
+            let out2 = (inputX * w2 * 1) / keep_rate; 
+            let y_pred = out1 + out2; 
+            
+            let error = target - y_pred; 
+            
+            update2 = learningRate * error * (inputX / keep_rate); 
+            w2 = w2 + update2; 
+
+            mathHTML = `
+                <h2>演示二：Dropout 触发 (放大系数的威力)</h2>
+                <div class="math-box warning">
+                    <strong>1. 放大系数的前向作用：</strong>
+                    <p>大佬被屏蔽 ($w_1$ 失活)。设失活概率 $p=0.5$，偷懒者的输出被强行放大 $\\frac{1}{1-p}$ 倍。</p>
+                    <p>$$\\tilde{a} = \\frac{a \\circ r}{1-p} \\quad , \\quad r \\sim Bernoulli(1-p)$$</p>
+                    <p>$$\\hat{y} = \\frac{x \\times w_2}{1-p} = \\frac{1.0 \\times 0.1}{0.5} = 0.2$$</p>
+                </div>
+                <div class="math-box danger">
+                    <strong>2. 巨大的误差诞生：</strong>
+                    <p>$$Error = 1.0 - 0.2 = 0.8$$</p>
+                    <p>即使被放大了，偷懒者依然没没能完成任务，系统产生巨大误差！</p>
+                </div>
+                <div class="math-box">
+                    <strong>3. 反向传播 (链式求导揭秘)：</strong>
+                    <p>由于 $\\hat{y} = \\frac{x \\cdot w_2}{1-p}$，在对 $w_2$ 求偏导时，常数项 $\\frac{1}{1-p}$ 会直接保留下来参与乘法！</p>
+                    <p>$$\\Delta w_2 = \\eta \\times Error \\times \\left( \\frac{x}{1-p} \\right)$$</p>
+                    <p>$$\\Delta w_2 = 0.5 \\times 0.8 \\times \\left( \\frac{1.0}{0.5} \\right) = \\mathbf{+0.8}$$</p>
+                    <p><strong>结论：</strong>因为有放大系数 $\\frac{1}{1-0.5} = 2$，回传给偷懒者的<strong>惩罚力度也被放大了两倍</strong>！它瞬间吸收了高达 <span class="highlight-green">0.8</span> 的更新量，被迫完成了史诗级进化！</p>
+                </div>
+            `;
+            drawNetwork(true, error, 0, update2);
+        }
+
+        document.getElementById('math-panel').innerHTML = mathHTML;
+        if (window.MathJax) {
+            MathJax.typesetPromise([document.getElementById('math-panel')]).catch((err) => console.log(err));
+        }
+    }
+
+    function resetSimulation() {
+        w1 = 0.9;
+        w2 = 0.1;
+        mask = [1, 1];
+        runScenario('dropout');
+    }
+
+    /* =================================================================
+       第二部分（动图与数据映射）的隔离 JavaScript 代码
+       ================================================================= */
+    const layers2 = [3, 5, 5, 2];
+    const layerNames2 = ['Input', 'Hidden 1', 'Hidden 2', 'Output'];
+    const originalA1_2 = [2.0, 4.0, 6.0, 8.0, 10.0]; 
+    let p_keep2 = 0.5;
+    let mode2 = 'train';
+    let currentMasks2 = [];
+
+    function resetMasks2() {
+        currentMasks2 = layers2.map(numNodes => Array(numNodes).fill(1));
+    }
+    resetMasks2();
+
+    const canvas2 = document.getElementById('nnCanvas2');
+    const ctx2 = canvas2.getContext('2d');
+    let nodeCoords2 = [];
+
+    function calculateCoords2() {
+        nodeCoords2 = [];
+        const width = canvas2.width;
+        const height = canvas2.height;
+        const layerSpacing = width / (layers2.length + 1);
+
+        for (let l = 0; l < layers2.length; l++) {
+            const numNodes = layers2[l];
+            const nodeSpacing = height / (numNodes + 1);
+            let layerCoords = [];
+            for (let n = 0; n < numNodes; n++) {
+                layerCoords.push({
+                    x: layerSpacing * (l + 1),
+                    y: nodeSpacing * (n + 1)
+                });
+            }
+            nodeCoords2.push(layerCoords);
+        }
+    }
+
+    function drawNetwork2() {
+        ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+        
+        for (let l = 0; l < layers2.length - 1; l++) {
+            for (let i = 0; i < layers2[l]; i++) {
+                for (let j = 0; j < layers2[l+1]; j++) {
+                    const nodeA = nodeCoords2[l][i];
+                    const nodeB = nodeCoords2[l+1][j];
+                    const isActive = currentMasks2[l][i] === 1 && currentMasks2[l+1][j] === 1;
+                    
+                    ctx2.beginPath();
+                    ctx2.moveTo(nodeA.x, nodeA.y);
+                    ctx2.lineTo(nodeB.x, nodeB.y);
+                    ctx2.strokeStyle = isActive ? 'rgba(52, 152, 219, 0.4)' : 'rgba(236, 240, 241, 0.2)';
+                    ctx2.lineWidth = isActive ? 1.5 : 0.5;
+                    ctx2.stroke();
+                }
+            }
+        }
+
+        const radius = 20; 
+        for (let l = 0; l < layers2.length; l++) {
+            for (let i = 0; i < layers2[l]; i++) {
+                const node = nodeCoords2[l][i];
+                const isActive = currentMasks2[l][i] === 1;
+
+                ctx2.beginPath();
+                ctx2.arc(node.x, node.y, radius, 0, Math.PI * 2);
+                
+                if (l === 0) {
+                    ctx2.fillStyle = '#2ecc71'; 
+                } else if (l === layers2.length - 1) {
+                    ctx2.fillStyle = '#e74c3c'; 
+                } else {
+                    ctx2.fillStyle = isActive ? '#3498db' : '#ecf0f1'; 
+                }
+                
+                ctx2.fill();
+                ctx2.lineWidth = 2;
+                ctx2.strokeStyle = isActive || l === 0 || l === layers2.length - 1 ? '#ffffff' : '#bdc3c7';
+                ctx2.stroke();
+
+                if (l === 1) {
+                    ctx2.fillStyle = isActive ? '#ffffff' : '#95a5a6';
+                    ctx2.font = '14px Arial';
+                    ctx2.textAlign = 'center';
+                    ctx2.textBaseline = 'middle';
+                    ctx2.fillText(`n${i+1}`, node.x, node.y);
+
+                    const a = originalA1_2[i];
+                    const m = currentMasks2[1][i];
+                    let displayVal = a * m;
+                    if (mode2 === 'train') displayVal = displayVal / p_keep2;
+
+                    if (m === 0) {
+                        ctx2.fillStyle = '#e74c3c'; 
+                    } else if (mode2 === 'train' && p_keep2 < 1.0) {
+                        ctx2.fillStyle = '#16a34a'; 
+                    } else {
+                        ctx2.fillStyle = '#34495e'; 
+                    }
+                    
+                    ctx2.font = 'bold 16px Arial';
+                    ctx2.fillText(displayVal.toFixed(1), node.x, node.y + 35);
+                }
+            }
+            
+            ctx2.fillStyle = '#34495e';
+            ctx2.font = '16px Arial';
+            ctx2.textAlign = 'center';
+            ctx2.fillText(layerNames2[l], nodeCoords2[l][0].x, 30);
+        }
+    }
+
+    function forwardPass2() {
+        if (mode2 === 'train') {
+            currentMasks2[0] = Array(layers2[0]).fill(1);
+            currentMasks2[layers2.length - 1] = Array(layers2[layers2.length - 1]).fill(1);
+            for (let l = 1; l < layers2.length - 1; l++) {
+                currentMasks2[l] = Array(layers2[l]).fill(0).map(() => Math.random() < p_keep2 ? 1 : 0);
+            }
+        } else {
+            resetMasks2();
+        }
+        drawNetwork2();
+        updateDataTable2();
+    }
+
+    function updateDataTable2() {
+        const mask1 = currentMasks2[1];
+        let tableHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>节点标识</th>
+                        <th>原始输出 $a_i^{(1)}$</th>
+                        <th>随机掩码 $r_i^{(1)}$</th>
+                        <th>失活后 $a_i^{(1)} \\times r_i^{(1)}$</th>
+                        <th>最终结果 $\\tilde{a}_i^{(1)}$</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        let sumOriginal = 0;
+        let sumDeactivated = 0;
+        let sumScaled = 0;
+
+        for (let i = 0; i < 5; i++) {
+            const a = originalA1_2[i];
+            const m = mask1[i];
+            
+            const deactivatedVal = a * m;
+            let scaledVal = deactivatedVal;
+            if (mode2 === 'train') {
+                scaledVal = deactivatedVal / p_keep2;
+            }
+
+            sumOriginal += a;
+            sumDeactivated += deactivatedVal;
+            sumScaled += scaledVal;
+
+            let maskStr = m === 0 ? `<span class="highlight-red">0</span>` : `1`;
+            let deactStr = deactivatedVal === 0 ? `<span class="highlight-red">0.0</span>` : deactivatedVal.toFixed(1);
+            
+            let scaledStr = m === 1 && mode2 === 'train' && p_keep2 < 1.0 ? `<span class="highlight-green-2">${scaledVal.toFixed(1)}</span>` : scaledVal.toFixed(1);
+            if (mode2 === 'inference') scaledStr = scaledVal.toFixed(1); 
+
+            tableHTML += `
+                <tr>
+                    <td><strong>$n_${i+1}$</strong></td>
+                    <td>${a.toFixed(1)}</td>
+                    <td>${maskStr}</td>
+                    <td>${deactStr}</td>
+                    <td>${scaledStr}</td>
+                </tr>
+            `;
+        }
+
+        tableHTML += `
+                <tr class="sum-row">
+                    <td><strong>层信号总和</strong></td>
+                    <td>${sumOriginal.toFixed(1)}</td>
+                    <td>-</td>
+                    <td>${sumDeactivated.toFixed(1)} <br><span style="font-size:0.8em;font-weight:normal;color:#e74c3c;">(信号剧减)</span></td>
+                    <td>${sumScaled.toFixed(1)} <br><span style="font-size:0.8em;font-weight:normal;color:#16a34a;">(补偿期望)</span></td>
+                </tr>
+            </tbody></table>
+        `;
+
+        document.getElementById('dynamic-data-table2').innerHTML = tableHTML;
+
+        let principleHTML = '';
+        if (mode2 === 'train') {
+            principleHTML = `
+                <p><strong>结合上图与上表，看清本质：</strong></p>
+                <ul>
+                    <li><strong>找映射：</strong>请看动图的 Hidden 1 列，圆圈里写着 $n_1$ 到 $n_5$。圆圈下方的数字，就是表格里<strong>“最终结果”</strong>这一列的数字。它们是严格对应的计算产物。</li>
+                    <li><strong>看失活：</strong>表格里随机掩码变成 0 时，不仅表格里最终结果是红色的 <span class="highlight-red">0.0</span>，你可以看到左边对应的圆圈瞬间变灰，连接线被切断，数字也变成了 <span class="highlight-red">0.0</span>。</li>
+                    <li><strong>看放大（极其重要）：</strong>看表格最下方那一行<strong>“层信号总和”</strong>。原本 5 个人输出的总信号是 ${sumOriginal.toFixed(1)}。因为有人被失活（休假），中间结果暴跌到了 ${sumDeactivated.toFixed(1)}。为了防止网络崩溃，剩下的人（掩码为1的节点）必须站出来，强行除以 $p=${p_keep2}$（即放大，对应绿色的数字），最终把总信号拉回到 ${sumScaled.toFixed(1)}，维持了系统的稳定！</li>
+                </ul>
+            `;
+        } else {
+            principleHTML = `
+                <p><strong>推理阶段解析：</strong></p>
+                <p>在推理阶段（预测未知数据时），掩码全部为 1，网络全员上阵。你可以看到，表格中的“最终结果”与“原始输出”完全一致，动图下方的数字也恢复了原始状态。此时网络处于最强、最完整的工作形态。</p>
+            `;
+        }
+        
+        document.getElementById('principle-explanation2').innerHTML = principleHTML;
+
+        if (window.MathJax) {
+            MathJax.typesetPromise([document.getElementById('dynamic-data-table2')]).catch(function (err) {
+                console.error(err.message);
+            });
+        }
+    }
+
+    function updateP2() {
+        p_keep2 = parseFloat(document.getElementById('pSlider2').value).toFixed(1);
+        document.getElementById('pVal2').innerText = p_keep2;
+        if(mode2 === 'train') forwardPass2();
+    }
+
+    function changeMode2() {
+        mode2 = document.getElementById('modeSelect2').value;
+        const btn = document.getElementById('forwardBtn2');
+        const slider = document.getElementById('pSlider2');
+        
+        if (mode2 === 'inference') {
+            btn.disabled = true;
+            slider.disabled = true;
+            p_keep2 = 1.0; 
+            forwardPass2(); 
+        } else {
+            btn.disabled = false;
+            slider.disabled = false;
+            p_keep2 = parseFloat(document.getElementById('pSlider2').value).toFixed(1);
+            forwardPass2(); 
+        }
+    }
+
+    /* =================================================================
+       页面全局加载统一控制
+       ================================================================= */
+    window.onload = () => {
+        runScenario('dropout');
+        calculateCoords2();
+        forwardPass2();
+    };
+</script>
+</body>
+</html>

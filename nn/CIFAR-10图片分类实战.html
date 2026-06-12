@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI小白的图像分类启蒙课：手撕CNN卷积神经网络 (完整代码版)</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+
+    <style>
+        /* 基础样式与限制容器宽度 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Microsoft YaHei';
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        /* 顶部按钮区域 */
+        .top-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #eef2f5;
+            border-radius: 8px;
+            justify-content: center;
+        }
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn-download { background-color: #00a1d6; }
+        .btn-download:hover { background-color: #008cb9; }
+        .btn-source { background-color: #4CAF50; }
+        .btn-source:hover { background-color: #45a049; }
+
+        /* 模态框样式 */
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0;
+            width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe; margin: 5% auto; padding: 20px;
+            border: 1px solid #888; width: 80%; max-width: 1000px; border-radius: 8px;
+            position: relative;
+        }
+        .close {
+            color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;
+        }
+        .close:hover { color: black; }
+
+        /* 内容区块样式 */
+        h1, h2, h3 { color: #2c3e50; }
+        h1 { text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { border-left: 5px solid #e74c3c; padding-left: 10px; margin-top: 40px; background-color: #f9f9f9; padding: 10px;}
+        .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .callout { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; border-radius: 0 4px 4px 0; }
+        .math-box { background-color: #fdf6e3; padding: 15px; border-radius: 5px; border: 1px dashed #e67e22; overflow-x: auto;}
+        
+        /* 表格与动画样式 */
+        .demo-container { display: flex; justify-content: space-around; align-items: center; margin: 20px 0; flex-wrap: wrap; }
+        .matrix { border-collapse: collapse; margin: 10px; text-align: center; }
+        .matrix td { width: 40px; height: 40px; border: 1px solid #999; font-size: 16px; background-color: #fff; transition: all 0.3s; }
+        .matrix-title { text-align: center; font-weight: bold; margin-bottom: 5px; color: #555; }
+        
+        /* 动画高亮色 */
+        .hl-input { background-color: #b3e5fc !important; } /* 浅蓝 */
+        .hl-kernel { background-color: #c8e6c9 !important; } /* 浅绿 */
+        .hl-output { background-color: #ffcc80 !important; font-weight: bold; color: #d84315; } /* 橙色 */
+        
+        .calculation-display {
+            font-size: 18px; font-family: monospace; background: #282c34; color: #abb2bf;
+            padding: 15px; border-radius: 5px; width: 100%; max-width: 800px; margin: 0 auto;
+            text-align: center; min-height: 60px;
+        }
+
+        .img-container { text-align: center; margin: 20px 0; }
+        .img-container img { max-width: 100%; height: auto; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        pre code { border-radius: 6px; font-size: 15px; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <div class="top-bar">
+        <button class="btn btn-download" onclick="showDownloadModal()">⬇️ 下载训练数据</button>
+        <button class="btn btn-source" onclick="showSourceModal()">💻 查看完整源码</button>
+    </div>
+
+    <h1>🚀 深入浅出：从零看懂图像分类神经网络（全代码精讲）</h1>
+    
+    <div class="callout">
+        <strong>👋 同学你好！</strong> 之前为了突出重点缩减了代码，现在我们把每一块代码<strong>完完整整</strong>地拿出来逐字讲解。结合你那张复杂的网络结构图，我会用吃货视角和动图演示，带你把这五大代码块彻彻底底地“生吞活剥”！
+    </div>
+
+    <div class="img-container">
+        <h3>我们要拆解的网络结构图如下</h3>
+        <img src="p1.png" alt="网络结构示意图" style="max-height: 600px; object-fit: contain; opacity: 0.8;">
+        <p><small>注：此处用占位图示意，请对照你手中的原图来看下面的推导。</small></p>
+    </div>
+
+    <h2>第一块：导入依赖与准备数据（给AI准备教材）</h2>
+    <div class="card">
+        <pre><code class="language-python">import time
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import ToTensor  # 你需要额外安装. pip install torchvision -i https://mirrors.aliyun.com/pypi/simple/
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torchsummary import summary
+
+### 1. 准备数据
+def create_dataset():
+    print('===========================构建张量数据集===========================')
+    # 1. 加载训练集
+    # 参1：数据存放路径；参2：是否为训练集；参3：数据转换；参4：是否允许下载数据（如果数据不存在）
+    tran_dataset = CIFAR10(root='./data', train=True,  transform=ToTensor(), download=True)
+    # 2. 加载测试集
+    test_dataset = CIFAR10(root='./data', train=False, transform=ToTensor(), download=True)
+    # 3. 返回数据集
+    return tran_dataset, test_dataset</code></pre>
+        <h3>💡 通俗解读：</h3>
+        <p>前面的一大串 <code>import</code> 是在借用大佬们写好的工具包（PyTorch）。重点看 <code>create_dataset()</code> 函数，这就像是你在教小宝宝认识动物（CIFAR10 包含猫狗鸟等10种分类）。</p>
+        <ul>
+            <li><strong>训练集 (train=True)</strong>：你拿来教宝宝的卡片库。</li>
+            <li><strong>测试集 (train=False)</strong>：期末考试卷。用他没见过的卡片，考考他学得怎么样。</li>
+            <li><strong>ToTensor()</strong>：宝宝看不懂彩色实物，只能看懂数字矩阵（张量 Tensor）。这一步负责把图片变成机器能处理的数据格式。</li>
+        </ul>
+    </div>
+
+    <h2>第二块：搭建模型（核心！图片尺寸是怎么变的？）</h2>
+    <div class="callout">
+        <strong>⚠️ 高能预警：这是最核心的结构图实现！</strong> 我们把整个模型类 <code>CIFARModel</code> 完整拿出来。
+    </div>
+    
+    <div class="card">
+        <pre><code class="language-python">### 2. 搭建模型
+class CIFARModel(nn.Module):
+    print('===========================搭建神经网络模型===========================')
+    # 1. 创建各层网络
+    def __init__(self):
+        super().__init__()
+        # 1.1 第一个卷积层：输入 3个 Channels, 输出 6个 Channels, 卷积核大小 3x3, 步长 1, 填充 0
+        # 输入：3x32x32
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=3, stride=1, padding=0)
+        # 第一个池化层：输入 30x30, 输出 15x15, 卷积核大小 2x2, 步长 2, 填充 0
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        # 1.2 第二个卷积层：输入 6个 Channels, 输出 16个 Channels, 卷积核大小 3x3, 步长 1, 填充 0
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3, stride=1, padding=0)
+        # 第二个池化层：输入 13x13, 输出 6x6, 卷积核大小 2x2, 步长 2, 填充 0
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        # 1.3 第一个全连接层：输入 576 (= 16 * 6 * 6) 维, 输出 120 维
+        self.linear1 = nn.Linear(576, 120)
+        # 1.4 第二个全连接层：输入 120 维, 输出 84 维
+        self.linear2 = nn.Linear(120, 84)
+        # 1.5 最后的输出层：输入 84 维, 输出 10 维
+        self.out = nn.Linear(84, 10)
+
+    # 2. 定义前向传播
+    def forward(self, x):
+        # 第1层: 卷积层 -> 激活层 -> 池化层
+        #        池化         激活      卷积
+        x = self.pool1(torch.relu(self.conv1(x)))
+        # 第2层: 卷积层 -> 激活层 -> 池化层
+        x = self.pool2(torch.relu(self.conv2(x)))
+
+        # 扁平化: 将 16x6x6 的特征图, 拉直成为长度 576 的一维向量
+        # shape: [batch_size, 16, 6, 6] -> [batch_size, 576]
+        x = x.reshape(x.shape[0], -1)
+
+        # 第3层: 第1个全连接层 + 激活函数
+        x = torch.relu(self.linear1(x))
+        # 第4层: 第2个全连接层 + 激活函数
+        x = torch.relu(self.linear2(x))
+        # 第5层: 输出层
+        # x = self.out(x)
+        return self.out(x)      # 后续传入 CrossEntropyLoss = Softmax计算 + 损失函数计算</code></pre>
+
+        <h3>1. 什么是卷积与池化？看结构图上的尺寸变化</h3>
+        <p>假设图片是一张大披萨，<strong>卷积核（Kernel）</strong>就像是一个小巧的“模具”。我们拿着模具在披萨上滑动，提取出特征（比如边缘、颜色）。</p>
+
+        <div class="math-box">
+            <strong>📐 黄金公式：卷积后的尺寸怎么算？</strong><br>
+            假设输入图片大小为 $I$，卷积核大小为 $K$，填充为 $P$，步长为 $S$。输出图片大小 $O$ 计算如下：
+            $$ O = \frac{I - K + 2P}{S} + 1 $$
+        </div>
+
+        <p><strong>结合代码 <code>self.conv1</code> 和你的图纸：</strong><br>
+        输入图片是 $32 \times 32$（$I = 32$）。代码中 <code>kernel_size=3</code> ($K=3$), <code>padding=0</code> ($P=0$), <code>stride=1</code> ($S=1$)。<br>
+        代入公式计算：
+        $$ O = \frac{32 - 3 + 2 \times 0}{1} + 1 = 30 $$
+        <strong>🎉 结论：</strong> 图片从 $32 \times 32$ 变成了图纸上的 <strong>$30 \times 30$</strong>！</p>
+
+        <p><strong>接下来是池化 <code>self.pool1</code>：</strong><br>
+        池化就是“浓缩”。模具变成了 $2 \times 2$ ($K=2$)，步长为 $2$ ($S=2$)。代入公式：
+        $$ O = \frac{30 - 2 + 0}{2} + 1 = 15 $$
+        <strong>🎉 结论：</strong> 图片被浓缩一半，变成了图纸上的 <strong>$15 \times 15$</strong>！</p>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <h3>🎬 互动演示：卷积的数字是怎么算出来的？</h3>
+        <p>左边是图像矩阵，中间是卷积核。重叠部分对应位置相乘再相加，填入右边特征图中。</p>
+        
+        <div class="demo-container">
+            <div>
+                <div class="matrix-title">输入图像 (I)</div>
+                <table class="matrix" id="input-matrix"></table>
+            </div>
+            <div style="font-size: 30px; font-weight: bold; color: #888;">*</div>
+            <div>
+                <div class="matrix-title">卷积核 (K)</div>
+                <table class="matrix" id="kernel-matrix"></table>
+            </div>
+            <div style="font-size: 30px; font-weight: bold; color: #888;">=</div>
+            <div>
+                <div class="matrix-title">输出特征图 (O)</div>
+                <table class="matrix" id="output-matrix"></table>
+            </div>
+        </div>
+        <div class="calculation-display" id="calc-display">等待计算...</div>
+        <div style="text-align: center; margin-top: 10px;">
+            <button class="btn btn-download" onclick="startAnimation()">▶️ 重新播放动画</button>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <h3>2. 扁平化与全连接层（从图像转变为概率）</h3>
+        <p>你看 <code>forward</code> 函数里面有一句 <code>x = x.reshape(x.shape[0], -1)</code>。经过两轮卷积池化，原本的图片变成了 16 个 $6 \times 6$ 的小方块。<br>
+        我们把它们拉直排成一排，长度就是 $16 \times 6 \times 6 = 576$。这就是图纸最右边长条的 <strong>(576x1)</strong>。</p>
+        <p>最后通过 <code>linear1</code>, <code>linear2</code>, <code>out</code> 这几个“全连接层”（就像算命先生层层打分），把 576 个特征浓缩成 120 个，再浓缩成 84 个，最后得出 <strong>10个分数</strong>。分数最高的那一项，就是AI猜测的动物类别！</p>
+
+    </div>
+
+    <h2>第三块：训练模型（让AI在纠错中学习）</h2>
+    <div class="card">
+        <pre><code class="language-python">### 3. 训练模型
+def train(tran_dataset):
+    print('===========================模型训练===========================')
+    # 使用 GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 1. 创建训练数据加载器
+    data_loader = DataLoader(tran_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # 2. 创建模型
+    model = CIFARModel()
+    model = model.to(device)
+    # 3. 创建损失函数
+    criterion = nn.CrossEntropyLoss()
+    # 4. 创建优化器
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+
+    # 5. 训练模型
+    epochs = 10
+    for epoch in range(epochs):
+        # 记录总损失
+        total_loss = 0.0
+        # 记录正确预测数量
+        total_correct = 0
+        # 记录开始时间
+        start = time.time()
+
+        # 分批次训练
+        for x, y in data_loader:
+            x = x.to(device)
+            y = y.to(device)
+
+            # 5.1 模型预测
+            y_pred = model(x)
+            # 5.2 计算损失（累计总损失）
+            loss = criterion(y_pred, y)
+            total_loss += loss.item() * len(x)
+            # 5.3 计算梯度
+            # 梯度清零
+            optimizer.zero_grad()
+            loss.backward()
+            # 5.4 更新权重
+            optimizer.step()
+            # 5.5 累计正确预测总数
+            total_correct += (torch.argmax(y_pred, dim=-1) == y).sum()
+
+        # 计算时间、平均损失、准确率
+        dur = time.time() - start
+        mean_loss = total_loss / len(tran_dataset)
+        accuracy = total_correct / len(tran_dataset)
+        # 打印结果
+        print(f"epoch: {epoch+1}, mean_loss: {mean_loss:.3f}, acc: {accuracy: .3f}, time: {dur:.3f} s")
+
+    # 6. 保存模型
+    torch.save(model.state_dict(), '.cifar_model.pth')</code></pre>
+        <h3>💡 通俗解读：</h3>
+        <p>这一大段循环，就是AI做题、对答案、自我纠正的过程。</p>
+        <ol>
+            <li><strong> DataLoader</strong>：因为一次看 50000 张图太累了，所以每次抽取一小批（<code>BATCH_SIZE</code>）来学。</li>
+            <li><strong> y_pred = model(x)</strong>：模型看图做预测。</li>
+            <li><strong> loss = criterion(y_pred, y)</strong>：计算“损失”。如果AI把猫看成了狗，严厉的老师（Loss函数）就会给出很高的惩罚分。</li>
+            <li><strong> loss.backward() 加上 optimizer.step()</strong>：反向传播与优化。老师指点迷津，AI根据错误，偷偷拧动脑子里 <code>CIFARModel</code> 的各个参数旋钮。下一次预测就会更准一点。</li>
+            <li>跑完 10 个周期（<code>epochs=10</code>）后，把学聪明的脑子存下来（<code>torch.save</code>）。</li>
+        </ol>
+    </div>
+<script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+    <h2>第四块：模型评估（期末大考）</h2>
+    <div class="card">
+        <pre><code class="language-python"># 4. 模型评估
+def evaluate(test_dataset):
+    print('===========================模型评估===========================')
+    # 使用 GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 1. 创建预测数据加载器
+    data_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE*2, shuffle=False)
+    # 2. 创建模型
+    model = CIFARModel()
+    # 3. 加载模型权重
+    model.load_state_dict(torch.load('.cifar_model.pth'))
+    # 4. 切换到模型评估模式
+    model.eval()
+    model = model.to(device)
+
+    # 5. 模型预测
+    # 记录正确预测数量
+    start = time.time()
+    total_correct = 0
+    for x, y in data_loader:
+        x = x.to(device)
+        y = y.to(device)
+
+        # 5.1 模型预测
+        y_pred = model(x)                       # 加权求和结果
+        y_pred = torch.argmax(y_pred, dim=-1)   # 分类结果
+        # 5.2 获取预测正确的样本个数.
+        total_correct += (y_pred == y).sum()
+
+    dur = time.time() - start
+    # 5. 打印结果
+    print(f'accuracy: {total_correct / len(test_dataset):.3f}, time: {dur:.3f} s')</code></pre>
+        <h3>💡 通俗解读：</h3>
+        <p>把刚才存下来的“聪明脑子”读进来（<code>load_state_dict</code>），并且告诉它 <code>model.eval()</code>（考试模式，不准看答案偷改参数了！）。<br>
+        让它在 10000 张没见过的测试集（期末卷子）上做预测，最后统计答对的题数（<code>total_correct</code>），除以总题数，算出最终的准确率 Accuracy。</p>
+    </div>
+
+    <h2>第五块：主程序入口（把所有流程串起来）</h2>
+    <div class="card">
+        <pre><code class="language-python">if __name__ == '__main__':
+
+    # 设置超参数
+    BATCH_SIZE = 32
+    LR = 0.001
+
+    # 1. 准备数据
+    tran_dataset, test_dataset = create_dataset()
+    # 检查数据
+    print(f'训练集数量: {tran_dataset.data.shape}')
+    print(f'测试集数量: {test_dataset.data.shape}')
+    print(f'分类类别： {tran_dataset.classes}')
+    print(f'分类类别索引: {tran_dataset.class_to_idx}')
+    # 显示图像
+    # i = 10000
+    # plt.imshow(tran_dataset.data[i])
+    # plt.title(tran_dataset.classes[tran_dataset.targets[i]])
+    # plt.show()
+
+    # 2. 搭建模型
+    model = CIFARModel()
+    # 查看模型参数
+    summary(model, input_size=(3, 32, 32), device='cpu')
+    # 168 = (3*3*3 + 1) * 6
+    # 880 = (3*3*6 + 1) * 16
+    # 69240 = (16*6*6 + 1) * 120
+    # 10164 = (120 + 1) * 84
+    # 850 = (84 + 1) * 10
+
+    # 3. 测试 模型训练函数.
+    train(tran_dataset)
+
+    # 4. 测试 模型评估函数.
+    evaluate(test_dataset)</code></pre>
+        <h3>💡 通俗解读：</h3>
+        <p>这是程序的总指挥部。在这里设置了 <code>BATCH_SIZE</code>（每次看多少张图）和 <code>LR</code>（学习率，代表AI学习时调整参数的步伐大小）。<br>
+        同时，在注释里你解答了参数量是怎么算出来的，例如：第一层参数 <code>168 = (3*3*3 + 1) * 6</code>。<br>
+        计算公式：<strong>参数量 = (卷积核宽 $\times$ 卷积核高 $\times$ 输入通道数 + 1个偏置值) $\times$ 输出通道数。</strong>完全正确！</p>
+    </div>
+
+</div> <div id="downloadModal" class="modal">
+    <div class="modal-content" style="max-width: 500px; text-align: center;">
+        <span class="close" onclick="closeModal('downloadModal')">&times;</span>
+        <h2 style="margin-top: 0;">📦 数据集下载链接</h2>
+        <p>以下是 CIFAR-10 数据集的百度网盘分享：</p>
+        <div style="background: #f1f1f1; padding: 15px; border-radius: 5px; text-align: left; margin: 20px 0;">
+            通过网盘分享的文件：<strong>cifar-10-batches-py</strong><br><br>
+            链接: <a href="https://pan.baidu.com/s/1_rrVfg9aDYs-newMhl0CLw" target="_blank" style="color: #00a1d6;">https://pan.baidu.com/s/1_rrVfg9aDYs-newMhl0CLw</a><br>
+            提取码: <strong style="color: #e74c3c;">wj9q</strong><br>
+            <small style="color: #888;">--来自百度网盘超级会员v2的分享</small>
+        </div>
+        <button class="btn btn-download" onclick="window.open('https://pan.baidu.com/s/1_rrVfg9aDYs-newMhl0CLw')">立即前往下载</button>
+    </div>
+</div>
+
+<div id="sourceModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('sourceModal')">&times;</span>
+        <h2 style="margin-top: 0;">💻 完整源码</h2>
+        <button class="btn btn-source" onclick="copyCode()" id="copyBtn" style="margin-bottom: 10px;">📋 一键复制全部代码</button>
+        <pre><code class="language-python" id="fullSourceCode">import time
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import ToTensor  # 你需要额外安装. pip install torchvision -i https://mirrors.aliyun.com/pypi/simple/
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torchsummary import summary
+
+
+### 1. 准备数据
+def create_dataset():
+    print('===========================构建张量数据集===========================')
+    # 1. 加载训练集
+    # 参1：数据存放路径；参2：是否为训练集；参3：数据转换；参4：是否允许下载数据（如果数据不存在）
+    tran_dataset = CIFAR10(root='./data', train=True,  transform=ToTensor(), download=True)
+    # 2. 加载测试集
+    test_dataset = CIFAR10(root='./data', train=False, transform=ToTensor(), download=True)
+    # 3. 返回数据集
+    return tran_dataset, test_dataset
+### 2. 搭建模型
+class CIFARModel(nn.Module):
+    print('===========================搭建神经网络模型===========================')
+    # 1. 创建各层网络
+    def __init__(self):
+        super().__init__()
+        # 1.1 第一个卷积层：输入 3个 Channels, 输出 6个 Channels, 卷积核大小 3x3, 步长 1, 填充 0
+        # 输入：3x32x32
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=3, stride=1, padding=0)
+        # 第一个池化层：输入 30x30, 输出 15x15, 卷积核大小 2x2, 步长 2, 填充 0
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        # 1.2 第二个卷积层：输入 6个 Channels, 输出 16个 Channels, 卷积核大小 3x3, 步长 1, 填充 0
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=3, stride=1, padding=0)
+        # 第二个池化层：输入 13x13, 输出 6x6, 卷积核大小 2x2, 步长 2, 填充 0
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        # 1.3 第一个全连接层：输入 576 (= 16 * 6 * 6) 维, 输出 120 维
+        self.linear1 = nn.Linear(576, 120)
+        # 1.4 第二个全连接层：输入 120 维, 输出 84 维
+        self.linear2 = nn.Linear(120, 84)
+        # 1.5 最后的输出层：输入 84 维, 输出 10 维
+        self.out = nn.Linear(84, 10)
+
+    # 2. 定义前向传播
+    def forward(self, x):
+        # 第1层: 卷积层 -> 激活层 -> 池化层
+        #        池化         激活      卷积
+        x = self.pool1(torch.relu(self.conv1(x)))
+        # 第2层: 卷积层 -> 激活层 -> 池化层
+        x = self.pool2(torch.relu(self.conv2(x)))
+
+        # 扁平化: 将 16x6x6 的特征图, 拉直成为长度 576 的一维向量
+        # shape: [batch_size, 16, 6, 6] -> [batch_size, 576]
+        x = x.reshape(x.shape[0], -1)
+
+        # 第3层: 第1个全连接层 + 激活函数
+        x = torch.relu(self.linear1(x))
+        # 第4层: 第2个全连接层 + 激活函数
+        x = torch.relu(self.linear2(x))
+        # 第5层: 输出层
+        # x = self.out(x)
+        return self.out(x)      # 后续传入 CrossEntropyLoss = Softmax计算 + 损失函数计算
+### 3. 训练模型
+def train(tran_dataset):
+    print('===========================模型训练===========================')
+    # 使用 GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 1. 创建训练数据加载器
+    data_loader = DataLoader(tran_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # 2. 创建模型
+    model = CIFARModel()
+    model = model.to(device)
+    # 3. 创建损失函数
+    criterion = nn.CrossEntropyLoss()
+    # 4. 创建优化器
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+
+    # 5. 训练模型
+    epochs = 10
+    for epoch in range(epochs):
+        # 记录总损失
+        total_loss = 0.0
+        # 记录正确预测数量
+        total_correct = 0
+        # 记录开始时间
+        start = time.time()
+
+        # 分批次训练
+        for x, y in data_loader:
+            x = x.to(device)
+            y = y.to(device)
+
+            # 5.1 模型预测
+            y_pred = model(x)
+            # 5.2 计算损失（累计总损失）
+            loss = criterion(y_pred, y)
+            total_loss += loss.item() * len(x)
+            # 5.3 计算梯度
+            # 梯度清零
+            optimizer.zero_grad()
+            loss.backward()
+            # 5.4 更新权重
+            optimizer.step()
+            # 5.5 累计正确预测总数
+            total_correct += (torch.argmax(y_pred, dim=-1) == y).sum()
+
+        # 计算时间、平均损失、准确率
+        dur = time.time() - start
+        mean_loss = total_loss / len(tran_dataset)
+        accuracy = total_correct / len(tran_dataset)
+        # 打印结果
+        print(f"epoch: {epoch+1}, mean_loss: {mean_loss:.3f}, acc: {accuracy: .3f}, time: {dur:.3f} s")
+
+    # 6. 保存模型
+    torch.save(model.state_dict(), '.cifar_model.pth')
+# 4. 模型评估
+def evaluate(test_dataset):
+    print('===========================模型评估===========================')
+    # 使用 GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 1. 创建预测数据加载器
+    data_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE*2, shuffle=False)
+    # 2. 创建模型
+    model = CIFARModel()
+    # 3. 加载模型权重
+    model.load_state_dict(torch.load('.cifar_model.pth'))
+    # 4. 切换到模型评估模式
+    model.eval()
+    model = model.to(device)
+
+    # 5. 模型预测
+    # 记录正确预测数量
+    start = time.time()
+    total_correct = 0
+    for x, y in data_loader:
+        x = x.to(device)
+        y = y.to(device)
+
+        # 5.1 模型预测
+        y_pred = model(x)                       # 加权求和结果
+        y_pred = torch.argmax(y_pred, dim=-1)   # 分类结果
+        # 5.2 获取预测正确的样本个数.
+        total_correct += (y_pred == y).sum()
+
+    dur = time.time() - start
+    # 5. 打印结果
+    print(f'accuracy: {total_correct / len(test_dataset):.3f}, time: {dur:.3f} s')
+
+
+if __name__ == '__main__':
+
+    # 设置超参数
+    BATCH_SIZE = 32
+    LR = 0.001
+
+    # 1. 准备数据
+    tran_dataset, test_dataset = create_dataset()
+    # 检查数据
+    print(f'训练集数量: {tran_dataset.data.shape}')
+    print(f'测试集数量: {test_dataset.data.shape}')
+    print(f'分类类别： {tran_dataset.classes}')
+    print(f'分类类别索引: {tran_dataset.class_to_idx}')
+    # 显示图像
+    # i = 10000
+    # plt.imshow(tran_dataset.data[i])
+    # plt.title(tran_dataset.classes[tran_dataset.targets[i]])
+    # plt.show()
+
+    # 2. 搭建模型
+    model = CIFARModel()
+    # 查看模型参数
+    summary(model, input_size=(3, 32, 32), device='cpu')
+    # 168 = (3*3*3 + 1) * 6
+    # 880 = (3*3*6 + 1) * 16
+    # 69240 = (16*6*6 + 1) * 120
+    # 10164 = (120 + 1) * 84
+    # 850 = (84 + 1) * 10
+
+    # 3. 测试 模型训练函数.
+    train(tran_dataset)
+
+    # 4. 测试 模型评估函数.
+    evaluate(test_dataset)</code></pre>
+    </div>
+</div>
+
+<script>
+    // 初始化代码高亮
+    hljs.highlightAll();
+
+    // 模态框逻辑
+    function showDownloadModal() { document.getElementById('downloadModal').style.display = "block"; }
+    function showSourceModal() { document.getElementById('sourceModal').style.display = "block"; }
+    function closeModal(id) { document.getElementById(id).style.display = "none"; }
+    window.onclick = function(event) {
+        if (event.target.className == 'modal') {
+            event.target.style.display = "none";
+        }
+    }
+
+    // 复制源码功能
+    function copyCode() {
+        const codeText = document.getElementById('fullSourceCode').innerText;
+        navigator.clipboard.writeText(codeText).then(() => {
+            const btn = document.getElementById('copyBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "✅ 复制成功！";
+            setTimeout(() => { btn.innerText = originalText; }, 2000);
+        });
+    }
+
+    // ==========================================
+    // 卷积动画核心逻辑
+    // ==========================================
+    const inputSize = 5;
+    const kernelSize = 3;
+    const outputSize = inputSize - kernelSize + 1; // = 3
+    let animationTimer;
+
+    // 构造数据表格的HTML
+    function buildTable(id, size, isOutput=false) {
+        const table = document.getElementById(id);
+        table.innerHTML = '';
+        for(let i=0; i<size; i++){
+            const tr = document.createElement('tr');
+            for(let j=0; j<size; j++){
+                const td = document.createElement('td');
+                td.id = `${id}-${i}-${j}`;
+                if(!isOutput) {
+                    // 填入随机演示数据
+                    td.innerText = (id === 'kernel-matrix') ? (Math.floor(Math.random()*3)-1) : Math.floor(Math.random()*5);
+                }
+                tr.appendChild(td);
+            }
+            table.appendChild(tr);
+        }
+    }
+
+    function initAnimationData() {
+        buildTable('input-matrix', inputSize);
+        buildTable('kernel-matrix', kernelSize);
+        buildTable('output-matrix', outputSize, true);
+    }
+
+    // 清理高亮
+    function clearHighlights() {
+        document.querySelectorAll('td').forEach(td => {
+            td.classList.remove('hl-input', 'hl-kernel', 'hl-output');
+        });
+    }
+
+    // 运行一次动画步骤
+    function stepAnimation(outRow, outCol) {
+        clearHighlights();
+        let equationHTML = `计算位置 [${outRow}, ${outCol}]: <br>`;
+        let sum = 0;
+        
+        // 标记输出框
+        const outCell = document.getElementById(`output-matrix-${outRow}-${outCol}`);
+        outCell.classList.add('hl-output');
+        outCell.innerText = '?';
+
+        // 遍历核的高亮并提取数值计算
+        const terms = [];
+        for(let i=0; i<kernelSize; i++) {
+            for(let j=0; j<kernelSize; j++) {
+                const inR = outRow + i;
+                const inC = outCol + j;
+                
+                const inCell = document.getElementById(`input-matrix-${inR}-${inC}`);
+                const kCell = document.getElementById(`kernel-matrix-${i}-${j}`);
+                
+                inCell.classList.add('hl-input');
+                kCell.classList.add('hl-kernel');
+
+                const inVal = parseInt(inCell.innerText);
+                const kVal = parseInt(kCell.innerText);
+                const mult = inVal * kVal;
+                sum += mult;
+
+                terms.push(`(<span style="color:#61afef">${inVal}</span>×<span style="color:#98c379">${kVal}</span>)`);
+            }
+        }
+        
+        equationHTML += terms.join(' + ') + ` = <span style="color:#e06c75; font-size: 24px; font-weight:bold;">${sum}</span>`;
+        document.getElementById('calc-display').innerHTML = equationHTML;
+        
+        // 更新输出结果
+        setTimeout(() => {
+            outCell.innerText = sum;
+        }, 800);
+    }
+
+    function startAnimation() {
+        if(animationTimer) clearInterval(animationTimer);
+        initAnimationData();
+        
+        let stepCount = 0;
+        const totalSteps = outputSize * outputSize;
+        
+        document.getElementById('calc-display').innerText = "动画开始...";
+        
+        // 每 2 秒跳一步
+        animationTimer = setInterval(() => {
+            if(stepCount >= totalSteps) {
+                clearInterval(animationTimer);
+                document.getElementById('calc-display').innerHTML = "🎉 卷积计算完成！";
+                clearHighlights();
+                return;
+            }
+            const r = Math.floor(stepCount / outputSize);
+            const c = stepCount % outputSize;
+            stepAnimation(r, c);
+            stepCount++;
+        }, 2000);
+    }
+
+    // 页面加载完成后启动动画
+    window.onload = function() {
+        startAnimation();
+    };
+
+</script>
+</body>
+</html>

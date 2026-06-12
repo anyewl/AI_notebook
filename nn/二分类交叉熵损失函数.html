@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>二分类交叉熵损失函数：AI 惩罚机制详解</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #333; line-height: 1.6; background-color: #f9f9f9; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1, h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .math-block { background: #2d3436; color: #fab1a0; padding: 20px; border-radius: 8px; font-family: 'Courier New', Courier, monospace; margin: 20px 0; font-size: 1.4em; text-align: center; }
+        .formula-explain { background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 5px solid #ff9f43; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 16px; }
+        th, td { border: 1px solid #ddd; padding: 15px; text-align: center; }
+        th { background-color: #f1f2f6; }
+        .highlight { color: #d63031; font-weight: bold; }
+        .interactive-box { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; }
+        .control-panel { background: #f8f9fa; padding: 20px; border-radius: 8px; }
+        input[type="range"] { width: 100%; height: 8px; cursor: pointer; }
+        .step-card { background: #fdfdfd; border: 1px solid #eee; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .code-block { background: #2d3436; color: #dfe6e9; padding: 20px; border-radius: 8px; font-family: monospace; margin-top: 10px; overflow-x: auto; }
+        .interview-q { background: #e8f4fd; border-left: 5px solid #3498db; padding: 15px; margin-top: 15px; }
+        
+        /* 新增控制按钮的样式 */
+        .btn-true-val {
+            border: none; padding: 10px 20px; color: white; border-radius: 6px; 
+            cursor: pointer; font-size: 15px; font-weight: bold; transition: all 0.3s;
+            margin-right: 10px; opacity: 0.5;
+        }
+        .btn-true-val:hover { transform: translateY(-2px); }
+    </style>
+
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>二分类交叉熵 (BCE Loss) 教学演示</h1>
+    
+    <p>想象你在训练一个AI判断图片是不是“猫”。<strong>真实结果(y)</strong>只有两种：是(1)或不是(0)。<strong>预测概率(\(\hat{y}\))</strong>是AI给出的0到1之间的信心指数。</p>
+
+    <h2>1. 核心公式与本质</h2>
+    <div class="math-block">
+        \( L = -[ y \cdot \ln(\hat{y}) + (1 - y) \cdot \ln(1 - \hat{y}) ] \)
+    </div>
+
+    <div class="formula-explain">
+        <strong>公式解码：</strong>
+        <ul>
+            <li>\( y \): <strong>真实标签</strong>。如果图片是猫，\( y=1 \)。</li>
+            <li>\( \hat{y} \): <strong>预测概率</strong>。AI觉得是猫的信心值，比如 0.9。</li>
+            <li>\( -\ln(\hat{y}) \): <strong>核心惩罚机制</strong>。这部分是我们要重点看的地方。</li>
+        </ul>
+        <p><em>本质：</em>如果 \( y=1 \)，公式简化为 \( L = -\ln(\hat{y}) \)。当 AI 预测概率 \( \hat{y} \) 越接近 0（猜错了），损失 \( L \) 就会飞速飙升，从而迫使 AI “吸取教训”。</p>
+    </div>
+
+    <h2>2. 数据案例对比 (匹配 PyTorch 代码数据)</h2>
+    <table>
+        <tr>
+            <th>样本</th>
+            <th>真实标签 (y)</th>
+            <th>AI预测 (\(\hat{y}\))</th>
+            <th>计算过程</th>
+            <th>损失 (Loss)</th>
+        </tr>
+        <tr>
+            <td>样本 1</td>
+            <td>0</td>
+            <td>0.3</td>
+            <td>\( -\ln(1-0.3) \)</td>
+            <td>0.3567</td>
+        </tr>
+        <tr>
+            <td>样本 2</td>
+            <td>1</td>
+            <td>0.8</td>
+            <td>\( -\ln(0.8) \)</td>
+            <td>0.2231</td>
+        </tr>
+        <tr>
+            <td>样本 3</td>
+            <td>0</td>
+            <td>0.1</td>
+            <td>\( -\ln(1-0.1) \)</td>
+            <td>0.1054</td>
+        </tr>
+        <tr>
+            <td><strong>平均 (Total)</strong></td>
+            <td>-</td>
+            <td>-</td>
+            <td>(0.3567 + 0.2231 + 0.1054) / 3</td>
+            <td class="highlight">0.2284</td>
+        </tr>
+    </table>
+
+    <h2>3. 动态交互演示：交叉熵惩罚曲线的“镜像对称”</h2>
+    <div class="interactive-box">
+        <div class="control-panel">
+            
+            <h3 style="margin-top: 0;">1. 设定真实值 y (Ground Truth)：</h3>
+            <div style="margin-bottom: 25px;">
+                <button id="btnY0" class="btn-true-val" style="background: #e74c3c;" onclick="setTrueLabel(0)">0 (负类)</button>
+                <button id="btnY1" class="btn-true-val" style="background: #27ae60;" onclick="setTrueLabel(1)">1 (正类)</button>
+            </div>
+
+            <h3>2. 调整预测值 (\(\hat{y}\))：</h3>
+            <label>当前 \(\hat{y}\) = <span id="yVal" class="highlight">0.50</span></label>
+            <input type="range" id="y_pred" min="0.01" max="0.99" step="0.01" value="0.50" oninput="updateDemo()">
+            
+            <div style="margin-top: 20px;">
+                <p>当前计算过程：</p>
+                <div id="calcText" class="math-block" style="font-size: 1em;">-ln(0.50) = 0.6931</div>
+                <p id="explainText" style="color: #636e72;"></p>
+            </div>
+        </div>
+        
+        <div style="position: relative; width: 100%; min-width: 0;">
+            <canvas id="lossChart"></canvas>
+        </div>
+    </div>
+    
+    <h2>4. 开发者必看：PyTorch 实现细节</h2>
+    <div class="step-card">
+        <p>在 PyTorch 中进行二分类任务时，注意数据类型的设置至关重要：</p>
+        <div class="code-block">
+            <pre>
+# 1. 创建样本真实值
+y_true = torch.tensor(data=[0, 1, 0], dtype=torch.float32)         # 【严重警告】：二分类索引编码必须使用 float32
+print('Index Encoding must use dtype->', y_true.dtype)
+# y_true = torch.tensor(data=[0, 1, 0], dtype=torch.int32)         # 使用 int32 会导致计算损失时【报错】
+# y_true = torch.tensor(data=[0, 1, 0], dtype=torch.int64)         # 使用 int64 会导致计算损失时【报错】
+
+# 2. 创建模型预测概率值
+y_pred = torch.tensor(data=[0.3, 0.8, 0.1])
+
+# 3. 创建二分类交叉熵损失函数
+criterion = nn.BCELoss()                                            # 默认：reduction='mean'
+
+# 4. 计算损失值
+loss = criterion(y_pred, y_true)
+print('loss ->', loss)  # 0.2284</pre>
+        </div>
+    </div>
+
+    <h2>5. 面试高频考题</h2>
+    <div class="interview-q">
+        <p><strong>Q1: 为什么分类任务中偏好使用交叉熵 (BCE) 而不是均方误差 (MSE)？</strong></p>
+        <p>答：在使用 Sigmoid 激活函数时，MSE 的梯度在误差较大时会趋近于 0（梯度饱和），导致模型难以收敛。而交叉熵求导后，梯度与误差是线性关系，能够有效避免梯度消失问题。</p>
+    </div>
+    <div class="interview-q">
+        <p><strong>Q2: 为什么在 PyTorch 中使用 BCELoss 时标签必须是 float？</strong></p>
+        <p>答：因为 BCE 公式涉及对数运算和概率乘法，这在数学上定义于实数域。如果传入整数（int），会导致框架在做除法或梯度计算时因为类型不匹配而报错。PyTorch 要求输入和标签的 dtype 必须一致。</p>
+    </div>
+
+</div>
+
+<script>
+    let currentY = 1; // 记录当前真实的标签 y
+
+    const ctx = document.getElementById('lossChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            // 生成 0.00 到 1.00 的 X 轴坐标
+            labels: Array.from({length: 101}, (_, i) => (i/100).toFixed(2)),
+            datasets: [{
+                label: '当 y=1 时, Loss = -ln(\u0079\u0302)', // 用 unicode 处理 y_hat 防止乱码
+                data: Array.from({length: 101}, (_, i) => {
+                    let p = i/100;
+                    if (p === 0) p = 0.001; // 防止 ln(0) 无穷大
+                    return -Math.log(p);
+                }),
+                borderColor: '#27ae60',
+                borderWidth: 3,
+                pointRadius: 0
+            }]
+        },
+        options: { 
+            responsive: true, 
+            scales: { 
+                x: { title: { display: true, text: '预测概率 (\u0079\u0302)' } }, 
+                y: { title: { display: true, text: '损失值 (Loss)' } } 
+            } 
+        }
+    });
+
+    // 切换真实标签的函数
+    function setTrueLabel(val) {
+        currentY = val;
+        const btn0 = document.getElementById('btnY0');
+        const btn1 = document.getElementById('btnY1');
+        const explainText = document.getElementById('explainText');
+        
+        if (val === 1) {
+            btn1.style.opacity = '1';
+            btn1.style.boxShadow = '0 0 0 4px rgba(46, 204, 113, 0.4)';
+            btn0.style.opacity = '0.4';
+            btn0.style.boxShadow = 'none';
+            
+            chart.data.datasets[0].label = '当 y=1 时, Loss = -ln(\u0079\u0302)';
+            chart.data.datasets[0].borderColor = '#27ae60';
+            chart.data.datasets[0].data = Array.from({length: 101}, (_, i) => {
+                let p = i/100;
+                if (p === 0) p = 0.001; 
+                return -Math.log(p);
+            });
+            explainText.innerHTML = '👉 <strong>逻辑解读：</strong> 因为真实情况是正类 (1)，当预测滑块向左靠近 0 时，说明模型错得离谱，图表上的惩罚曲线迅速飙升！';
+        } else {
+            btn0.style.opacity = '1';
+            btn0.style.boxShadow = '0 0 0 4px rgba(231, 76, 60, 0.4)';
+            btn1.style.opacity = '0.4';
+            btn1.style.boxShadow = 'none';
+            
+            chart.data.datasets[0].label = '当 y=0 时, Loss = -ln(1-\u0079\u0302)';
+            chart.data.datasets[0].borderColor = '#e74c3c';
+            chart.data.datasets[0].data = Array.from({length: 101}, (_, i) => {
+                let p = i/100;
+                if (p === 1) p = 0.999; 
+                return -Math.log(1 - p);
+            });
+            explainText.innerHTML = '👉 <strong>逻辑解读：</strong> 因为真实情况是负类 (0)，当预测滑块向右靠近 1 时，说明模型错得离谱，图表上的惩罚曲线迅速向右方飙升！';
+        }
+        
+        chart.update();
+        updateDemo(); // 切换按钮时，同时更新公式块内容
+    }
+
+    // 拖动滑块计算 Loss 函数
+    function updateDemo() {
+        const val = parseFloat(document.getElementById('y_pred').value);
+        document.getElementById('yVal').innerText = val.toFixed(2);
+        
+        let loss;
+        if (currentY === 1) {
+            loss = -Math.log(val);
+            document.getElementById('calcText').innerHTML = `-ln(${val.toFixed(2)}) = <span style="color:#27ae60;">${loss.toFixed(4)}</span>`;
+        } else {
+            loss = -Math.log(1 - val);
+            document.getElementById('calcText').innerHTML = `-ln(1 - ${val.toFixed(2)}) = <span style="color:#e74c3c;">${loss.toFixed(4)}</span>`;
+        }
+    }
+    
+    // 页面加载完成后，默认激活 y=1 状态
+    window.addEventListener('DOMContentLoaded', () => {
+        setTrueLabel(1);
+    });
+
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+
+
+</script>
+
+</body>
+</html>

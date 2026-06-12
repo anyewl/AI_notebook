@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小白也能懂的神经网络：PReLU 实战全量上图版 (BCE 修复版)</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            line-height: 1.6;
+            background-color: #f8f9fa;
+        }
+        h1, h2, h3 { color: #2c3e50; }
+        h1 { text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px;}
+        
+        .card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            transition: border-color 0.3s, box-shadow 0.3s;
+            border: 2px solid transparent;
+        }
+        .card.active-step {
+            border-color: #f1c40f;
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.3);
+            background: #fffdf5;
+        }
+        .card.active-step-back {
+            border-color: #e74c3c;
+            box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+            background: #fff5f5;
+        }
+
+        .highlight { color: #e74c3c; font-weight: bold; }
+        .math-block {
+            background: #f1f8ff;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+            margin: 15px 0;
+            overflow-x: auto;
+            font-size: 1.1em;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 12px 15px; border: 1px solid #dee2e6; text-align: center; }
+        th { background-color: #3498db; color: white; font-weight: 600; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        
+        .sticky-visual {
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+            background: #2c3e50;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+        }
+        
+        #network-svg {
+            width: 100%; max-width: 900px; height: 320px;
+            margin: 0; display: block;
+        }
+        .node { fill: #ecf0f1; stroke: #34495e; stroke-width: 3; transition: fill 0.5s; }
+        .node-text { font-family: sans-serif; font-size: 16px; font-weight: bold; fill: #2c3e50; text-anchor: middle; dominant-baseline: central; }
+        
+        /* 调大节点内数值的字体 */
+        .node-val { font-family: sans-serif; font-size: 16px; fill: #e74c3c; text-anchor: middle; font-weight: bold; transition: all 0.3s;}
+        .edge { stroke: #7f8c8d; stroke-width: 2; fill: none; opacity: 0.6; }
+        
+        .param-weight { font-family: 'Courier New', Courier, monospace; font-size: 15px; font-weight: bold; fill: #f39c12; text-anchor: middle; transition: all 0.3s; }
+        .param-bias { font-family: 'Courier New', Courier, monospace; font-size: 14px; font-weight: bold; fill: #3498db; text-anchor: middle; transition: all 0.3s; }
+        .param-alpha { font-family: 'Courier New', Courier, monospace; font-size: 14px; font-weight: bold; fill: #9b59b6; text-anchor: middle; }
+        
+        /* 调大变量标识 z 和 a 的字体 */
+        .var-label { font-family: 'Courier New', Courier, monospace; font-size: 18px; text-anchor: start; font-weight: bold; transition: all 0.3s;}
+        .var-z { fill: #8e44ad; } 
+        .var-a { fill: #27ae60; } 
+        
+        .param-bg { paint-order: stroke; stroke: #2c3e50; stroke-width: 4px; } 
+
+        .btn-step {
+            background: #3498db; color: white; border: none; padding: 10px 20px;
+            font-size: 15px; border-radius: 5px; cursor: pointer; margin-top: 10px;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        .btn-step:hover { background: #2980b9; transform: scale(1.02); }
+        .btn-back { background: #e74c3c; }
+        .btn-back:hover { background: #c0392b; }
+        .btn-reset { background: #95a5a6; }
+        .btn-reset:hover { background: #7f8c8d; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>小白也能懂的神经网络：PReLU实战结合版</h1>
+    
+    <div class="sticky-visual" style="display: flex; align-items: center; justify-content: center; padding: 15px 25px;">
+        
+        <div style="display: flex; flex-direction: column; width: 220px; margin-right: 30px; text-align: center;">
+            <button class="btn-step btn-reset" onclick="resetAll()" style="margin-top: 0;">🔄 重置网络与参数</button>
+            <span style="color: #ecf0f1; font-size: 13px; line-height: 1.6; margin-top: 12px; border-top: 1px dashed #7f8c8d; padding-top: 10px;">注意：<br><span style="color:#e74c3c; font-weight:bold;">w12 变为 -1.0</span><br>并引入 PReLU 参数 α</span>
+        </div>
+<script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+        <div style="flex: 1; display: flex; justify-content: center;">
+            <svg id="network-svg" viewBox="0 0 950 380">
+                <line class="edge" x1="150" y1="100" x2="450" y2="100" />
+                <line class="edge" x1="150" y1="100" x2="450" y2="280" />
+                <line class="edge" x1="150" y1="280" x2="450" y2="100" />
+                <line class="edge" x1="150" y1="280" x2="450" y2="280" />
+                <line class="edge" x1="450" y1="100" x2="750" y2="190" />
+                <line class="edge" x1="450" y1="280" x2="750" y2="190" />
+                
+                <text class="param-weight param-bg" id="lbl-w11" x="300" y="90">w11 = 0.1</text>
+                <text class="param-weight param-bg" id="lbl-w12" x="320" y="165" style="fill: #e74c3c;">w12 = -1.0</text>
+                <text class="param-weight param-bg" id="lbl-w21" x="320" y="225">w21 = 0.3</text>
+                <text class="param-weight param-bg" id="lbl-w22" x="300" y="270">w22 = 0.4</text>
+                
+                <text class="param-weight param-bg" id="lbl-v1" x="600" y="135">v1 = 0.7</text>
+                <text class="param-weight param-bg" id="lbl-v2" x="600" y="255">v2 = 0.8</text>
+
+                <text class="param-bias param-bg" id="lbl-b1" x="450" y="30">b1 = 0.5</text>
+                <text class="param-alpha param-bg" id="lbl-a1" x="450" y="50">PReLU α = 0.1</text>
+                
+                <text class="param-bias param-bg" id="lbl-b2" x="450" y="345">b2 = 0.6</text>
+                <text class="param-alpha param-bg" id="lbl-a2" x="450" y="365">PReLU α = 0.1</text>
+                
+                <text class="param-bias param-bg" id="lbl-c" x="750" y="125">c = 0.9</text>
+
+                <circle class="node" cx="150" cy="100" r="40" />
+                <text class="node-text" x="150" y="85">x1</text>
+                <text class="node-val" id="val-x1" x="150" y="110">0.5</text>
+
+                <circle class="node" cx="150" cy="280" r="40" />
+                <text class="node-text" x="150" y="265">x2</text>
+                <text class="node-val" id="val-x2" x="150" y="290">0.8</text>
+                
+                <!-- 这里的 style 字体已调大 -->
+                <g class="split-node">
+                    <circle class="node" cx="450" cy="100" r="55" />
+                    <line x1="450" y1="45" x2="450" y2="155" stroke="#34495e" stroke-width="2" />
+                    <text class="node-text" x="450" y="65">h1</text>
+                    <text x="420" y="90" class="var-label var-z" style="font-size:18px; text-anchor:middle;">z</text>
+                    <text class="node-val var-z" id="val-zh1" x="420" y="118">?</text>
+                    <text x="480" y="90" class="var-label var-a" style="font-size:18px; text-anchor:middle;">a</text>
+                    <text class="node-val var-a" id="val-ah1" x="480" y="118">?</text>
+                    <text class="node-val" id="val-delta-h1" x="450" y="118"></text>
+                </g>
+
+                <g class="split-node">
+                    <circle class="node" cx="450" cy="280" r="55" />
+                    <line x1="450" y1="225" x2="450" y2="335" stroke="#34495e" stroke-width="2" />
+                    <text class="node-text" x="450" y="245">h2</text>
+                    <text x="420" y="270" class="var-label var-z" style="font-size:18px; text-anchor:middle;">z</text>
+                    <text class="node-val var-z" id="val-zh2" x="420" y="298">?</text>
+                    <text x="480" y="270" class="var-label var-a" style="font-size:18px; text-anchor:middle;">a</text>
+                    <text class="node-val var-a" id="val-ah2" x="480" y="298">?</text>
+                    <text class="node-val" id="val-delta-h2" x="450" y="298"></text>
+                </g>
+                
+                <g class="split-node">
+                    <circle class="node" cx="750" cy="190" r="55" />
+                    <line x1="750" y1="135" x2="750" y2="245" stroke="#34495e" stroke-width="2" />
+                    <text class="node-text" x="750" y="155">Out</text>
+                    <text x="720" y="180" class="var-label var-z" style="font-size:18px; text-anchor:middle;">z</text>
+                    <text class="node-val var-z" id="val-zout" x="720" y="208">?</text>
+                    <text x="780" y="180" class="var-label var-a" style="font-size:18px; text-anchor:middle;">a</text>
+                    <text class="node-val var-a" id="val-aout" x="780" y="208">?</text>
+                    <text class="node-val" id="val-delta-out" x="750" y="208"></text>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <div class="card" id="card-dataset">
+        <h2>📊 课前准备：我们的数据样本（一条具体数据）</h2>
+        <p>在开始让数据跑进神经网络之前，我们先明确一下今天所使用的原始数据。在真实的AI业务中，数据通常是一行一行的表格。在这里，我们直接从数据集中抽出<strong>第 1 条真实训练数据</strong>用于全流程推演：</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>样本编号</th>
+                    <th>特征 1 ($x_1$)</th>
+                    <th>特征 2 ($x_2$)</th>
+                    <th>真实标签 ($y$)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>#1</td>
+                    <td>0.5</td>
+                    <td>0.8</td>
+                    <td>1</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card" id="card-step1">
+        <h2>第 1 步：正向传播计算隐藏层（使用 PReLU 激活）</h2>
+        <button class="btn-step" onclick="runStep1()">▶ 点击演示：结合 w 和 b 计算隐藏层</button>
+        
+        <div class="math-block">
+            <strong>1. 计算 $h_1$ 节点：</strong><br>
+            $$z_{h1} = (0.5 \times 0.1) + (0.8 \times -1.0) + 0.5 = 0.05 - 0.8 + 0.5 = -0.25$$
+            $$a_{h1} = \text{PReLU}(-0.25) = 0.1 \times (-0.25) = -0.025$$
+            <br>
+            <strong>2. 同理计算 $h_2$ 节点：</strong><br>
+            $$z_{h2} = (0.5 \times 0.3) + (0.8 \times 0.4) + 0.6 = 0.15 + 0.32 + 0.6 = 1.07$$
+            $$a_{h2} = \text{PReLU}(1.07) = 1.07$$
+        </div>
+    </div>
+
+    <div class="card" id="card-step2">
+        <h2>第 2 步：正向传播计算输出结果（Sigmoid 激活 + BCE 损失）</h2>
+        <button class="btn-step" onclick="runStep2()">▶ 点击演示：结合 v 和 c 计算输出层</button>
+        
+        <div class="math-block">
+            <strong>计算最终输出：</strong><br>
+            $$z_{out} = (-0.025 \times 0.7) + (1.07 \times 0.8) + 0.9 = 1.7385$$
+            $$a_{out} = \sigma(1.7385) = \frac{1}{1 + e^{-1.7385}} \approx 0.85$$
+            <br>
+            <strong>计算误差 (Binary Cross-Entropy)：</strong><br>
+            真实答案 $y=1$，模型计算得到 $a_{out}=0.85$。为了配合分类任务与 Sigmoid，我们采用交叉熵损失函数：
+            $$E = -[y \ln(a_{out}) + (1-y)\ln(1-a_{out})]$$
+            $$E = -[1 \times \ln(0.85) + 0 \times \ln(0.15)] \approx 0.1625$$
+        </div>
+    </div>
+
+    <div class="card" id="card-step3">
+        <h2>第 3 步：反向传播第一站 —— 完整链式法则展开</h2>
+        
+        <div class="math-block" style="text-align: center; background: #ffffff; border: 2px solid #3498db; padding: 25px;">
+            <strong>【核心总公式：反向传播链式法则】</strong><br><br>
+            $$ \frac{\partial E}{\partial v_1} = \underbrace{ \frac{\partial E}{\partial a_{out}} }_{Loss} \times \underbrace{ \frac{\partial a_{out}}{\partial z_{out}} }_{Sigmoid} \times \underbrace{ \frac{\partial z_{out}}{\partial v_1} }_{Signal} $$
+        </div>
+
+        <button class="btn-step btn-back" onclick="runStep3()">◀ 点击演示：误差回传并更新 v1, v2</button>
+        
+        <div class="math-block">
+            <strong>第一阶段：找出方向（计算完整梯度）</strong><br><br>
+            计算关于 $v_1$ 的完整梯度：
+            $$ \frac{\partial E}{\partial v_1} = \frac{\partial E}{\partial a_{out}} \times \frac{\partial a_{out}}{\partial z_{out}} \times \frac{\partial z_{out}}{\partial v_1} $$
+            $$ \frac{\partial E}{\partial v_1} = \left( -\frac{y}{a_{out}} + \frac{1-y}{1-a_{out}} \right) \times [ a_{out} \times (1 - a_{out}) ] \times a_{h1} $$
+            $$ \frac{\partial E}{\partial v_1} = \left( -\frac{1}{0.85} + \frac{1-1}{1-0.85} \right) \times [ 0.85 \times (1 - 0.85) ] \times (-0.025) $$
+            $$ \frac{\partial E}{\partial v_1} = (-1.17647 + 0) \times (0.85 \times 0.15) \times (-0.025) $$
+            $$ \frac{\partial E}{\partial v_1} = (-1.17647) \times 0.1275 \times (-0.025) $$
+            $$ \frac{\partial E}{\partial v_1} = (-0.15) \times (-0.025) = 0.00375 $$
+            
+            <br>计算关于 $v_2$ 的完整梯度：
+            $$ \frac{\partial E}{\partial v_2} = \frac{\partial E}{\partial a_{out}} \times \frac{\partial a_{out}}{\partial z_{out}} \times \frac{\partial z_{out}}{\partial v_2} $$
+            $$ \frac{\partial E}{\partial v_2} = \left( -\frac{y}{a_{out}} + \frac{1-y}{1-a_{out}} \right) \times [ a_{out} \times (1 - a_{out}) ] \times a_{h2} $$
+            $$ \frac{\partial E}{\partial v_2} = \left( -\frac{1}{0.85} + 0 \right) \times [ 0.85 \times 0.15 ] \times 1.07 $$
+            $$ \frac{\partial E}{\partial v_2} = (-1.17647) \times 0.1275 \times 1.07 $$
+            $$ \frac{\partial E}{\partial v_2} = (-0.15) \times 1.07 = -0.1605 $$
+            
+            <hr style="border: 1px dashed #bdc3c7; margin: 15px 0;">
+
+            <strong>第二阶段：迈出步伐（更新参数，假设学习率 $\eta = 0.5$）</strong><br>
+            $$ v_1^{(new)} = v_1 - \eta \times \frac{\partial E}{\partial v_1} = 0.7 - 0.5 \times 0.00375 = 0.7 - 0.001875 = 0.698125 $$
+            $$ v_2^{(new)} = v_2 - \eta \times \frac{\partial E}{\partial v_2} = 0.8 - 0.5 \times (-0.1605) = 0.8 + 0.08025 = 0.88025 $$
+        </div>
+    </div>
+
+    <div class="card" id="card-step4">
+        <h2>第 4 步：反向传播第二站 —— 隐藏层 PReLU 的全链条导数展开</h2>
+        <button class="btn-step btn-back" onclick="runStep4()">◀ 点击演示：误差回传修改 w11</button>
+        
+        <div class="math-block">
+            <strong>完整追溯计算 $w_{11}$ 的梯度：</strong><br>
+            $$ \frac{\partial E}{\partial w_{11}} = \frac{\partial E}{\partial a_{out}} \times \frac{\partial a_{out}}{\partial z_{out}} \times \frac{\partial z_{out}}{\partial a_{h1}} \times \frac{\partial a_{h1}}{\partial z_{h1}} \times \frac{\partial z_{h1}}{\partial w_{11}} $$
+            代入各个偏导数的具体数学公式：
+            $$ \frac{\partial E}{\partial w_{11}} = \left( -\frac{y}{a_{out}} + \frac{1-y}{1-a_{out}} \right) \times [ a_{out} \times (1 - a_{out}) ] \times v_1 \times \text{PReLU}'(z_{h1}) \times x_1 $$
+            逐一代入所有数值（由于 $z_{h1} = -0.25 < 0$，其 $\text{PReLU}'(-0.25) = \alpha = 0.1$）：
+            $$ \frac{\partial E}{\partial w_{11}} = \left( -\frac{1}{0.85} + \frac{0}{0.15} \right) \times (0.85 \times 0.15) \times 0.7 \times 0.1 \times 0.5 $$
+            $$ \frac{\partial E}{\partial w_{11}} = (-1.17647) \times 0.1275 \times 0.7 \times 0.1 \times 0.5 $$
+            $$ \frac{\partial E}{\partial w_{11}} = (-0.15) \times 0.7 \times 0.1 \times 0.5 $$
+            $$ \frac{\partial E}{\partial w_{11}} = -0.105 \times 0.1 \times 0.5 $$
+            $$ \frac{\partial E}{\partial w_{11}} = -0.0105 \times 0.5 = -0.00525 $$
+            
+            <hr style="border: 1px dashed #bdc3c7; margin: 15px 0;">
+
+            <strong>更新参数 $w_{11}$（假设学习率 $\eta = 0.5$）：</strong><br>
+            $$ w_{11}^{(new)} = w_{11} - \eta \times \frac{\partial E}{\partial w_{11}} = 0.1 - 0.5 \times (-0.00525) = 0.1 + 0.002625 = 0.102625 $$
+        </div>
+    </div>
+</div>
+
+<script>
+    const svg = document.getElementById('network-svg');
+    let activeCircles = [];
+
+    const initialParams = {
+        'lbl-w11': 'w11 = 0.1', 'lbl-w12': 'w12 = -1.0',
+        'lbl-w21': 'w21 = 0.3', 'lbl-w22': 'w22 = 0.4',
+        'lbl-v1': 'v1 = 0.7',   'lbl-v2': 'v2 = 0.8',
+        'lbl-b1': 'b1 = 0.5', 'lbl-b2': 'b2 = 0.6', 'lbl-c': 'c = 0.9'
+    };
+
+    function resetAll() {
+        activeCircles.forEach(c => c.remove());
+        activeCircles = [];
+        
+        const innerVals = ['val-zh1', 'val-ah1', 'val-zh2', 'val-ah2', 'val-zout', 'val-aout'];
+        innerVals.forEach(id => {
+            document.getElementById(id).textContent = "?";
+            document.getElementById(id).style.fill = "#e74c3c";
+        });
+
+        const deltaVals = ['val-delta-h1', 'val-delta-h2', 'val-delta-out'];
+        deltaVals.forEach(id => {
+            document.getElementById(id).textContent = "";
+        });
+        
+        for (let id in initialParams) {
+            const el = document.getElementById(id);
+            el.textContent = initialParams[id];
+            el.style.fill = id.includes('lbl-b') || id.includes('lbl-c') ? '#3498db' : '#f39c12';
+            if(id === 'lbl-w12') el.style.fill = '#e74c3c'; 
+            el.style.fontSize = id.includes('lbl-b') || id.includes('lbl-c') ? '14px' : '15px';
+            el.style.fontWeight = 'bold';
+        }
+        
+        document.querySelectorAll('.card').forEach(card => {
+            card.classList.remove('active-step', 'active-step-back');
+        });
+    }
+
+    function createMovingPacket(startX, startY, endX, endY, isBackprop) {
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("r", "8");
+        circle.setAttribute("fill", isBackprop ? "#e74c3c" : "#f1c40f");
+        svg.appendChild(circle);
+        activeCircles.push(circle);
+
+        const anim = circle.animate([
+            { cx: startX, cy: startY },
+            { cx: endX, cy: endY }
+        ], {
+            duration: 1200,
+            easing: "ease-in-out",
+            fill: "forwards"
+        });
+        
+        return anim.finished.then(() => circle.remove());
+    }
+
+    function highlightCard(stepId, isBack) {
+        document.querySelectorAll('.card').forEach(card => card.classList.remove('active-step', 'active-step-back'));
+        document.getElementById(stepId).classList.add(isBack ? 'active-step-back' : 'active-step');
+    }
+
+    function runStep1() {
+        resetAll();
+        highlightCard('card-step1', false);
+        
+        Promise.all([
+            createMovingPacket(150, 100, 450, 100, false),
+            createMovingPacket(150, 100, 450, 280, false),
+            createMovingPacket(150, 280, 450, 100, false),
+            createMovingPacket(150, 280, 450, 280, false)
+        ]).then(() => {
+            document.getElementById('val-zh1').textContent = "-0.25";
+            document.getElementById('val-ah1').textContent = "-0.025";
+            document.getElementById('val-zh1').style.fill = "#8e44ad";
+            document.getElementById('val-ah1').style.fill = "#27ae60";
+
+            document.getElementById('val-zh2').textContent = "1.07";
+            document.getElementById('val-ah2').textContent = "1.07";
+            document.getElementById('val-zh2').style.fill = "#8e44ad";
+            document.getElementById('val-ah2').style.fill = "#27ae60";
+        });
+    }
+
+    function runStep2() {
+        document.getElementById('val-zh1').textContent = "-0.25";
+        document.getElementById('val-ah1').textContent = "-0.025";
+        document.getElementById('val-zh1').style.fill = "#8e44ad";
+        document.getElementById('val-ah1').style.fill = "#27ae60";
+
+        document.getElementById('val-zh2').textContent = "1.07";
+        document.getElementById('val-ah2').textContent = "1.07";
+        document.getElementById('val-zh2').style.fill = "#8e44ad";
+        document.getElementById('val-ah2').style.fill = "#27ae60";
+
+        highlightCard('card-step2', false);
+
+        Promise.all([
+            createMovingPacket(450, 100, 750, 190, false),
+            createMovingPacket(450, 280, 750, 190, false)
+        ]).then(() => {
+            document.getElementById('val-zout').textContent = "1.7385";
+            document.getElementById('val-aout').textContent = "0.85";
+            document.getElementById('val-zout').style.fill = "#8e44ad";
+            document.getElementById('val-aout').style.fill = "#27ae60";
+        });
+    }
+
+    function runStep3() {
+        document.getElementById('val-zh1').textContent = "-0.25";
+        document.getElementById('val-ah1').textContent = "-0.025";
+        document.getElementById('val-zh1').style.fill = "#8e44ad";
+        document.getElementById('val-ah1').style.fill = "#27ae60";
+
+        document.getElementById('val-zh2').textContent = "1.07";
+        document.getElementById('val-ah2').textContent = "1.07";
+        document.getElementById('val-zh2').style.fill = "#8e44ad";
+        document.getElementById('val-ah2').style.fill = "#27ae60";
+
+        highlightCard('card-step3', true);
+
+        setTimeout(() => {
+            document.getElementById('val-zout').textContent = "";
+            document.getElementById('val-aout').textContent = "";
+            document.getElementById('val-delta-out').textContent = "δ: -0.15";
+            document.getElementById('val-delta-out').style.fill = "#e74c3c";
+            
+            Promise.all([
+                createMovingPacket(750, 190, 450, 100, true),
+                createMovingPacket(750, 190, 450, 280, true)
+            ]).then(() => {
+                const v1Label = document.getElementById('lbl-v1');
+                const v2Label = document.getElementById('lbl-v2');
+                
+                v1Label.textContent = "梯度: +0.00375";
+                v2Label.textContent = "梯度: -0.1605";
+                v1Label.style.fill = "#e74c3c";
+                v2Label.style.fill = "#e74c3c";
+                
+                setTimeout(() => {
+                    v1Label.textContent = "新 v1 = 0.698125";
+                    v2Label.textContent = "新 v2 = 0.88025";
+                    v1Label.style.fill = "#27ae60"; 
+                    v2Label.style.fill = "#27ae60";
+                    v1Label.style.fontSize = "16px";
+                    v2Label.style.fontSize = "16px";
+                }, 1500);
+            });
+        }, 500);
+    }
+
+    function runStep4() {
+        document.getElementById('lbl-v1').textContent = "新 v1 = 0.698125";
+        document.getElementById('lbl-v1').style.fill = "#27ae60";
+        
+        document.getElementById('val-zout').textContent = "";
+        document.getElementById('val-aout').textContent = "";
+        document.getElementById('val-delta-out').textContent = "δ: -0.15";
+        document.getElementById('val-delta-out').style.fill = "#e74c3c";
+
+        highlightCard('card-step4', true);
+
+        setTimeout(() => {
+            document.getElementById('val-zh1').textContent = "";
+            document.getElementById('val-ah1').textContent = "";
+            document.getElementById('val-delta-h1').textContent = "δ: -0.0105";
+            document.getElementById('val-delta-h1').style.fill = "#e74c3c";
+
+            document.getElementById('val-zh2').textContent = "";
+            document.getElementById('val-ah2').textContent = "";
+            document.getElementById('val-delta-h2').textContent = "δ: ..."; 
+            document.getElementById('val-delta-h2').style.fill = "#e74c3c";
+
+            Promise.all([
+                createMovingPacket(450, 100, 150, 100, true),
+                createMovingPacket(450, 100, 150, 280, true),
+                createMovingPacket(450, 280, 150, 100, true),
+                createMovingPacket(450, 280, 150, 280, true)
+            ]).then(() => {
+                const w11Label = document.getElementById('lbl-w11');
+                w11Label.textContent = "梯度 -0.00525";
+                w11Label.style.fill = "#e74c3c";
+                w11Label.style.fontSize = "16px";
+            });
+        }, 500);
+    }
+</script>
+
+</body>
+</html>

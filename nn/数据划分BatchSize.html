@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <script>
+        (function() {
+            try {
+                // 1. 拦截 getImageData 报错
+                var originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+                CanvasRenderingContext2D.prototype.getImageData = function() {
+                    try {
+                        return originalGetImageData.apply(this, arguments);
+                    } catch (e) {
+                        if (e.name === "SecurityError" || (e.message && e.message.indexOf("security") !== -1)) {
+                            console.warn("[AxureShow] 已拦截 Canvas getImageData 安全报错。");
+                            var sw = arguments[2] || 1, sh = arguments[3] || 1;
+                            return this.createImageData(Math.max(1, sw), Math.max(1, sh));
+                        }
+                        throw e;
+                    }
+                };
+                // 2. 拦截 toDataURL 报错
+                var originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function() {
+                    try {
+                        return originalToDataURL.apply(this, arguments);
+                    } catch (e) {
+                        if (e.name === "SecurityError" || (e.message && e.message.indexOf("security") !== -1)) {
+                            console.warn("[AxureShow] 已拦截 Canvas toDataURL 安全报错。");
+                            return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+                        }
+                        throw e;
+                    }
+                };
+                // 3. 自动为动态创建的图片设置 crossOrigin
+                var originalCreateElement = document.createElement;
+                document.createElement = function(tagName) {
+                    var el = originalCreateElement.apply(document, arguments);
+                    if (tagName && tagName.toLowerCase() === "img") {
+                        try { el.crossOrigin = "anonymous"; } catch(e) {}
+                    }
+                    return el;
+                };
+                // 4. 自动为 new Image() 设置 crossOrigin
+                var NativeImage = window.Image;
+                window.Image = function(w, h) {
+                    var img = new NativeImage(w, h);
+                    try { img.crossOrigin = "anonymous"; } catch(e) {}
+                    return img;
+                };
+                window.Image.prototype = NativeImage.prototype;
+            } catch (e) {}
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器学习 - Batch Size 与优化策略</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 约束2: 容器宽度要求 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            background-color: #f9fbfd;
+        }
+        h1, h2, h3 { color: #1a365d; }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+        .highlight {
+            background-color: #ebf8ff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: #2b6cb0;
+            font-weight: bold;
+        }
+        /* 动画区域样式 */
+        .demo-area {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .book-container {
+            flex: 1;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+            text-align: center;
+            min-height: 150px;
+        }
+        /* 稍微缩小尺寸以完美容纳50个数据块 */
+        .data-box {
+            display: inline-block;
+            width: 26px;
+            height: 26px;
+            line-height: 26px;
+            margin: 3px;
+            background-color: #4299e1;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            border-radius: 4px;
+            transition: all 0.5s ease;
+        }
+        .data-box.processing { background-color: #ed8936; transform: scale(1.1); }
+        .data-box.done { background-color: #48bb78; }
+        
+        button {
+            background-color: #2b6cb0;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover { background-color: #2c5282; }
+        button:disabled { background-color: #cbd5e0; cursor: not-allowed; }
+        
+        /* 下拉选择框样式 */
+        select {
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e0;
+            background-color: white;
+            cursor: pointer;
+            color: #2b6cb0;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background-color: #f7fafc; color: #4a5568; text-align: center; }
+        #gradient-table-body td { text-align: center; }
+        
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .math-dynamic-box {
+            background-color: #2d3748;
+            color: #48bb78;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            margin-top: 15px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .row-highlight {
+            background-color: #fffaf0;
+            font-weight: bold;
+        }
+        .qa-list li {
+            margin-bottom: 15px;
+        }
+        .answer-text {
+            color: #4a5568;
+            background: #f7fafc;
+            padding: 10px;
+            border-left: 3px solid #4299e1;
+            margin-top: 8px;
+            display: block;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🚀 彻底搞懂AI训练中的数据划分与优化</h1>
+    <p>同学你好！学习AI就像我们准备期末考试。假设现在有一本 <strong>50页</strong> 的核心绝密习题集（代表总数据集）。让我们看看模型是怎么“刷题”的。</p>
+    
+    <div class="card">
+        <h2>第一步：选择训练模式并观察数据划分 (Epoch, Batch Size, Iteration)</h2>
+        
+        <div style="margin-bottom: 20px; background-color: #ebf8ff; padding: 15px; border-radius: 8px; border: 1px solid #bee3f8;">
+            <label for="mode-select" style="font-weight: bold; font-size: 1.1em; color: #2b6cb0;">🎯 切换动图演示模式：</label>
+            <select id="mode-select" onchange="changeMode(this.value)">
+                <option value="mini-batch">Mini-Batch GD (小批量梯度下降) - 每次拿10页</option>
+                <option value="sgd">SGD (随机梯度下降) - 每次拿1页</option>
+                <option value="bgd">BGD (批量梯度下降) - 每次全拿50页</option>
+            </select>
+            <span style="color: #4a5568; font-size: 0.95em;">切换模式会自动重置下方的图表和计算数据哦！</span>
+        </div>
+
+        <p>
+            <ul>
+                <li><strong>总数据量 (Dataset)</strong>：习题集总共 <span class="highlight">50</span> 页。</li>
+                <li><strong>Batch Size (批大小)</strong>：你一次拿 <span id="text-batch-size" class="highlight">10</span> 页放在桌子上做。</li>
+                <li><strong>Iteration (步数)</strong>：要把这本习题集全部做完一遍，一共要“搬运” <span id="text-iterations" class="highlight">5</span> 次桌子（即多少个 Batch)。</li>
+                <li><strong>Epoch (轮次)</strong>：当你把这 50 页题完完整整做过一遍，就完成了 <strong>1个 Epoch</strong>。</li>
+            </ul>
+        </p>
+        
+        <button id="btn-batch" onclick="nextIteration()">👉 演示：执行 1 次 Iteration (搬10页题)</button>
+        <button id="btn-reset" onclick="resetBatch()" style="background-color: #718096; display: none;">🔄 重置习题集</button>
+        
+        <div class="demo-area">
+            <div class="book-container">
+                <h3>书包里还没做的题</h3>
+                <div id="unprocessed-data"></div>
+            </div>
+            <div class="book-container">
+                <h3>桌子上正在做的题 (Batch)</h3>
+                <div id="processing-data"></div>
+            </div>
+            <div class="book-container">
+                <h3>已经做完的题 (Trained)</h3>
+                <div id="done-data"></div>
+            </div>
+        </div>
+        <div style="margin-top: 15px; text-align: center; font-size: 1.2em;">
+            当前状态：<strong>第 <span id="iter-count" class="highlight">0</span> 次 Iteration</strong> | 
+            完成 <strong><span id="epoch-count" class="highlight">0</span> 个 Epoch</strong>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第二步：为什么分批训练会产生“震荡”问题？</h2>
+        <p>我们之所以分批训练，是因为计算机的内存（显存）装不下所有数据。但分批会带来一个严重问题：<strong>“管中窥豹，盲人摸象”</strong>。</p>
+        <p id="mode-problem-desc">在当前模式下，每次计算的步伐方向如下表所示：</p>
+        
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Iteration (批次)</th>
+                            <th>当前Batch带来的梯度 ($\theta_t$)</th>
+                            <th>实际情况分析</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gradient-table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第三步：优化神器 —— 指数加权平均 (EMA / Momentum)</h2>
+        <p>为了防止模型“一惊一乍”，我们引入了类似“动量”的概念。核心思想是：<strong>不要只听今天这批数据的，要结合过去几天的平均经验。</strong></p>
+        <p>它的数学公式是这样的（我们假设动量系数 $\beta = 0.5$）：</p>
+        <div style="text-align: center; font-size: 1.2em; margin: 10px 0;">
+            $$V_t = \beta \cdot V_{t-1} + (1 - \beta) \cdot \theta_t$$
+        </div>
+        <ul>
+            <li>$V_t$ ：模型今天要走的<strong>最终实际步伐</strong>。</li>
+            <li>$\beta$ ：对过去经验的信任度。如果是 $0.5$，代表 50% 听过去的。</li>
+            <li>$V_{t-1}$ ：昨天积攒下来的经验步伐。</li>
+            <li>$(1 - \beta)$ ：对今天新数据的信任度。如果是 $0.5$，代表 50% 听今天的。</li>
+            <li>$\theta_t$ ：今天这批数据计算出来的新梯度（就是上表的数字）。</li>
+        </ul>
+        <h3>动态计算演示</h3>
+        <p>点击按钮，我们一步步代入数据，看看公式是怎么把剧烈波动的红线（原始数据），拉成平缓的绿线（EMA优化后）的！</p>
+        
+        <button id="btn-calc" onclick="nextCalc()">➕ 计算下一步 EMA</button>
+        
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <table id="ema-table">
+                    <thead>
+                        <tr>
+                            <th>$t$</th>
+                            <th>新梯度 $\theta_t$</th>
+                            <th>过去经验 $V_{t-1}$</th>
+                            <th>最终步伐 $V_t$ (EMA)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div style="flex: 1;" class="canvas-container">
+                <canvas id="chartCanvas" width="400" height="250"></canvas>
+            </div>
+        </div>
+        
+        <div class="math-dynamic-box" id="math-output">
+            等待点击计算...
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第四步：Batch Size 究竟该怎么选？（大与小的博弈）</h2>
+        <p>在实际炼丹中，Batch Size 的大小直接决定了梯度下降的方向准确度和训练效率。这是一个在“稳定”与“泛化”之间寻找平衡的过程。</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 15%;">Batch Size 设定</th>
+                    <th style="width: 40%;">优势 (Pros)</th>
+                    <th style="width: 45%;">劣势 (Cons)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="text-align: center;"><strong>较大 (Large)</strong></td>
+                    <td>梯度计算更准确且稳定，训练曲线平滑。<br>能充分利用 GPU 矩阵运算的并行加速能力，单次 Epoch 的计算耗时极短。</td>
+                    <td>泛化能力可能稍弱，容易陷入尖锐的局部最小值 (Sharp Local Minima)。<br>对显存要求极高，容易导致 OOM (Out of Memory)。</td>
+                </tr>
+                <tr>
+                    <td style="text-align: center;"><strong>较小 (Small)</strong></td>
+                    <td>梯度包含较大噪声，这种随机性有助于模型跳出局部最优解。<br>通常在测试集上能获得更好的泛化性。</td>
+                    <td>训练过程极不稳定，损失函数震荡剧烈。<br>无法有效发挥 GPU 的并行矩阵运算优势，整体收敛速度慢。</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div style="background-color: #fffaf0; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #ed8936;">
+            <strong>💡 炼丹经验值：</strong> 业界常用的 Batch Size 经验值为 <strong>32, 64, 128</strong>。如果你的显卡显存不够，可以尝试降到 <strong>16 或 8</strong>。<br>
+            <em>注意：通常建议将数值设置为 2 的 N 次方，这与 GPU 的底层硬件架构（如 CUDA 线程束大小）和内存对齐有关，能最大化硬件计算效率。</em>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第五步：🔥 核心面试题自测</h2>
+        <p>理解了底层的迭代原理和博弈过程，面对大厂的这 5 道高频基础面试题自然水到渠成：</p>
+        <ol class="qa-list" style="line-height: 1.8; font-size: 1.05em;">
+            <li>
+                <strong>Epoch、Batch Size 和 Iteration 的区别与联系是什么？</strong>
+                <span class="answer-text"><strong>解析：</strong> Epoch 是指完整遍历一次整个数据集；Batch Size 是单次执行前向/反向传播时所使用的样本数量；Iteration 是指进行一次参数更新（即跑完一个 Batch）。三者的关系公式为：$Iteration = \frac{\text{Dataset Size}}{\text{Batch Size}}$。</span>
+            </li>
+            <li>
+                <strong>为什么 Batch Size 通常设定为 2 的次幂（如 32, 64, 128）？</strong>
+                <span class="answer-text"><strong>解析：</strong> 主要是为了匹配 GPU 等底层硬件设备的架构（例如 CUDA 的线程束 Warp 大小通常是 32）。符合 2 的次幂能够实现更优的内存对齐，大幅提高矩阵乘法的并行计算效率。</span>
+            </li>
+            <li>
+                <strong>如果训练时 Loss 曲线震荡非常剧烈，可能的原因是什么？应该如何调整？</strong>
+                <span class="answer-text"><strong>解析：</strong> 核心原因通常是 Batch Size 设置过小（梯度噪声过大导致盲目乱走），或者学习率（Learning Rate）设置过高。调整策略：适当增大 Batch Size、降低学习率，或者在优化器中引入动量（Momentum）机制进行平滑。</span>
+            </li>
+            <li>
+                <strong>在极小的 Batch Size 下，为什么模型的泛化能力往往反而更好？</strong>
+                <span class="answer-text"><strong>解析：</strong> 小 Batch 带来的剧烈梯度波动包含大量随机噪声，这种噪声起到了一种隐式的正则化（Regularization）作用，使得模型在优化空间中不断“跳跃”，从而不容易落入训练集的尖锐局部极小值（Sharp Minima），更倾向于停留在平缓的极小值区域，因此在未知测试集上表现更佳。</span>
+            </li>
+            <li>
+                <strong>如果服务器显存极小，但又想使用大 Batch Size 来稳定训练，有什么工程手段？</strong>
+                <span class="answer-text"><strong>解析：</strong> 可以使用<strong>梯度累加（Gradient Accumulation）</strong>技术。即保持显存能承受的极小 Batch（如 4）进行前向和反向传播，但不立即更新参数，而是将这几次计算出的梯度在内存中累加。当累积了足够的步数（比如累加 8 次等价于 Batch Size 32）后，再统一执行一次优化器的 `step()` 更新参数并清零梯度。这样本质是用时间换取空间。</span>
+            </li>
+        </ol>
+    </div>
+
+</div>
+
+<script>
+    // ==========================================
+    // 核心多模式配置数据源
+    // ==========================================
+    const totalData = 50;
+    const modeConfigs = {
+        'mini-batch': {
+            batchSize: 10,
+            rawData: [5.00, -1.00, 4.00, -0.50, 3.50],
+            tableRows: [
+                {iter: 1, grad: "+5.00", desc: "每次看10页，方向大体正确，稍微有点激进"},
+                {iter: 2, grad: "-1.00", desc: "这10页包含一些偏题，方向往反方向修正了一点"},
+                {iter: 3, grad: "+4.00", desc: "重新回归主流大方向"},
+                {iter: 4, grad: "-0.50", desc: "轻微小震荡"},
+                {iter: 5, grad: "+3.50", desc: "稳步前进"}
+            ]
+        },
+        'sgd': {
+            batchSize: 1,
+            rawData: [8.00, -6.00, 7.00, -5.00, 6.00],
+            tableRows: [
+                {iter: 1, grad: "+8.00", desc: "随机抽到1个极端难题，步伐迈得极大！"},
+                {iter: 2, grad: "-6.00", desc: "又抽到1个反向极端的题，直接往回猛退！"},
+                {iter: 3, grad: "+7.00", desc: "左右疯狂横跳，方向极不稳定！"},
+                {iter: 4, grad: "-5.00", desc: "继续剧烈震荡，计算机直呼吃不消！"},
+                {iter: 5, grad: "+6.00", desc: "单样本训练的典型特征：高频严重噪点"}
+            ]
+        },
+        'bgd': {
+            batchSize: 50,
+            rawData: [4.00, 3.20, 2.50, 1.90, 1.40],
+            tableRows: [
+                {iter: 1, grad: "+4.00", desc: "一次性看完了全部50页，方向极其精准稳定"},
+                {iter: 2, grad: "+3.20", desc: "完全没有反向震荡，顺滑减速逼近最优解"},
+                {iter: 3, grad: "+2.50", desc: "大局观拉满，一步一个脚印"},
+                {iter: 4, grad: "+1.90", desc: "极其沉稳，唯一的缺点是搬运一次太重"},
+                {iter: 5, grad: "+1.40", desc: "无震荡的理想状态，平滑曲线下降"}
+            ]
+        }
+    };
+
+    let currentMode = 'mini-batch';
+    let batchSize = modeConfigs[currentMode].batchSize;
+    let rawData = modeConfigs[currentMode].rawData;
+
+    let currentDataIndex = 0;
+    let iterationCount = 0;
+    let epochCount = 0;
+
+    // ==========================================
+    // 动图及划分逻辑
+    // ==========================================
+    function initDataBoxes() {
+        const unproc = document.getElementById('unprocessed-data');
+        unproc.innerHTML = '';
+        for(let i=1; i<=totalData; i++) {
+            const box = document.createElement('div');
+            box.className = 'data-box';
+            box.id = `box-${i}`;
+            box.innerText = i;
+            unproc.appendChild(box);
+        }
+        document.getElementById('processing-data').innerHTML = '';
+        document.getElementById('done-data').innerHTML = '';
+        currentDataIndex = 0;
+        iterationCount = 0;
+        document.getElementById('iter-count').innerText = iterationCount;
+    }
+
+    function nextIteration() {
+        const unproc = document.getElementById('unprocessed-data');
+        const proc = document.getElementById('processing-data');
+        const done = document.getElementById('done-data');
+
+        while (proc.firstChild) {
+            proc.firstChild.className = 'data-box done';
+            done.appendChild(proc.firstChild);
+        }
+
+        if (currentDataIndex >= totalData) {
+            epochCount++;
+            document.getElementById('epoch-count').innerText = epochCount;
+            document.getElementById('btn-batch').style.display = 'none';
+            document.getElementById('btn-reset').style.display = 'inline-block';
+            return;
+        }
+
+        for(let i=0; i<batchSize; i++) {
+            if(currentDataIndex < totalData) {
+                currentDataIndex++;
+                const box = document.getElementById(`box-${currentDataIndex}`);
+                if(box) {
+                    box.className = 'data-box processing';
+                    proc.appendChild(box);
+                }
+            }
+        }
+        iterationCount++;
+        document.getElementById('iter-count').innerText = iterationCount;
+        
+        if (currentDataIndex >= totalData) {
+            document.getElementById('btn-batch').innerText = "✨ 完成本轮！点击归档";
+        }
+    }
+
+    function resetBatch() {
+        initDataBoxes();
+        document.getElementById('btn-batch').style.display = 'inline-block';
+        document.getElementById('btn-batch').innerText = `👉 演示：执行 1 次 Iteration (搬${batchSize}页题)`;
+        document.getElementById('btn-reset').style.display = 'none';
+    }
+
+    // ==========================================
+    // 切换模式核心处理器
+    // ==========================================
+    function changeMode(mode) {
+        currentMode = mode;
+        batchSize = modeConfigs[currentMode].batchSize;
+        rawData = modeConfigs[currentMode].rawData;
+
+        // 更新第一步的参数面板文本显示
+        document.getElementById('text-batch-size').innerText = batchSize;
+        document.getElementById('text-iterations').innerText = totalData / batchSize;
+        
+        // 重置搬题区状态
+        epochCount = 0;
+        document.getElementById('epoch-count').innerText = epochCount;
+        resetBatch();
+
+        // 动态重建第二步的梯度表格
+        const tbody = document.getElementById('gradient-table-body');
+        tbody.innerHTML = '';
+        modeConfigs[currentMode].tableRows.forEach(row => {
+            const tr = document.createElement('tr');
+            const color = parseFloat(row.grad) < 0 ? 'blue' : 'red';
+            tr.innerHTML = `<td>${row.iter}</td><td style="color: ${color}; font-weight:bold;">${row.grad}</td><td>${row.desc}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        // 重置第三步的 EMA 计算区和图表
+        calcStep = 0;
+        vHistory = [0];
+        emaData = [];
+        document.querySelector('#ema-table tbody').innerHTML = '';
+        document.getElementById('math-output').innerText = '等待点击计算...';
+        document.getElementById('btn-calc').innerText = "➕ 计算下一步 EMA";
+        document.getElementById('btn-calc').disabled = false;
+        drawChart();
+    }
+
+    // ==========================================
+    // 第三部分：EMA 数学与图表逻辑
+    // ==========================================
+    const beta = 0.5;
+    let calcStep = 0;
+    let vHistory = [0]; 
+    let emaData = [];
+
+    const canvas = document.getElementById('chartCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function drawChart() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height/2);
+        ctx.lineTo(canvas.width, canvas.height/2);
+        ctx.stroke();
+
+        ctx.font = "12px Arial";
+        ctx.fillStyle = "#a0aec0";
+        ctx.fillText("0 (基准)", 5, canvas.height/2 - 5);
+
+        const padding = 30;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+        const stepX = width / (rawData.length - 1);
+        const mapY = (val) => canvas.height/2 - (val * 13); // 轻微调整比例防止溢出
+
+        // 画原始数据 (红色)
+        if(calcStep > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(252, 129, 129, 0.5)';
+            ctx.lineWidth = 2;
+            for(let i=0; i<calcStep; i++) {
+                let x = padding + i * stepX;
+                let y = mapY(rawData[i]);
+                if(i===0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                
+                ctx.fillStyle = 'red';
+                ctx.fillRect(x-2, y-2, 4, 4);
+            }
+            ctx.stroke();
+            
+            ctx.fillStyle = 'red';
+            ctx.fillText("原始波动(忽大忽小)", padding, 20);
+        }
+
+        // 画 EMA 数据 (绿色)
+        if(calcStep > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#48bb78';
+            ctx.lineWidth = 3;
+            for(let i=0; i<calcStep; i++) {
+                let x = padding + i * stepX;
+                let y = mapY(emaData[i]);
+                if(i===0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.stroke();
+            
+            ctx.fillStyle = 'green';
+            ctx.fillText("EMA平滑后(稳定前进)", canvas.width/2, 20);
+        }
+    }
+
+    function nextCalc() {
+        if(calcStep >= rawData.length) {
+            document.getElementById('math-output').innerHTML = "计算已全部完成！注意看绿线，是不是比红线平滑稳定多了？这就是EMA过滤波动的核心魅力。";
+            return;
+        }
+
+        let t = calcStep + 1;
+        let theta = rawData[calcStep];
+        let v_prev = vHistory[calcStep];
+        let v_new = beta * v_prev + (1 - beta) * theta;
+        
+        v_new = parseFloat(v_new.toFixed(2));
+        vHistory.push(v_new);
+        emaData.push(v_new);
+
+        const tbody = document.querySelector('#ema-table tbody');
+        const tr = document.createElement('tr');
+        tr.className = 'row-highlight';
+        tr.innerHTML = `
+            <td>${t}</td>
+            <td style="color: ${theta > 0 ? 'red' : 'blue'};">${theta > 0 ? '+'+theta.toFixed(2) : theta.toFixed(2)}</td>
+            <td>${v_prev.toFixed(2)}</td>
+            <td style="color: green; font-weight: bold;">${v_new.toFixed(2)}</td>
+        `;
+        
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(r => r.classList.remove('row-highlight'));
+        tbody.appendChild(tr);
+
+        const mathBox = document.getElementById('math-output');
+        mathBox.innerHTML = `正在计算第 ${t} 步： $$V_{${t}} = 0.5 \\times ${v_prev.toFixed(2)} + 0.5 \\times (${theta}) = ${v_new.toFixed(2)}$$`;
+        
+        if (window.MathJax) {
+            MathJax.typesetPromise([mathBox]).catch((err) => console.log('MathJax 渲染错误: ', err));
+        }
+
+        calcStep++;
+        drawChart();
+
+        if(calcStep >= rawData.length) {
+            document.getElementById('btn-calc').innerText = "✅ 演示完毕";
+            document.getElementById('btn-calc').disabled = true;
+        }
+    }
+
+    // 页面首次加载初始化
+    changeMode('mini-batch');
+</script>
+</body>
+</html>

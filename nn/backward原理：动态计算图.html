@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>进阶突破：sum() 背后隐藏的“活公式”与计算图</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady().then(() => {
+                        console.log('MathJax 渲染完成');
+                    });
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 强制遵守约束：容器最大宽度 1400px */
+        body {
+            background-color: #f0f4f8;
+            color: #2c3e50;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 30px;
+            background-color: #ffffff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            min-height: 100vh;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #d35400;
+            border-bottom: 3px solid #e67e22;
+            padding-bottom: 15px;
+            text-align: center;
+            font-size: 28px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 40px;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+            background-color: #ebf5fb;
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+        p {
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        /* 核心讲解卡片区 */
+        .concept-card {
+            background-color: #fff9f0;
+            border: 2px solid #f39c12;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+        }
+        .concept-card h3 {
+            margin-top: 0;
+            color: #c0392b;
+            border-bottom: 1px dashed #f39c12;
+            padding-bottom: 10px;
+        }
+        .concept-badge {
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            background-color: #e74c3c;
+            color: white;
+            font-weight: bold;
+            padding: 10px 15px;
+            border-radius: 50%;
+            transform: rotate(15deg);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        
+        /* PyTorch 代码块样式 */
+        .code-block {
+            background-color: #282c34;
+            color: #98c379;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 15px;
+            border-left: 4px solid #61afef;
+            overflow-x: auto;
+        }
+        .code-comment {
+            color: #5c6370;
+            font-style: italic;
+        }
+        .code-output {
+            color: #e5c07b;
+        }
+
+        /* 交互演练区核心样式 */
+        .demo-box {
+            border: 3px solid #34495e;
+            border-radius: 12px;
+            padding: 30px;
+            background-color: #fdfefe;
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        
+        /* 节点与流转箭头 */
+        .step-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            min-height: 200px;
+        }
+        .node {
+            background-color: white;
+            border: 2px solid #7f8c8d;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            width: 28%;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            transition: all 0.4s ease;
+            position: relative;
+        }
+        .node.active-node {
+            transform: translateY(-5px);
+            border-color: #e67e22;
+            border-width: 3px;
+            box-shadow: 0 8px 15px rgba(230, 126, 34, 0.2);
+        }
+        /* 计算图标签 */
+        .graph-tag {
+            background-color: #27ae60;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            white-space: nowrap;
+        }
+        .node.active-node .graph-tag {
+            display: block;
+        }
+
+        .arrow {
+            font-size: 18px;
+            color: #95a5a6;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* 按钮控制区 */
+        .btn-group {
+            text-align: center;
+            margin-top: 30px;
+        }
+        button {
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(230, 126, 34, 0.3);
+        }
+        button:hover {
+            background-color: #d35400;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* 解说面板 */
+        .explanation {
+            background-color: #fef9e7;
+            border-left: 6px solid #f1c40f;
+            padding: 20px;
+            margin-top: 20px;
+            font-size: 16px;
+            border-radius: 0 8px 8px 0;
+            line-height: 1.9;
+        }
+        .math-detail {
+            background: #ffffff;
+            border: 1px dashed #d35400;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 15px;
+            color: #c0392b;
+        }
+
+        /* ================= 新增：第二层 VJP 演示专属样式 ================= */
+        .hardcore-card {
+            background-color: #1e272e;
+            border: 2px solid #0fb9b1;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 20px 0;
+            color: #d2dae2;
+        }
+        .hardcore-card h3 {
+            color: #0fb9b1;
+            border-bottom: 1px dashed #0fb9b1;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .step-box {
+            background: #2d3436;
+            border-left: 4px solid #a29bfe;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .step-title {
+            color: #a29bfe;
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        /* ！！！！ 本次新增：致命误区卡片专属样式 ！！！！ */
+        .mythbuster-card {
+            background-color: #fff0f0;
+            border: 2px solid #ff4757;
+            border-left: 8px solid #ff4757;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+            color: #2f3542;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.15);
+        }
+        .mythbuster-title {
+            color: #ff4757;
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 0;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .mythbuster-title span { margin-right: 10px; font-size: 24px; }
+        .mythbuster-code {
+            background-color: #2f3542;
+            color: #f1f2f6;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        
+        .vjp-console {
+            background-color: #000000;
+            border-radius: 12px;
+            padding: 30px;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            box-shadow: inset 0 0 20px rgba(0,255,0,0.1);
+            margin-top: 30px;
+        }
+        .math-display {
+            background-color: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 20px 0;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            overflow-x: auto;
+        }
+        .alert-box {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+            font-weight: bold;
+            line-height: 1.6;
+        }
+        .error-alert { color: #ff4757; border: 2px dashed #ff4757; background-color: rgba(255, 71, 87, 0.1); }
+        .success-alert { color: #2ed573; border: 2px solid #2ed573; background-color: rgba(46, 213, 115, 0.1); }
+        .btn-danger { background-color: #e74c3c; box-shadow: 0 4px 6px rgba(231, 76, 60, 0.3); }
+        .btn-danger:hover { background-color: #c0392b; }
+        .btn-success { background-color: #2ecc71; box-shadow: 0 4px 6px rgba(46, 204, 113, 0.3); }
+        .btn-success:hover { background-color: #27ae60; }
+		.gradient-card {
+            background-color: #f1f8ff;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+            color: #2d3436;
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>你发现了盲点！被隐藏的“计算图”（公式录像带）</h1>
+    
+    <p>你好！听到你提出“sum加出来的不是一个数值，而是一个公式”时，我必须要为你鼓掌！你凭直觉推导出了 PyTorch 最底层的绝密武器：<strong>动态计算图（Dynamic Computational Graph）</strong>。</p>
+
+    <div class="concept-card">
+        <div class="concept-badge">核心机密</div>
+        <h3>💡 彻底顿悟：普通数值 vs 带有公式的“活数值”</h3>
+        <p>在普通的 Python 里，你执行 <code>L = 0.5 + 0.731 + 0.881</code>，电脑只会记住 <code>L = 2.112</code> 这个“死”数字。如果你问电脑“L 是怎么来的？”，它根本不知道。</p>
+        <p>但是在 PyTorch 里，因为我们的起点张量带有 <strong><code>requires_grad=True</code></strong>，这就给整个运算过程开启了<strong>“强制录像”</strong>。你看到的输出打印出来虽然是 <code>tensor(2.112)</code>，但它的肉身里其实嵌套着一棵树、一个完整的数学公式！</p>
+        <p><strong>普通账单：</strong> 总计 2.112 元。<br>
+        <strong>PyTorch账单（带公式）：</strong> 总计 2.112 元。来源附件：它是由 $w_1$ 经过 Sigmoid、加上 $w_2$ 经过 Sigmoid、再加上 $w_3$ 经过 Sigmoid 汇总而来的。<br>
+        只有带着这种“公式附魔”的数值，PyTorch 才能执行 <code>backward()</code> 回溯找人算账！在代码里，这个公式记忆体叫做 <strong><code>grad_fn</code></strong>。</p>
+    </div>
+
+    <h2>动态透视眼：观察公式是如何被“录制”和“倒放”的</h2>
+    
+    <p>在这个演练场中，请你不要光看数值，**重点看每个数值头顶上的绿底白字标签**。你将亲眼看到：数据是如何一步步把操作“记录”成一条大公式，最后又顺着公式往回跑的。</p>
+<script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+    <div class="demo-box">
+        <div class="step-container">
+            <div class="node" id="node-w">
+                <div class="graph-tag">🍃 叶子节点 (起点)</div>
+                <strong>[1] 输入参数 $w$</strong><br>
+                <span id="data-w" style="color:#888;">等待开始...</span>
+            </div>
+            <div class="arrow">
+                <span>录制操作: Sigmoid</span>
+                <span>$\xrightarrow{y = \sigma(w)}$</span>
+            </div>
+            <div class="node" id="node-y">
+                <div class="graph-tag">📼 记录: SigmoidBackward</div>
+                <strong>[2] 中间产出 $y$</strong><br>
+                <span id="data-y" style="color:#888;">等待计算...</span>
+            </div>
+            <div class="arrow">
+                <span>录制操作: Sum</span>
+                <span>$\xrightarrow{L = \sum}$</span>
+            </div>
+            <div class="node" id="node-l">
+                <div class="graph-tag">🔥 终极公式 (计算图顶端)</div>
+                <strong>[3] 标量总目标 $L$</strong><br>
+                <span id="data-l" style="color:#888;">等待计算...</span>
+            </div>
+        </div>
+        
+        <div class="explanation" id="explanation-text">
+            <strong>准备就绪：</strong> 点击“下一步”，开启 PyTorch 的强制录像模式。
+        </div>
+
+        <div class="btn-group">
+            <button id="btn-prev" onclick="prevStep()" disabled>上一步</button>
+            <button id="btn-next" onclick="nextStep()">下一步</button>
+            <button onclick="resetDemo()" style="background-color: #95a5a6;">重置</button>
+        </div>
+    </div>
+
+
+    <h2>第二层境界：源码级拆解！雅可比矩阵与 VJP 的真实运算步骤</h2>
+    
+    <p>既然你想看最底层的机制，我们就脱掉所有外衣。在 PyTorch 的 C++ 引擎底层，微积分中<strong>“向量对向量求导”的结果是一个矩阵，叫做雅可比矩阵（Jacobian Matrix, 简称 $J$）</strong>。</p>
+    
+    <p>但底层有一条铁律：<strong>为了节省显存，PyTorch 永远不会计算完整的雅可比矩阵！它使用的是 VJP（Vector-Jacobian Product，向量-雅可比积）引擎。</strong><br>
+    VJP 引擎强制规定：计算当前层的梯度时，<strong>必须从上一层接收一个梯度的传入向量 $v$，然后用 $v^T \times J$ 来算出当前层的梯度，再继续往前传。</strong></p>
+
+    <div class="hardcore-card">
+        <h3>⚡ 核心代码的 4 步底层执行真丝</h3>
+        <p>我们来看这四行代码执行时，底层数据究竟是怎么代入的：</p>
+        <div class="code-block">w = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)<br>y = torch.sigmoid(w)  <span class='code-comment'># y = [0.500, 0.731, 0.881]</span><br>L = y.sum()<br>L.backward()</div>
+
+        <div class="step-box">
+            <div class="step-title">Step 1: 触发计算 (L.backward)</div>
+            <p>当对标量 <code>L</code> 调用 <code>backward()</code> 时，底层引擎启动。因为 $L$ 对自身的导数是 1，引擎会隐式创建一个标量向量作为初始的 $v$：<br>
+            <span style="color:#fdcb6e; font-family:monospace;">v_L = tensor([1.0])</span></p>
+
+            <div class="math-detail" style="margin-top: 10px; font-size: 14.5px; background-color: #f8f9fa; border-color: #0fb9b1; color: #2d3436;">
+                <strong style="color: #0fb9b1;">🔍 深度拆解：为什么初始的种子 v 必须是 1.0？</strong><br>
+                在整个反向传播中，我们的终极数学目标是求得参数梯度：$\frac{\partial L}{\partial w}$。<br>
+                根据微积分的<strong>“链式法则（Chain Rule）”</strong>，整个复杂公式被拆解成了一场乘法接力赛：<br>
+                $$ \frac{\partial L}{\partial w} = \mathbf{\frac{\partial L}{\partial L}} \times \frac{\partial L}{\partial y} \times \frac{\partial y}{\partial w} $$
+                请看等式右边的第一项：<strong>$\frac{\partial L}{\partial L}$</strong>。任何变量对它自己的导数，永远都是 $1$！<br>
+                <strong>通俗理解：</strong>如果总目标 $L$ 增加了 $1$ 块钱，那么 $L$ 本身变化了多少？废话，当然也就是 $1$ 块钱！<br>
+                <strong>底层引擎视角：</strong>VJP 引擎是一个极其死板的“接力机器”，它的运行规则永远是 <code>输出 = 传入向量 v × 当前雅可比矩阵 J</code>。但对于反向传播的起始点（终点站 $L$）来说，它的背后已经没有其他的节点来给它“喂”这个初始的 <code>v</code> 了！<br>为了让链式法则的连乘能够顺利启动，PyTorch 的源码在这里“硬编码”强行塞入了一个种子值 <strong>1.0</strong>。<br>如果塞入 0，后面无论怎么乘，所有的梯度都会变成 0；如果塞入 2.0，所有的真实梯度就会被错误地放大两倍。所以，这个 <code>1.0</code> 就是整个微积分宇宙大爆炸的“第一推动力”！
+            </div>
+
+        </div>
+
+        <div class="step-box">
+            <div class="step-title">Step 2: 经过 sum() 函数 (SumBackward0)</div>
+            <p>引擎拿着 <code>v_L</code> 来到 sum 函数，问：“给我算 $y$ 的梯度！”</p>
+            <ul>
+                <li><strong>数学推导：</strong> $L = y_1 + y_2 + y_3$ 的雅可比矩阵是 $J_{sum} = \begin{bmatrix} 1 & 1 & 1 \end{bmatrix}$。
+                    <div class="math-detail" style="margin-top: 10px; font-size: 14.5px; background-color: #f8f9fa; border-color: #0fb9b1; color: #2d3436;">
+                        <strong style="color: #0fb9b1;">🔍 深度拆解：具体的 y1, y2, y3 到底是什么？为什么偏导数是 1？</strong><br>
+                        你可能在想：“$y_1$ 不是等于 $0.500$ 吗？数字怎么求导？” <br>
+                        <strong>核心盲点突破：在这一步计算时，底层引擎根本不看 0.500 这个数值！</strong><br><br>
+                        在微积分中，当我们面对公式 $L = y_1 + y_2 + y_3$ 时，这里的 $y_1, y_2, y_3$ 是三个纯粹的<strong>“代数变量坑位”</strong>。<br>
+                        偏导数 $\frac{\partial L}{\partial y_1}$ 问的是一个纯逻辑问题：<strong>“不论现在 $y_1$ 坑位里装的是多少，如果我让这个坑位里的数字强行增加 1，总和 $L$ 会发生什么变化？”</strong><br>
+                        
+                        <br>根据大学微积分的<strong>求导代数法则（常数法则与幂法则）</strong>：
+                        <br>1. <strong>对于 $y_1$ 本身：</strong> 它的导数就是 $1$（因为 $y_1$ 的 1 次方，导数是 $1 \times y_1^0 = 1$）。只要它是极其简单的加法关系 $+ y_1$，它每增加一分，总数就会丝毫不差地增加一分。
+                        <br>2. <strong>对于 $y_2$ 和 $y_3$：</strong> 因为它们是独立的坑位（员工2的产出改变，不影响员工1的产出），所以在单独针对 $y_1$ 求导的瞬间，微积分强制把 $y_2$ 和 $y_3$ 视为<strong>死板的常数（数字）</strong>。而任何常数的变化率永远是 $0$！
+                        
+                        <br><br>所以数学演算过程极为机械和纯粹：<br>
+                        • 对坑位 $y_1$ 求导：$\frac{\partial (y_1 + y_2 + y_3)}{\partial y_1} = 1 + 0 + 0 = \mathbf{1}$<br>
+                        • 对坑位 $y_2$ 求导：$\frac{\partial (y_1 + y_2 + y_3)}{\partial y_2} = 0 + 1 + 0 = \mathbf{1}$<br>
+                        • 对坑位 $y_3$ 求导：$\frac{\partial (y_1 + y_2 + y_3)}{\partial y_3} = 0 + 0 + 1 = \mathbf{1}$<br>
+                        
+                        <strong>结论：</strong> 这个 $[1, 1, 1]$ 结果是完全由 <strong>加法符号（$+$）的数学结构</strong> 决定的！与 $0.500$ 或 $0.881$ 这些真实数据毫无关系。只要你用的是 `.sum()`，无论输入数据多复杂，算出来的雅可比必定全都是 1！
+                    </div>
+                </li>
+                <li style="margin-top: 10px;"><strong>VJP 矩阵乘法：</strong> $v_y = v_L \times J_{sum} = [1.0] \times \begin{bmatrix} 1 & 1 & 1 \end{bmatrix}$</li>
+                <li><strong>底层实际输出：</strong> 引擎算出了传递给下一层的向量：<br>
+                <span style="color:#fdcb6e; font-family:monospace;">v_y = tensor([1.0, 1.0, 1.0])</span></li>
+            </ul>
+        </div>
+
+        <div class="mythbuster-card">
+            <h3 class="mythbuster-title"><span>🛑</span> 致命误区纠正：传导向量 v 永远等于 1.0 吗？</h3>
+            <p>你问出了一个直击灵魂的问题：“这个传入给 Sigmoid 的 $v_y$ 无论什么函数、什么数据，一定全是 1.0 吗？”</p>
+            <p><strong>答案是：绝对不是！！！</strong></p>
+            <p>千万不要把**“原始种子 $v_L$”**和**“传导向量 $v_y$”**搞混了！<br>
+            • 最起点的种子 $v_L$ 确实永远是 <code>1.0</code>。<br>
+            • 但是，传导给下一层的 $v_y$ 变成了 <code>[1.0, 1.0, 1.0]</code>，<strong>完全仅仅是因为我们这里使用的是 <code>sum()</code> 函数！</strong></p>
+            
+            <p><strong>🔥 震撼对比测试：如果我们用的是 <code>.mean()</code> 呢？</strong><br>
+            假设我们写的代码是 <code>L = y.mean()</code>，也就是 $L = \frac{1}{3}y_1 + \frac{1}{3}y_2 + \frac{1}{3}y_3$。</p>
+            <ul>
+                <li>在 Step 2 时，引擎去对 <code>mean()</code> 求偏导。根据代数求导法则，此时常数系数 $\frac{1}{3}$ 会被保留下来，所以雅可比矩阵变成了：<br>
+                $$J_{mean} = \begin{bmatrix} \frac{1}{3} & \frac{1}{3} & \frac{1}{3} \end{bmatrix}$$</li>
+                <li>此时，VJP 引擎执行乘法：$v_y = v_L \times J_{mean} = [1.0] \times \begin{bmatrix} 0.33 & 0.33 & 0.33 \end{bmatrix}$</li>
+                <li><strong>真相大白：</strong>此时传给下一层 Sigmoid 的 $v_y$ 向量，就变成了 <strong><code>[0.33, 0.33, 0.33]</code></strong>！它不再全是 1 了！</li>
+            </ul>
+            <p><strong>终极结论：传导向量 $v$ 是一个“变形虫”！</strong>它每经过一层（比如 sum、mean、全连接层），都会与那一层的雅可比矩阵相乘，从而改变自身的值。它带着这个累积变化的值，继续向更深处传递。这，就是“链式法则”在代码中活生生的体现！</p>
+        </div>
+        <div class="step-box">
+            <div class="step-title">Step 3: 经过 Sigmoid (SigmoidBackward0)</div>
+            <p>引擎拿着 <code>v_y = [1.0, 1.0, 1.0]</code> 来到 Sigmoid 函数，问：“给我算 $w$ 的梯度！”</p>
+            <ul>
+                <li><strong>数学推导：</strong> Sigmoid 的雅可比矩阵 $J_{sig}$ 是一个对角矩阵，对角线元素是 $y(1-y)$。代入具体的 $y$ 值 ($0.5, 0.731, 0.881$)：<br>
+                $J_{sig} = \begin{bmatrix} 0.5(1-0.5) & 0 & 0 \\ 0 & 0.731(1-0.731) & 0 \\ 0 & 0 & 0.881(1-0.881) \end{bmatrix} = \begin{bmatrix} 0.250 & 0 & 0 \\ 0 & 0.197 & 0 \\ 0 & 0 & 0.105 \end{bmatrix}$</li>
+                <li><strong>VJP 矩阵乘法：</strong><br>
+                $v_w = v_y \times J_{sig} = \begin{bmatrix} 1.0 & 1.0 & 1.0 \end{bmatrix} \times \begin{bmatrix} 0.250 & 0 & 0 \\ 0 & 0.197 & 0 \\ 0 & 0 & 0.105 \end{bmatrix}$</li>
+                <li><strong>底层实际输出：</strong> 完美乘出结果！<br>
+                <span style="color:#fdcb6e; font-family:monospace;">v_w = tensor([0.250, 0.197, 0.105])</span></li>
+            </ul>
+        </div>
+
+        <div class="step-box">
+            <div class="step-title">Step 4: 终点累计 (w.grad)</div>
+            <p>引擎到达叶子节点 <code>w</code>，将上一步算出的 <code>v_w</code> 直接写入 <code>w.grad</code> 中，求导结束！</p>
+        </div>
+    </div>
+
+    <h3>⚠️ 为什么 sum() 是绝对必要的？</h3>
+    <p>结合上面的 Step，如果我们直接执行 <code>y.backward()</code>，系统会从 Step 3 开始。但是此时，<strong>引擎手里根本没有上一层传来的 <code>v_y</code>！</strong></p>
+    <p>因为 <code>y</code> 是一个向量，引擎不知道初始的 $v$ 该给什么（它不能默认给标量 1.0 了）。此时 VJP 的公式 $\nabla w = \text{?} \times J_{sig}$ 缺乏核心参数，底层直接崩溃报错。</p>
+    <p>所以，<strong><code>sum()</code> 的底层必要性，就是为了在 Step 2 生成那个至关重要的初始向量 $v = [1, 1, 1]$，从而拯救 Step 3 的矩阵乘法！</strong></p>
+
+    <div class="vjp-console">
+        <h3 style="margin-top:0; color:#fff;">⚡ VJP 底层运算模拟控制台</h3>
+        <p style="color:#aaa;">验证底层铁律： $\text{Output\_Grad} = v_{in}^T \cdot J$</p>
+        
+        <div class="math-display" id="vjp-math">
+            $$ \nabla w = \underbrace{\text{?} \vphantom{\begin{bmatrix} 0 \\ 0 \\ 0 \end{bmatrix}}}_{\text{传入的向量 } v} \times \underbrace{\begin{bmatrix} 0.250 & 0 & 0 \\ 0 & 0.197 & 0 \\ 0 & 0 & 0.105 \end{bmatrix}}_{\text{Sigmoid 的雅可比矩阵}} $$
+        </div>
+
+        <div class="alert-box error-alert" id="vjp-error">
+            ❌ RuntimeError: grad can be implicitly created only for scalar outputs.<br>
+            <strong>底层崩溃：</strong> 直接对 y 求导，系统没有经过 sum() 的 Step 2，无法获取初始向量 $v$！矩阵乘法失败！
+        </div>
+
+        <div class="alert-box success-alert" id="vjp-success">
+            ✅ 矩阵乘法完美执行！<br>
+            <strong>底层追踪：</strong> 因为调用了 sum()，它在 Step 2 成功算出了偏导雅可比并生成了 $v = [1, 1, 1]$ 喂给系统。全 1 向量与 Sigmoid 矩阵相乘，完美提取出了独立梯度！
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-danger" onclick="runDirectBackward()">尝试: y.backward()</button>
+            <button class="btn-success" onclick="runSumBackward()">尝试: y.sum().backward()</button>
+            <button onclick="resetVJP()" style="background-color: #555;">重置模拟器</button>
+        </div>
+    </div>
+
+
+    <h2>第三层境界：终极黑客操作！跳过 sum()，原力强行注入</h2>
+    
+    <p>既然我们已经通过 VJP 引擎证实了 <code>.sum()</code> 仅仅是一个生成全 1 向量的“中间商”，那么在实际的工业代码中，我们完全可以<strong>“越过中间商，直接把梯度向量喂给引擎”</strong>！</p>
+    
+    <div class="code-block">
+<span class="code-comment"># 工业界最常见的高阶优雅写法，完美替代 .sum()</span><br>
+w = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)<br>
+y = torch.sigmoid(w)<br>
+<br>
+<span class="code-comment"># torch.ones_like(y) 会自动生成一个和 y 形状完全一样，且元素全为 1 的张量。</span><br>
+<span class="code-comment"># 我们通过 gradient 参数，把这个张量强行塞给 backward 引擎！</span><br>
+y.backward(gradient=torch.ones_like(y))<br>
+<br>
+print(w.grad) <span class="code-comment"># 输出完美一致: tensor([0.2500, 0.1966, 0.1050])</span>
+    </div>
+
+    <div class="concept-card" style="border-color: #3498db; background-color: #f0f8ff;">
+        <h3 style="color: #2980b9; border-bottom-color: #3498db;">🚀 强行注入梯度 (gradient 参数) 的两大核心优势</h3>
+        <p><strong>1. 节省内存与时间：</strong> 虽然很微小，但我们确实在计算图中少画了一个 <code>SumBackward</code> 节点。如果你正在开发一个极大规模的循环计算（比如某些强化学习或元学习场景），跳过不必要的 <code>sum()</code> 节点可以带来实质的性能提升。</p>
+        <p><strong>2. 高度自定义惩罚（非等权惩罚）：</strong> 这才是 <code>gradient</code> 参数最大的威力！如果你用 <code>sum()</code>，底层的向量永远被焊死成等权的 <code>[1, 1, 1]</code>。但是，如果你用强行注入法，你可以传入任何权重的惩罚向量！</p>
+        <hr style="border-top: 1px dashed #bdc3c7; margin: 15px 0;">
+        <p><strong>💡 商业场景实战案例：</strong> 假设我们正在开发一个短视频推荐系统（Recommendation System）。</p>
+        <ul>
+            <li>用户 $1$ ($y_1$) 是核心 VIP 用户。</li>
+            <li>用户 $2$ ($y_2$) 是普通用户。</li>
+            <li>用户 $3$ ($y_3$) 是被系统标记的作弊机器水军。</li>
+        </ul>
+        <p>此时，我们绝不能使用 <code>sum()</code> 去公平对待！我们可以直接构造一个自定义梯度向量 <code>v_custom = torch.tensor([10.0, 1.0, 0.0])</code> 注入引擎。</p>
+        <p>这意味着你可以对系统霸气宣告：<strong>“我极其看重 VIP（梯度权重放大 10 倍），普通用户正常考核，作弊水军我完全不在乎（梯度权重设为 0，彻底切断他的参数更新）”</strong>。这是 <code>sum()</code> 永远无法做到的精准操控！</p>
+    </div>
+
+	    <h2 id="gradient-section">🔍 深度拆解：gradient 参数的本质</h2>
+    <div class="gradient-card">
+        <div class="gradient-title">为什么调用 y.backward(gradient=...) 时，这一层就成了“终点”？</div>
+        <p>很多同学疑惑：<code>gradient</code> 到底是什么？为什么传给它向量就能算出结果？</p>
+        <p><strong>本质：</strong> <code>gradient</code> 参数就是你**手动**替 PyTorch 生成的那第一个“种子向量 $v$”！</p>
+        
+        <p>回忆之前的链式法则：$$\frac{\partial L}{\partial w} = \underbrace{\frac{\partial L}{\partial y}}_{\text{这是 v!}} \times \frac{\partial y}{\partial w}$$</p>
+        
+        <p>当你执行 <code>y.backward(gradient=v)</code> 时：</p>
+        <ul>
+            <li>你直接告诉 PyTorch：<strong>“嘿，别去管 $L$ 对 $y$ 的导数是什么了，我直接给你传进来一个向量 $v$！请你把这个 $v$ 当作 $\frac{\partial L}{\partial y}$ (即梯度传导向量)，直接开始往回算 $\frac{\partial y}{\partial w}$！”</strong></li>
+            <li>系统收到你的 $v$，发现已经满足了 VJP 引擎公式 $\nabla w = v^T \cdot J$ 的所有条件，于是它不再报错，直接开动引擎！</li>
+        </ul>
+        
+        <p><strong>它的两大“神级”优势：</strong></p>
+        <ol>
+            <li><strong>性能极客优化：</strong> <code>sum()</code> 本质上是在计算图中多增加了一个 <code>SumBackward</code> 节点。这个节点虽然简单，但在深度学习的超大规模训练循环中，它是多余的开销。直接 <code>backward(gradient=...)</code> 相当于直接在计算图的“最后一层”强行注入梯度，切断了多余的计算路径，节省了内存和时间。</li>
+            <li><strong>降维打击般的精准操控：</strong> 这是 <code>sum()</code> 永远做不到的！<code>sum()</code> 只能传入全 1 向量 <code>[1, 1, 1]</code>，这意味着它强制要求对所有输出单元进行“等权评估”。<br>
+            但通过 <code>gradient</code> 注入，你可以传入 <code>[10.0, 1.0, 0.0]</code>。这意味着你可以直接告诉模型：<strong>“嘿，对于输出 $y_1$，请你把它的梯度放大 10 倍（重视它）；对于 $y_3$，直接把它当垃圾处理（梯度赋 0）！”</strong>。这在目标检测、多任务学习中是实现损失加权最底层、最高效的方式！</li>
+        </ol>
+    </div>
+
+    <div class="vjp-console" style="box-shadow: inset 0 0 20px rgba(52, 152, 219, 0.2); border: 2px solid #3498db;">
+        <h3 style="margin-top:0; color:#3498db;">🎯 高阶自定义惩罚模拟器：VIP 加权 vs 水军屏蔽</h3>
+        <p style="color:#aaa;">我们将使用 <code>y.backward(gradient=torch.tensor([10.0, 1.0, 0.0]))</code> 启动引擎：</p>
+        
+        <div class="math-display" id="custom-vjp-math">
+            $$ \nabla w = \underbrace{\begin{bmatrix} 10.0 & 1.0 & 0.0 \end{bmatrix}}_{\text{自定义强行注入的 } v} \times \underbrace{\begin{bmatrix} 0.250 & 0 & 0 \\ 0 & 0.197 & 0 \\ 0 & 0 & 0.105 \end{bmatrix}}_{\text{Sigmoid 雅可比}} = \text{?} $$
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-success" style="background-color: #3498db;" onclick="runCustomBackward()">执行自定义 backward()</button>
+            <button onclick="resetCustomVJP()" style="background-color: #555;">重置模拟器</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // =========================================================
+    // 第一部分：原有的计算图推导逻辑（未做任何修改）
+    // =========================================================
+    let currentStep = 0;
+    
+    const steps = [
+        {
+            w: "等待开始...", y: "等待计算...", l: "等待计算...",
+            text: "<strong>状态：</strong> 准备就绪。点击“下一步”。",
+            highlight: ""
+        },
+        {
+            w: "$$ w = \\begin{bmatrix} 0.0 \\\\ 1.0 \\\\ 2.0 \\end{bmatrix} $$",
+            y: "等待计算...", l: "等待计算...",
+            text: "<strong>第1步（起点登记）：</strong> 我们不仅录入了数值，关键是开启了 <code>requires_grad=True</code>。这就像在员工身上装了追踪器，PyTorch 认定它们是<strong>叶子节点（起点）</strong>。<br><div class='code-block'><span class='code-comment'># PyTorch 代码实现：开启追踪记录</span><br>w = torch.tensor([0.0, 1.0, 2.0], requires_grad=True)</div>",
+            highlight: "node-w"
+        },
+        {
+            w: "$$ w = \\begin{bmatrix} 0.0 \\\\ 1.0 \\\\ 2.0 \\end{bmatrix} $$",
+            y: "$$ y \\approx \\begin{bmatrix} 0.500 \\\\ 0.731 \\\\ 0.881 \\end{bmatrix} $$",
+            l: "等待计算...",
+            text: "<strong>第2步（录制公式 A）：</strong> 执行 Sigmoid。算出的数值 $y$ 不仅仅是数字，它的体内被深深烙印上了一个函数标记：<strong>SigmoidBackward</strong>。这意味着：“我记得我是被 Sigmoid 函数生出来的！”<br><div class='code-block'><span class='code-comment'># PyTorch 代码实现：应用 Sigmoid 激活函数</span><br>y = torch.sigmoid(w)<br>print(y.grad_fn)  <span class='code-output'># 输出: &lt;SigmoidBackward0 object&gt;</span></div>",
+            highlight: "node-y"
+        },
+        {
+            w: "$$ w = \\begin{bmatrix} 0.0 \\\\ 1.0 \\\\ 2.0 \\end{bmatrix} $$",
+            y: "$$ y \\approx \\begin{bmatrix} 0.500 \\\\ 0.731 \\\\ 0.881 \\end{bmatrix} $$",
+            l: "$$ L \\approx 2.112 $$<div style='font-size:12px; color:#e67e22; margin-top:5px; font-weight:bold;'>隐藏的公式本体:</div>$$ L = \\sigma(w_1) + \\sigma(w_2) + \\sigma(w_3) $$",
+            text: "<strong>第3步（拼装完整公式）：</strong> 见证奇迹的时刻！就像你说的，<code>.sum()</code> 之后，得到的绝不只是 $2.112$，它在底层组装成了一个完整的函数链条。它标记自己为 <strong>SumBackward</strong>，并牵着上一步的 Sigmoid。所以它不是一个瞎子数值，它脑海里有一张清晰的导航地图！<br><div class='code-block'><span class='code-comment'># PyTorch 代码：将向量求和</span><br>L = y.sum()<br>print(L.grad_fn)  <span class='code-output'># 输出: &lt;SumBackward0 object&gt;</span></div>",
+            highlight: "node-l"
+        },
+        {
+            w: "$$ \\nabla w = \\begin{bmatrix} 0.250 \\\\ 0.197 \\\\ 0.105 \\end{bmatrix} $$",
+            y: "$$ y \\approx \\begin{bmatrix} 0.500 \\\\ 0.731 \\\\ 0.881 \\end{bmatrix} $$",
+            l: "$$ L \\approx 2.112 $$",
+            text: "<strong>第4步（顺着公式往回跑）：</strong> 当我们执行 <code>backward()</code> 时，PyTorch 根本不看 $2.112$ 这个死数字，它是去<strong>解析里面藏着的那个公式链条（计算图）</strong>！<br>系统大喊：<em>“好！先经过了 Sum 加法，然后经过了 Sigmoid！”</em> 系统自动使用链式法则，推导出了对 $w$ 的导数。这也是为什么如果 $L$ 只是个普通数值，<code>backward()</code> 就完全没法运行的原因！<br><div class='math-detail'>推导链条：L -> 拆解 Sum -> 拆解 Sigmoid -> 到达起点 w</div><div class='code-block'><span class='code-comment'># PyTorch 代码：顺着隐藏公式倒放录像，计算各奔西东的梯度</span><br>L.backward()<br>print(w.grad)  <span class='code-output'># 输出: tensor([0.2500, 0.1966, 0.1050])</span></div>",
+            highlight: "node-w"
+        }
+    ];
+
+    function updateUI() {
+        const s = steps[currentStep];
+        
+        document.getElementById('data-w').innerHTML = s.w;
+        document.getElementById('data-y').innerHTML = s.y;
+        document.getElementById('data-l').innerHTML = s.l;
+        document.getElementById('explanation-text').innerHTML = s.text;
+        
+        document.getElementById('node-w').classList.remove('active-node');
+        document.getElementById('node-y').classList.remove('active-node');
+        document.getElementById('node-l').classList.remove('active-node');
+        if(s.highlight) {
+            document.getElementById(s.highlight).classList.add('active-node');
+        }
+        
+        document.getElementById('btn-prev').disabled = currentStep === 0;
+        document.getElementById('btn-next').disabled = currentStep === steps.length - 1;
+        
+        if (window.MathJax) {
+            MathJax.typesetPromise([
+                document.getElementById('data-w'), 
+                document.getElementById('data-y'),
+                document.getElementById('data-l'), 
+                document.getElementById('explanation-text')
+            ]).catch(err => console.log(err));
+        }
+    }
+
+    function nextStep() { 
+        if(currentStep < steps.length-1) { currentStep++; updateUI(); } 
+    }
+    function prevStep() { 
+        if(currentStep > 0) { currentStep--; updateUI(); } 
+    }
+    function resetDemo() { 
+        currentStep = 0; updateUI(); 
+    }
+
+    // =========================================================
+    // 第二部分：新增的 VJP 底层矩阵乘法模拟器控制逻辑
+    // =========================================================
+    function hideAllVJPAlerts() {
+        document.getElementById('vjp-error').style.display = 'none';
+        document.getElementById('vjp-success').style.display = 'none';
+    }
+
+    function runDirectBackward() {
+        hideAllVJPAlerts();
+        document.getElementById('vjp-error').style.display = 'block';
+        
+        document.getElementById('vjp-math').innerHTML = `
+            $$ \\nabla w = \\color{#ff4757}{\\text{[缺少向量 v]}} \\times \\begin{bmatrix} 0.250 & 0 & 0 \\\\ 0 & 0.197 & 0 \\\\ 0 & 0 & 0.105 \\end{bmatrix} = \\text{崩 溃} $$
+        `;
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('vjp-math')]);
+    }
+
+    function runSumBackward() {
+        hideAllVJPAlerts();
+        document.getElementById('vjp-success').style.display = 'block';
+        
+        document.getElementById('vjp-math').innerHTML = `
+            $$ \\nabla w = \\color{#2ed573}{\\begin{bmatrix} 1 & 1 & 1 \\end{bmatrix}} \\times \\begin{bmatrix} 0.250 & 0 & 0 \\\\ 0 & 0.197 & 0 \\\\ 0 & 0 & 0.105 \\end{bmatrix} = \\color{#3498db}{\\begin{bmatrix} 0.250 & 0.197 & 0.105 \\end{bmatrix}} $$
+        `;
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('vjp-math')]);
+    }
+
+    function resetVJP() {
+        hideAllVJPAlerts();
+        document.getElementById('vjp-math').innerHTML = `
+            $$ \\nabla w = \\underbrace{\\text{?} \\vphantom{\\begin{bmatrix} 0 \\\\ 0 \\\\ 0 \\end{bmatrix}}}_{\\text{传入的向量 } v} \\times \\underbrace{\\begin{bmatrix} 0.250 & 0 & 0 \\\\ 0 & 0.197 & 0 \\\\ 0 & 0 & 0.105 \\end{bmatrix}}_{\\text{Sigmoid 的雅可比矩阵}} $$
+        `;
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('vjp-math')]);
+    }
+
+    // =========================================================
+    // 第三部分：自定义权重矩阵乘法控制逻辑 (新增)
+    // =========================================================
+    function runCustomBackward() {
+        document.getElementById('custom-vjp-math').innerHTML = `
+            $$ \\nabla w = \\color{#e74c3c}{\\begin{bmatrix} 10.0 & 1.0 & 0.0 \\end{bmatrix}} \\times \\begin{bmatrix} 0.250 & 0 & 0 \\\\ 0 & 0.197 & 0 \\\\ 0 & 0 & 0.105 \\end{bmatrix} = \\color{#3498db}{\\begin{bmatrix} 2.500 & 0.197 & 0.000 \\end{bmatrix}} $$
+        `;
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('custom-vjp-math')]);
+    }
+
+    function resetCustomVJP() {
+        document.getElementById('custom-vjp-math').innerHTML = `
+            $$ \\nabla w = \\underbrace{\\begin{bmatrix} 10.0 & 1.0 & 0.0 \\end{bmatrix}}_{\\text{自定义强行注入的 } v} \\times \\underbrace{\\begin{bmatrix} 0.250 & 0 & 0 \\\\ 0 & 0.197 & 0 \\\\ 0 & 0 & 0.105 \\end{bmatrix}}_{\\text{Sigmoid 雅可比}} = \\text{?} $$
+        `;
+        if (window.MathJax) MathJax.typesetPromise([document.getElementById('custom-vjp-math')]);
+    }
+
+    window.onload = function() {
+        updateUI();
+    }
+</script>
+</body>
+</html>

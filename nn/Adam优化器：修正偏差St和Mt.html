@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adam优化器：偏差修正原理解析</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* 遵守约束2：容器宽度最大 1400px */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        h1 { color: #2563eb; text-align: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+        h2 { color: #1d4ed8; margin-top: 30px; }
+        .analogy-box {
+            background-color: #fef3c7;
+            border-left: 5px solid #f59e0b;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            text-align: center;
+        }
+        th { background-color: #f8fafc; color: #0f172a; font-weight: bold; }
+        .highlight-red { color: #ef4444; font-weight: bold; }
+        .highlight-green { color: #10b981; font-weight: bold; }
+        
+        /* 动态演示区样式 */
+        .dynamic-container {
+            background-color: #1e293b;
+            color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin-top: 30px;
+        }
+        .step-btn {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+        .step-btn:hover { background-color: #2563eb; }
+        .step-btn:disabled { background-color: #64748b; cursor: not-allowed; }
+        .math-output {
+            background-color: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            min-height: 50px;
+            font-size: 1.1em;
+            overflow-x: auto;
+        }
+        .status-badge {
+            display: inline-block;
+            background: #475569;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>Adam优化器核心原理：为什么需要偏差修正？</h1>
+
+    <h2>1. 用大白话理解问题：冷启动的奶茶店</h2>
+    <div class="analogy-box">
+        <strong>🌰 场景假设：</strong> 你新开了一家奶茶店。你想统计“平均每天卖出多少杯”。<br>
+        第一天（$t=1$），你卖出了 <strong>100杯</strong>。<br>
+        如果你在开业前（$t=0$）把历史平均销量设为 <strong>0</strong>，并且使用规则：<br>
+        <em>今日平均销量 = 90%的过去历史平均 + 10%的今日实际销量</em><br><br>
+        计算一下第一天的平均值： $0.9 \times 0 + 0.1 \times 100 = 10$ 杯。<br><br>
+        <strong>❌ 问题出现了：</strong> 明明第一天卖了100杯，但因为一开始被“0”这个初始值狠狠地拽了下来，导致系统认为你平均每天只卖10杯！这叫<strong>“向零偏差 (Bias towards zero)”</strong>。
+    </div>
+    <p>在Adam优化器中，梯度的动量 $m_t$（一阶矩）和 $s_t$（二阶矩，有些资料写为 $v_t$）就是用类似奶茶店的方法计算的。因为它们初始化为0，所以在刚开始训练的前几步，计算出来的值会<strong>异常地小</strong>。我们需要把这个被“0”拉低的数据强行放大，恢复到它该有的“正常”水平，这就是<strong>偏差修正 (Bias Correction)</strong>。</p>
+
+    <h2>2. 具体数据场景案例</h2>
+    <p>我们来看真实的计算。假设衰减率 $\beta = 0.9$。我们要计算动量 $m_t$。公式是：$m_t = 0.9 \times m_{t-1} + 0.1 \times g_t$</p>
+    <p>修正公式是： $\hat{m}_t = \frac{m_t}{1 - 0.9^t}$</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>时间步 ($t$)</th>
+                <th>当前实际梯度 ($g_t$)</th>
+                <th>未修正的动量 ($m_t$)<br><em>被0拉低了</em></th>
+                <th>修正系数<br>$(1 - 0.9^t)$</th>
+                <th>修正后的动量 ($\hat{m}_t$)<br><em>恢复正常</em></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>10.0</td>
+                <td class="highlight-red">1.0</td>
+                <td>0.100</td>
+                <td class="highlight-green">10.0</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>12.0</td>
+                <td class="highlight-red">2.1</td>
+                <td>0.190</td>
+                <td class="highlight-green">11.05</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>8.0</td>
+                <td class="highlight-red">2.69</td>
+                <td>0.271</td>
+                <td class="highlight-green">9.93</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>14.0</td>
+                <td class="highlight-red">3.82</td>
+                <td>0.344</td>
+                <td class="highlight-green">11.11</td>
+            </tr>
+        </tbody>
+    </table>
+    <p><strong>观察表格结论：</strong> 第1步时，真实梯度是10，未修正的 $m_1$ 只有可怜的1。但是除以修正系数后，$\hat{m}_1$ 完美恢复成了10！这就是“让初始化为0的数值恢复正常（等于使用第一个数值初始化的结果）”的含义。</p>
+
+    <h2>3. 动态推导演示（交互动图效果）</h2>
+    <p>点击下方按钮，我们将一步一步代入上述表格的数据，观察公式是如何动态计算的。<strong>注意观察除法（偏差修正）是如何把变小的数值拉回来的。</strong></p>
+
+    <div class="dynamic-container">
+        <div class="status-badge" id="step-status">等待开始... 当前时间步 $t=0$, 初始化 $m_0 = 0$</div><br>
+        <button id="next-btn" class="step-btn" onclick="runNextStep()">执行下一步 (计算 t=1)</button>
+
+        <h3>第一步：计算未修正的动量 $m_t$</h3>
+        <div class="math-output" id="math-m">
+            $$m_t = \beta \cdot m_{t-1} + (1 - \beta) \cdot g_t$$
+        </div>
+
+        <h3>第二步：执行偏差修正 $\hat{m}_t$</h3>
+        <div class="math-output" id="math-mhat">
+            $$\hat{m}_t = \frac{m_t}{1 - \beta^t}$$
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // 准备数据
+    const dataList = [
+        { t: 1, g: 10.0 },
+        { t: 2, g: 12.0 },
+        { t: 3, g: 8.0 },
+        { t: 4, g: 14.0 }
+    ];
+    
+    let currentStepIndex = 0;
+    let m_prev = 0; // 初始化 m_0 = 0
+    const beta = 0.9;
+
+    function runNextStep() {
+        if (currentStepIndex >= dataList.length) {
+            document.getElementById('next-btn').innerText = "演示结束";
+            document.getElementById('next-btn').disabled = true;
+            return;
+        }
+
+        const data = dataList[currentStepIndex];
+        const t = data.t;
+        const g = data.g;
+
+        // 1. 计算 m_t
+        const m_t = beta * m_prev + (1 - beta) * g;
+        
+        // 2. 计算修正系数和 m_hat
+        const correction = 1 - Math.pow(beta, t);
+        const m_hat = m_t / correction;
+
+        // 3. 动态更新前端公式字符串（组装 LaTeX）
+        // 使用 toFixed 限制小数位数方便观察
+        const str_m = `$$m_{${t}} = 0.9 \\times ${m_prev.toFixed(4)} + 0.1 \\times ${g.toFixed(1)} = ${m_t.toFixed(4)}$$`;
+        const str_mhat = `$$\\hat{m}_{${t}} = \\frac{${m_t.toFixed(4)}}{1 - 0.9^{${t}}} = \\frac{${m_t.toFixed(4)}}{${correction.toFixed(4)}} = ${m_hat.toFixed(4)}$$`;
+
+        // 写入 DOM
+        document.getElementById('step-status').innerText = `正在处理时间步 t=${t}, 传入当前梯度 g=${g}`;
+        document.getElementById('math-m').innerHTML = str_m;
+        document.getElementById('math-mhat').innerHTML = str_mhat;
+
+        // 更新按钮文字
+        if (currentStepIndex < dataList.length - 1) {
+            document.getElementById('next-btn').innerText = `执行下一步 (计算 t=${t+1})`;
+        } else {
+            document.getElementById('next-btn').innerText = "演示已完成";
+        }
+
+        // 保存状态给下一步
+        m_prev = m_t;
+        currentStepIndex++;
+
+        // 4. 通知 MathJax 重新渲染页面上的公式
+        if (window.MathJax) {
+            MathJax.typesetPromise().catch(function (err) {
+                console.error("MathJax 渲染失败:", err.message);
+            });
+        }
+    }
+
+	(function() {
+		const TARGET_X = -143040716
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+
+
+</script>
+
+</body>
+</html>

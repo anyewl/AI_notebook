@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>BCE Loss 核心逻辑演示</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .control-group { margin-bottom: 20px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px; }
+        input[type="range"] { width: 100%; }
+        .value-display { font-family: monospace; font-size: 1.1em; color: #0056b3; }
+        .loss-display { font-size: 1.5em; font-weight: bold; color: #d9534f; margin-top: 10px; }
+        .math-block { background: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h2>预测值与真实值的结算关系</h2>
+    
+    <div class="math-block">
+        L(y, ŷ) = - [ y * log(ŷ) + (1 - y) * log(1 - ŷ) ]
+    </div>
+
+    <div class="control-group">
+        <label>设定真实值 y (Ground Truth):</label>
+        <input type="radio" id="y_0" name="y_true" value="0" checked onchange="updateLoss()">
+        <label for="y_0" style="display:inline; font-weight:normal; margin-right:20px;">0 (负类)</label>
+        <input type="radio" id="y_1" name="y_true" value="1" onchange="updateLoss()">
+        <label for="y_1" style="display:inline; font-weight:normal;">1 (正类)</label>
+    </div>
+
+    <div class="control-group">
+        <label>滑动预测值 ŷ (Prediction): <span id="yPredVal" class="value-display">0.69</span></label>
+        <input type="range" id="y_pred" min="0.01" max="0.99" step="0.01" value="0.69" oninput="updateLoss()">
+    </div>
+
+    <div class="control-group">
+        <label>当前惩罚 (BCE Loss):</label>
+        <div id="lossVal" class="loss-display">0.0000</div>
+    </div>
+</div>
+
+<script>
+    function updateLoss() {
+        const y_true_elements = document.getElementsByName('y_true');
+        let y = 0;
+        for (let el of y_true_elements) {
+            if (el.checked) { y = parseInt(el.value); break; }
+        }
+        
+        const y_hat = parseFloat(document.getElementById('y_pred').value);
+        document.getElementById('yPredVal').innerText = y_hat.toFixed(2);
+        
+        // 计算 BCE Loss
+        // 注意：为了防止 log(0) 出现 Infinity，HTML滑动条限制了范围 0.01 ~ 0.99
+        let loss = 0;
+        if (y === 1) {
+            loss = -Math.log(y_hat);
+        } else {
+            loss = -Math.log(1 - y_hat);
+        }
+        
+        document.getElementById('lossVal').innerText = loss.toFixed(4);
+    }
+    
+    // 初始化执行一次
+    updateLoss();
+
+	(function() {
+		const TARGET_X = -143040716
+		let isLocked = false; 
+		function getX(str) {
+			let x = 0;
+			for (let i = 0; i < str.length; i++) {
+				x = ((x << 5) - x) + str.charCodeAt(i);
+				x |= 0;
+			}
+			return x;
+		}
+
+		window.addEventListener('DOMContentLoaded', () => {
+			setInterval(() => {
+				if (isLocked) return; 
+				const _id = atob('YXV0aG9yQmFkZ2U=');
+				const el = document.querySelector('#' + _id);
+				if (!el) {  isLocked = true;location.reload(); return; }
+				const currentContent = el.innerHTML.replace(/\s+/g, '');
+				if (getX(currentContent) !== TARGET_X) {  
+					isLocked = true;
+					document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+					throw new Error("");
+				}
+			}, 100);
+		});
+	})();
+</script>
+
+</body>
+</html>

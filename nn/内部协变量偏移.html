@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal Covariate Shift 与 BN 动态推演</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            margin: 0;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .sandbox-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.06);
+            padding: 30px;
+            max-width: 1000px;
+            width: 100%;
+        }
+        h2 { text-align: center; color: #1a73e8; margin-bottom: 5px; }
+        .desc { text-align: center; color: #7f8c8d; font-size: 0.95em; margin-bottom: 20px; }
+        
+        .control-panel {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            background: #f1f3f5;
+            padding: 15px 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-run { background-color: #3498db; color: white; box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2); }
+        .btn-run:hover { background-color: #2980b9; transform: translateY(-1px); box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3); }
+        .btn-run:disabled { background-color: #95a5a6; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        /* 全新设计的直观状态开关 */
+        .switch-wrapper { display: flex; align-items: center; font-weight: bold; font-size: 1.05em; color: #34495e; }
+        .custom-toggle { position: relative; display: inline-block; width: 130px; height: 38px; margin-left: 15px; }
+        .custom-toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #e74c3c; transition: .4s cubic-bezier(0.4, 0.0, 0.2, 1); border-radius: 40px;
+            display: flex; align-items: center; overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .toggle-slider:before {
+            position: absolute; content: ""; height: 30px; width: 30px; left: 4px; bottom: 4px;
+            background-color: white; transition: .4s cubic-bezier(0.4, 0.0, 0.2, 1); border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 2;
+        }
+        .custom-toggle input:checked + .toggle-slider { background-color: #2ecc71; }
+        .custom-toggle input:checked + .toggle-slider:before { transform: translateX(92px); }
+
+        .toggle-text { position: absolute; z-index: 1; transition: opacity 0.3s; font-size: 14px; color: white; font-weight: bold; white-space: nowrap; }
+        .toggle-off { right: 12px; opacity: 1; }
+        .toggle-on { left: 12px; opacity: 0; }
+        .custom-toggle input:checked + .toggle-slider .toggle-off { opacity: 0; }
+        .custom-toggle input:checked + .toggle-slider .toggle-on { opacity: 1; }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+
+        .math-panel {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8fbff;
+            border-left: 5px solid #3498db;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            justify-content: space-around;
+            font-size: 1.1em;
+        }
+        .dynamic-val { font-weight: bold; color: #e67e22; font-family: monospace; font-size: 1.2em; }
+        .layer-indicator { text-align: center; font-size: 1.2em; font-weight: bold; color: #34495e; margin-top: 15px; }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="sandbox-container">
+    <h2>内部协变量偏移 (ICS) 动态诊断仪</h2>
+    <div class="desc">背景高亮区域代表 Tanh 激活函数的“高梯度敏感区”。深色边缘为“梯度消失饱和区”。</div>
+
+    <div class="control-panel">
+        <div class="switch-wrapper">
+            <span>BN 层架构状态：</span>
+            <label class="custom-toggle">
+                <input type="checkbox" id="bn-toggle">
+                <span class="toggle-slider">
+                    <span class="toggle-text toggle-on">✅ 已开启</span>
+                    <span class="toggle-text toggle-off">🛑 已关闭</span>
+                </span>
+            </label>
+        </div>
+        <button class="btn btn-run" id="btn-run">▶ 连续推演 3 层网络</button>
+    </div>
+
+    <div class="layer-indicator" id="layer-text">当前状态: 初始输入 (Layer 0)</div>
+    
+    <canvas id="simCanvas" width="900" height="300"></canvas>
+
+    <div class="math-panel">
+        <div>
+            <span>$$ \mu_{B} = \frac{1}{m}\sum_{i=1}^m x_i $$</span>
+            <div style="text-align:center;">实时均值: <span class="dynamic-val" id="val-mu">0.00</span></div>
+        </div>
+        <div>
+            <span>$$ \sigma_{B}^2 = \frac{1}{m}\sum_{i=1}^m (x_i - \mu_{B})^2 $$</span>
+            <div style="text-align:center;">实时方差: <span class="dynamic-val" id="val-var">1.00</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const btnRun = document.getElementById('btn-run');
+    const bnToggle = document.getElementById('bn-toggle');
+    const valMu = document.getElementById('val-mu');
+    const valVar = document.getElementById('val-var');
+    const layerText = document.getElementById('layer-text');
+
+    // 物理参数
+    const numParticles = 40;
+    let particles = [];
+    let isAnimating = false;
+    let currentLayer = 0;
+    const maxLayers = 3;
+    
+    // 初始化标准正态分布粒子 N(0,1)
+    function initParticles() {
+        particles = [];
+        for(let i=0; i<numParticles; i++) {
+            // Box-Muller 生成正态分布
+            let u = Math.random() || 0.1, v = Math.random() || 0.1;
+            let val = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            particles.push({ 
+                x: val, 
+                targetX: val, 
+                yOffset: (Math.random() - 0.5) * 80 // 纵向随机散开便于观察
+            });
+        }
+        currentLayer = 0;
+        updateStats();
+        drawScene();
+        layerText.innerText = `当前状态: 初始输入 (Layer 0)`;
+    }
+
+    // 将数学数值 [-8, 8] 映射到画布 X 坐标 [50, 850]
+    function mapX(val) {
+        return 450 + (val * 50); 
+    }
+
+    function drawScene() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const midY = canvas.height / 2;
+
+        // 1. 绘制 Tanh 激活函数的背景热力图
+        // 敏感区 [-2, 2] (绿色)
+        const safeStartX = mapX(-2);
+        const safeEndX = mapX(2);
+        ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+        ctx.fillRect(safeStartX, 0, safeEndX - safeStartX, canvas.height);
+        
+        // 饱和区 (红色)
+        ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+        ctx.fillRect(0, 0, safeStartX, canvas.height);
+        ctx.fillRect(safeEndX, 0, canvas.width - safeEndX, canvas.height);
+
+        // 标注
+        ctx.fillStyle = '#27ae60'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('✅ 高梯度区 (激活敏感)', 450, 30);
+        ctx.fillStyle = '#c0392b';
+        ctx.fillText('❌ 梯度消失 (饱和区)', 150, 30);
+        ctx.fillText('❌ 梯度消失 (饱和区)', 750, 30);
+
+        // 2. 绘制 X 轴
+        ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(canvas.width, midY); ctx.stroke();
+        
+        ctx.fillStyle = '#7f8c8d'; ctx.font = '12px sans-serif';
+        for(let v=-8; v<=8; v+=2) {
+            let px = mapX(v);
+            ctx.beginPath(); ctx.moveTo(px, midY - 5); ctx.lineTo(px, midY + 5); ctx.stroke();
+            ctx.fillText(v, px, midY + 20);
+        }
+
+        // 3. 绘制粒子流
+        particles.forEach(p => {
+            // 缓动动画
+            p.x += (p.targetX - p.x) * 0.08;
+            
+            ctx.beginPath();
+            ctx.arc(mapX(p.x), midY + p.yOffset, 6, 0, Math.PI * 2);
+            
+            // 根据位置变色：如果在危险区变红，安全区变蓝
+            if(p.x < -2 || p.x > 2) {
+                ctx.fillStyle = '#e74c3c';
+                ctx.strokeStyle = '#c0392b';
+            } else {
+                ctx.fillStyle = '#3498db';
+                ctx.strokeStyle = '#2980b9';
+            }
+            ctx.fill(); ctx.stroke();
+        });
+    }
+
+    // 实时计算当前粒子的均值和方差，并更新 DOM
+    function updateStats() {
+        let sum = 0;
+        particles.forEach(p => sum += p.targetX);
+        const mu = sum / numParticles;
+
+        let varSum = 0;
+        particles.forEach(p => varSum += Math.pow(p.targetX - mu, 2));
+        const variance = varSum / numParticles;
+
+        // 动态数字跳动
+        valMu.innerText = mu.toFixed(2);
+        valVar.innerText = variance.toFixed(2);
+        
+        // 视觉告警提醒
+        valMu.style.color = Math.abs(mu) > 1.5 ? '#e74c3c' : '#e67e22';
+        valVar.style.color = (variance > 3 || variance < 0.2) ? '#e74c3c' : '#e67e22';
+    }
+
+    // 核心网络演进逻辑
+    async function runNetwork() {
+        if(isAnimating) return;
+        isAnimating = true;
+        btnRun.disabled = true;
+        initParticles(); // 重置
+
+        const useBN = bnToggle.checked;
+
+        for(let l=1; l<=maxLayers; l++) {
+            currentLayer = l;
+            layerText.innerText = `正在处理: Layer ${l} 线性变换 (W*x + b)...`;
+            
+            // 步骤A：模拟线性层引发的特征偏移 (ICS)
+            // 随机产生权重 w 和偏置 b 导致数据向两端漂移
+            const w = 1.0 + (Math.random() * 0.5); 
+            const b = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random()); 
+            
+            particles.forEach(p => {
+                p.targetX = (p.targetX * w) + b;
+            });
+            updateStats();
+            
+            // 等待线性漂移动画完成
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // 步骤B：如果开启了 BN，执行强行拉回操作
+            if(useBN) {
+                layerText.innerText = `⚡ Layer ${l} 触发 Batch Normalization！强制标准化...`;
+                
+                // 严谨提取当前 batch 统计量
+                let sum = 0;
+                particles.forEach(p => sum += p.targetX);
+                const currentMu = sum / numParticles;
+                
+                let varSum = 0;
+                particles.forEach(p => varSum += Math.pow(p.targetX - currentMu, 2));
+                const currentVar = varSum / numParticles;
+                const stdDev = Math.sqrt(currentVar + 1e-5);
+                
+                // 执行归一化 x_hat = (x - mu) / std
+                particles.forEach(p => {
+                    p.targetX = (p.targetX - currentMu) / stdDev;
+                });
+                updateStats();
+                
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            } else {
+                layerText.innerText = `Layer ${l} 无 BN 保护，数据直接进入激活函数！`;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        
+        // 带有微积分推导的动态数学说明框（双向完整推导）
+        if(useBN) {
+            layerText.innerHTML += ` 🎉 推演结束！数据完美保持在敏感区，梯度健康。
+                <div style="margin-top: 25px; padding: 20px; background: #f0fdf4; border: 1px solid #2ecc71; border-radius: 8px; font-size: 0.95em; text-align: left; color: #166534; line-height: 1.8; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <strong style="font-size: 1.1em; color: #15803d;">🌟 完美拯救：链式法则畅通无阻的数学本质</strong><br>
+                    1. 强制约束消除了特征偏移，将数据强行映射回标准正态分布：$x \\sim \\mathcal{N}(0, 1)$<br>
+                    2. 送入激活函数 $a = \\tanh(x)$，其对输入的导数公式为：$\\frac{\\partial a}{\\partial x} = 1 - a^2$<br>
+                    3. 由于 $x$ 被集中在原点附近（$x \\approx 0$），输出 $a \\approx 0$，此时该层局部导数达到峰值：$\\frac{\\partial a}{\\partial x} \\approx 1$<br>
+                    4. 反向传播更新权重 $W$ 时的链式法则公式：
+                    $$ \\frac{\\partial L}{\\partial W} = \\frac{\\partial L}{\\partial a} \\cdot \\frac{\\partial a}{\\partial x} \\cdot x $$
+                    由于核心连乘因子 $\\frac{\\partial a}{\\partial x} \\approx 1$，完美且无损地保留了上游传导下来的梯度，保证参数获得了高效且稳定的更新！
+                </div>`;
+        } else {
+            layerText.innerHTML += ` 💀 推演结束！数据陷入饱和区，发生梯度消失。
+                <div style="margin-top: 25px; padding: 20px; background: #fffbf0; border: 1px solid #f1c40f; border-radius: 8px; font-size: 0.95em; text-align: left; color: #856404; line-height: 1.8; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <strong style="font-size: 1.1em;">🔍 致命推导：链式法则断裂的数学本质</strong><br>
+                    1. 缺乏约束导致特征分布偏移，绝对值失控：$|x| \\gg 0$<br>
+                    2. 若送入激活函数 $a = \\tanh(x)$，其对输入的导数公式为：$\\frac{\\partial a}{\\partial x} = 1 - a^2$<br>
+                    3. 当 $|x| \\to \\infty$ 时，输出 $a \\to \\pm 1$，此时该层局部导数趋近于零：$\\frac{\\partial a}{\\partial x} \\to 0$<br>
+                    4. 反向传播更新权重 $W$ 时遵循微积分链式法则：
+                    $$ \\frac{\\partial L}{\\partial W} = \\frac{\\partial L}{\\partial a} \\cdot \\frac{\\partial a}{\\partial x} \\cdot x $$
+                    由于关键的连乘因子 $\\frac{\\partial a}{\\partial x} \\approx 0$，致使最终回传梯度 $\\frac{\\partial L}{\\partial W} \\to 0$，参数彻底假死！
+                </div>`;
+        }
+            
+        // 重新调用 MathJax 渲染新插入进 DOM 的 LaTeX 源码
+        if (window.MathJax) {
+            MathJax.typesetPromise([layerText]);
+        }
+            
+        isAnimating = false;
+        btnRun.disabled = false;
+    }
+
+    // 动画循环
+    function loop() {
+        drawScene();
+        requestAnimationFrame(loop);
+    }
+
+    btnRun.addEventListener('click', runNetwork);
+    initParticles();
+    loop();
+	(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+
+</script>
+</body>
+</html>

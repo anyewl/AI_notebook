@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>3D物理沙盘与Momentum算法深度教学</title>
+    
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <style>
+        /* ================= 外部整体保持亮色主题不变 ================= */
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", 'Segoe UI', Arial, sans-serif;
+            line-height: 1.7;
+            color: #333;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px 0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.04);
+            margin-bottom: 40px;
+        }
+        h1 { color: #2c3e50; text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 15px; margin-top: 0; margin-bottom: 30px; }
+        h2 { color: #34495e; margin-top: 50px; border-left: 5px solid #3498db; padding-left: 15px; margin-bottom: 25px; }
+        h3 { color: #2c3e50; margin-top: 0; }
+        hr { border: 0; height: 1px; background: #e0e0e0; margin: 30px 0; }
+
+        .box { background: #fdfdfd; padding: 20px; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .story-box { background: #e8f4f8; padding: 25px; border-radius: 8px; border-left: 5px solid #3498db; margin: 20px 0; }
+        .math-box { background: #fdf6e3; padding: 25px; border-radius: 8px; border-left: 5px solid #f39c12; margin: 20px 0; border: 1px solid #faeccc; }
+        .formula-box { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 5px solid #3498db; margin: 15px 0; border: 1px solid #e9ecef; }
+        .card { background: #ffffff; border: 1px solid #e9ecef; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
+        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; margin-bottom: 30px; }
+        
+        .code-block { background: #f8f9fa; color: #24292e; padding: 20px; border-radius: 8px; font-family: 'Courier New', Courier, monospace; overflow-x: auto; margin-bottom: 20px; border: 1px solid #e1e4e8; }
+        code { background: #f1f3f5; padding: 3px 6px; border-radius: 4px; color: #e74c3c; font-family: monospace; font-size: 0.95em; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: #fff; color: #333; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #dee2e6; }
+        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: center; }
+        th { background: #f4f6f7; color: #2c3e50; font-weight: bold; }
+        .highlight-row { background-color: #fff3cd !important; font-weight: bold; color: #856404; }
+        .red-text { color: #e74c3c; font-weight: bold; }
+        .green-text { color: #2ecc71; font-weight: bold; }
+
+        .scenario-selector { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .tab-btn { background: #e9ecef; color: #495057; border: 2px solid transparent; padding: 12px 20px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.3s ease; }
+        .tab-btn:hover { background: #dee2e6; color: #212529; }
+        .tab-btn.active { background: #3498db; color: white; border-color: #2980b9; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
+
+        .layout { display: flex; gap: 20px; margin-top: 10px; }
+        .panel-container { flex: 1.2; display: flex; flex-direction: column; gap: 15px; }
+        .control-panel { background: #ffffff; padding: 20px; border-radius: 8px; text-align: center; border-top: 4px solid #3498db; border: 1px solid #dee2e6; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        .math-panel { background: #fdf6e3; color: #333; padding: 20px; border-radius: 8px; flex-grow: 1; border-left: 5px solid #f39c12; border: 1px solid #faeccc; overflow-y: auto; max-height: 400px; }
+
+        button { padding: 10px 20px; font-size: 1.1em; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; margin: 5px; }
+        .btn-next { background-color: #2ecc71; color: white; box-shadow: 0 3px 6px rgba(46,204,113,0.3); }
+        .btn-next:hover { background-color: #27ae60; transform: translateY(-1px); }
+        .btn-reset { background-color: #e74c3c; color: white; box-shadow: 0 3px 6px rgba(231,76,60,0.3); }
+        .btn-reset:hover { background-color: #c0392b; transform: translateY(-1px); }
+
+
+        /* ================= 动图内部：恢复暗色主题 ================= */
+
+        /* 1. 3D 沙盘容器恢复暗色 */
+        .canvas-container { 
+            flex: 1.8; 
+            background: #000; /* 容器底色变黑 */
+            border-radius: 8px; 
+            overflow: hidden; 
+            border: 1px solid #dee2e6; 
+            position: relative; 
+        }
+        #canvas-3d { width: 100%; height: 500px; display: block; outline: none; }
+        
+        /* 3D 提示框恢复暗色半透明 */
+        .instruction { 
+            position: absolute; top: 15px; left: 15px; 
+            color: rgba(255,255,255,0.9); font-size: 0.9em; pointer-events: none; 
+            background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 6px; 
+            border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 2px 8px rgba(0,0,0,0.5); font-weight: bold;
+        }
+
+        /* 2. 2D 小球动图恢复暗色 */
+        .simulation { 
+            height: 160px; 
+            background: #1a1e23; /* 暗色背景 */
+            position: relative; border-radius: 8px; overflow: hidden; margin: 20px 0; 
+            border: 1px solid #dee2e6; box-shadow: inset 0 2px 10px rgba(0,0,0,0.8); 
+        }
+        /* 跑道线修改为暗色模式下可见的白色虚线 */
+        .track-line { 
+            position: absolute; width: 100%; height: 2px; 
+            background: rgba(255,255,255,0.05); border-top: 1px dashed rgba(255,255,255,0.15); 
+        }
+        .ball { width: 32px; height: 32px; border-radius: 50%; position: absolute; box-shadow: 0 3px 8px rgba(0,0,0,0.5); z-index: 10; }
+        #sgd-ball { background: linear-gradient(135deg, #ff7675, #d63031); animation: moveSGD 4s infinite linear; top: 30px; }
+        #momentum-ball { background: linear-gradient(135deg, #55efc4, #00b894); animation: moveMomentum 4s infinite linear; top: 100px; }
+
+        @keyframes moveSGD { 0% { left: 2%; transform: translateY(0); } 25% { left: 25%; transform: translateY(-20px); } 50% { left: 50%; transform: translateY(0px); } 75% { left: 75%; transform: translateY(-20px); } 100% { left: 95%; transform: translateY(0px); } }
+        @keyframes moveMomentum { 0% { left: 2%; transform: translateY(0); } 100% { left: 95%; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+<style>
+ .author-badge-container {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background-color: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        padding: 12px 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        font-family: 'Segoe UI', "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        z-index: 10000;
+        transition: all 0.3s ease;
+        width: max-content; 
+        max-width: 90vw;
+    }
+    .badge-content {
+        white-space: nowrap;
+    }
+    .badge-content h4 { margin: 0 0 8px 0; font-size: 14px; color: #2c3e50; }
+    .badge-content p { margin: 3px 0; color: #444; }
+</style>
+
+<div class="author-badge-container" id="authorBadge">
+    <!-- 按钮已删除，仅保留内容 -->
+    <div class="badge-content">
+        <h4>📝 作者信息</h4>
+        <p><strong>微信：李滋芸</strong> </p>
+		<p>liziyun_2000</p>
+        <p> <a href="#" target="_blank">Bilibili</a></p>
+        <p> <a href="https://github.com/anyewl/AI_notebook" target="_blank">GitHub</a></p>
+        <p> <a href="https://www.axureshow.com/project/3V4X1wfF/" target="_blank">在线访问</a></p>
+    </div>
+</div>
+<div class="container">
+    <h1>3D物理沙盘：动量如何破解深度学习的三大地形陷阱</h1>
+    <div class="scenario-selector">
+        <button class="tab-btn active" id="tab-1" onclick="switchScenario(1)">🌋 场景一：峡谷</button>
+        <button class="tab-btn" id="tab-2" onclick="switchScenario(2)">🐎 场景二：鞍点</button>
+        <button class="tab-btn" id="tab-3" onclick="switchScenario(3)">🏜️ 场景三：平缓区</button>
+    </div>
+    <script>
+(function() {
+    const TARGET_X = -143040716
+	let isLocked = false; 
+    function getX(str) {
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            x = ((x << 5) - x) + str.charCodeAt(i);
+            x |= 0;
+        }
+        return x;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setInterval(() => {
+			if (isLocked) return; 
+			const _id = atob('YXV0aG9yQmFkZ2U=');
+			const el = document.querySelector('#' + _id);
+            if (!el) {  isLocked = true;location.reload(); return; }
+            const currentContent = el.innerHTML.replace(/\s+/g, '');
+            if (getX(currentContent) !== TARGET_X) {  
+				isLocked = true;
+                document.documentElement.innerHTML = "<body><div style='font-family: monospace; padding: 50px;'></div></body>";
+                throw new Error("");
+            }
+        }, 100);
+    });
+})();
+</script>
+
+    <div class="layout">
+        <div class="canvas-container">
+            <div class="instruction">🎥 提示：左键拖拽旋转，滚轮缩放</div>
+            <div id="canvas-3d"></div>
+        </div>
+        <div class="panel-container">
+            <div class="control-panel">
+                <button class="btn-next" onclick="nextStep()">▶ 执行下一步 (第 <span id="stepCounter">0</span> 步)</button>
+                <button class="btn-reset" onclick="resetSim()">↻ 重新开始</button>
+            </div>
+            <div class="math-panel">
+                <h3 id="panel-title" style="margin-top:0;">核心公式实时演算</h3>
+                <div id="math-explanation"><p style="color:#7f8c8d;">请点击“执行下一步”启动演算。</p></div>
+            </div>
+        </div>
+    </div>
+    
+    <table>
+        <thead>
+            <tr id="table-header">
+                <th>步骤</th>
+                <th>当前梯度 ($dW$)</th>
+                <th><span class="red-text">红球</span> (普通GD)</th>
+                <th><span class="green-text">绿球惯性</span> ($V$)</th>
+                <th><span class="green-text">绿球</span> (动量GD)</th>
+            </tr>
+        </thead>
+        <tbody id="dataTableBody"></tbody>
+    </table>
+</div>
+
+<div class="container">
+    <div class="box">
+        <strong>核心直觉：</strong> SGD（随机梯度下降）在遇到峡谷时，会因为梯度左右震荡而“左右横跳”，浪费大量时间。Momentum（动量）则引入了<strong>物理惯性</strong>，它会把过去几次的梯度方向累加起来，从而抵消震荡，加速向最优解前进。
+    </div>
+
+    <div class="story-box">
+        <h3>🚙 通俗类比：越野车与碎石路 (Mini-batch 震荡)</h3>
+        <p>为什么普通的 Mini-batch SGD 会震荡导致训练变慢？想象你开着一辆没有避震器的越野车走在<strong>坑洼的碎石路</strong>上。</p>
+        <ul>
+            <li><strong>普通 SGD（无动量）：</strong> 就像一个“健忘”的司机，每一次遇到路面的小坑洼（Mini-batch 算出的局部噪声梯度），车轮就会猛打方向盘。结果就是车子在路两边来回画“Z”字型，虽然整体在往前走，但大部分力气都浪费在“左右横跳”上了。</li>
+            <li><strong>Momentum（有动量）：</strong> 相当于给车子装上了<strong>重型飞轮</strong>。即使这一步车轮碾到了碎石想往右偏，但因为过去很长一段路积累了巨大的“向前惯性”，这块小碎石根本无法改变飞轮的大方向。前进方向变得平滑，车速自然就快了！</li>
+        </ul>
+    </div>
+
+    <h2>1. 动态演示：为什么 Momentum 更快？</h2>
+    <div class="simulation">
+        <div class="track-line" style="top: 45px;"></div>
+        <div class="track-line" style="top: 115px;"></div>
+        <div id="sgd-ball" class="ball"></div>
+        <div id="momentum-ball" class="ball"></div>
+    </div>
+    <p><strong><span class="red-text">🔴 红色 (普通 SGD)：</span></strong> 每次只看当前的一小批数据，遇到波动就疯狂抖动。</p>
+    <p><strong><span class="green-text">🟢 绿色 (Momentum)：</span></strong> 拥有惯性，自动平均并抵消了上下的震荡波动，路径平滑且高效。</p>
+
+    <h2>2. 数学本质：指数到底藏在哪？</h2>
+    <p>很多理论教材中的 EWMA 公式会带有一个 \((1-\beta)\)，但 <strong>PyTorch 的真实源码实现却去掉了它</strong>。看下面的对比，它们的数学本质是一致的：</p>
+
+    <div class="comparison-grid">
+        <div class="card">
+            <h3>理论课上的：指数加权平均</h3>
+            <p><strong>特点：</strong> 让均值的量级与当前梯度保持一致。</p>
+            <div class="formula-box">
+                $$ S_t = \beta S_{t-1} + (1 - \beta) G_t $$
+            </div>
+            <ul>
+                <li>\(S_{t-1}\): 旧的指数加权均值</li>
+                <li>\(G_t\): 当前梯度</li>
+                <li>\(1 - \beta\): 抑制新数据的权重</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>PyTorch 源码中的：动量算法</h3>
+            <p><strong>特点：</strong> 当前梯度系数为 1！直接累加总惯性。</p>
+            <div class="formula-box">
+                $$ v_t = \mu \cdot v_{t-1} + g_t $$
+                $$ w_{new} =  w_{old} - \eta \cdot v_t  $$
+            </div>
+            <ul>
+                <li>\(v_{t-1}\): 动量缓冲区 (Velocity)</li>
+                <li>\(g_t\): 当前梯度（系数永远是 1）</li>
+                <li>\(\eta\): 学习率（靠它来对冲放大的动量）</li>
+                <li>\(\mu\): 动量系数 (Momentum，如 0.9)</li>
+            </ul>
+        </div>
+    </div>
+    <p style="color: #7f8c8d; font-size: 0.95em; text-align: center;">注：PyTorch 之所以省略 \((1-\beta)\)，是为了减少一次乘法计算。虽然动量 \(v_t\) 被放大了，但最终会通过乘以学习率 \(\eta\) 来控制步长，工程上更加高效。</p>
+
+    <h2>3. 深度拆解：PyTorch 代码与 8.0 是怎么算出来的？</h2>
+    <p>我们来看一段极简的 PyTorch 代码，并手动还原底层优化的第一步数学推导：</p>
+    <div class="code-block">
+<pre>
+import torch
+import torch.optim as optim
+
+# 假设模型参数 w
+w = torch.tensor([10.0], requires_grad=True)
+
+# 定义优化器，momentum=0.9，学习率=0.1
+optimizer = optim.SGD([w], lr=0.1, momentum=0.9)
+
+# 模拟一步更新
+optimizer.zero_grad()
+loss = w ** 2  # 模拟 Loss = w^2
+loss.backward()
+optimizer.step()
+
+print(f"更新后的参数: {w.item()}")
+# 输出结果将是: 8.0
+</pre>
+    </div>
+
+    <div class="math-box">
+        <h3>🧮 揭秘：控制台输出的 8.0 从何而来？</h3>
+        <p>在执行 <code>optimizer.step()</code> 时，底层发生了以下三次计算：</p>
+        <ol>
+            <li><strong>求当前梯度 (\(g_t\))：</strong><br>
+                已知 \(Loss = w^2\)，对 \(w\) 求导得 \(\frac{\partial Loss}{\partial w} = 2w\)。<br>
+                代入当前参数 \(w = 10.0\)，得到当前真实梯度：<strong>\(g_t = 2 \times 10.0 = 20.0\)</strong>。
+            </li>
+            <br>
+            <li><strong>更新动量缓冲区 (\(v_t\))：</strong><br>
+                代入 PyTorch 公式 \(v_t = 0.9 \cdot v_{t-1} + g_t\)。<br>
+                因为这是第一步，过去没有惯性（\(v_{t-1} = 0\)），直接塞入新梯度：<strong>\(v_t = 0.9 \times 0 + 20.0 = 20.0\)</strong>。
+            </li>
+            <br>
+            <li><strong>正式更新参数 (\(w_{new}\))：</strong><br>
+                代入公式 \(w_{new} = w_{old} - lr \cdot v_t\)。<br>
+                \(w_{new} = 10.0 - (0.1 \times 20.0)\)<br>
+                \(w_{new} = 10.0 - 2.0 =\) <strong><span style="color:#e74c3c; font-size:1.2em;">8.0</span></strong>
+            </li>
+        </ol>
+    </div>
+
+    <h2>4. 面试高频问题进阶</h2>
+    <div class="box">
+        <strong>问：如果我在 PyTorch 里把 `dampening=1`（阻尼设为1）会发生什么？</strong><br>
+        答：PyTorch 包含阻尼的完整公式是：\(v_t = \mu \cdot v_{t-1} + (1 - \text{dampening}) \cdot g_t\)。<br>
+        如果设为 1，公式就变成了 \(v_t = \mu \cdot v_{t-1}\)。这意味着<strong>当前的梯度被完全抛弃了！</strong> 模型将像一个瞎子一样，完全忽略眼前的路况，只依靠之前的惯性盲目滑行，最终动量衰减为 0 导致训练彻底停滞。所以除了特殊实验，千万别这么设。
+    </div>
+    
+    <div class="box">
+        <strong>问：Momentum 遇到大平原（平缓区）有什么用？</strong><br>
+        答：在平缓区，普通 SGD 因为当前梯度极小，会陷入“龟速爬行”。而 Momentum 因为保留了之前冲下山坡的巨大惯性 \(v_{t-1}\)，哪怕当前梯度 \(g_t\) 接近 0，它依然能借助飞轮的惯性高速冲过这片平原。
+    </div>
+</div>
+
+<script>
+    // 3D 沙盘核心逻辑
+    const allScenarios = {
+        1: {
+            title: "🌋 场景一：峡谷（左右横跳）", focusAxis: "Y",
+            terrainFunc: (x, y) => (x * x) * 0.005 + (y * y) * 0.03,
+            cameraPos: {x: 130, y: 0, z: 150}, targetPos: {x: -45, y: 0, z: 0},
+            steps: [
+                { step: 0, desc: "准备出发", stdX: -90, stdY: 52.35, momX: -90, momY: 52.35, dW: 0, V_old: 0, V_new: 0 },
+                { step: 1, desc: "第一步：崖壁产生巨大拉力", dW: 104.7, V_old: 0, V_new: 10.47, stdX: -80, stdY: -47.5, momX: -80, momY: -47.5 },
+                { step: 2, desc: "第二步：奇迹发生（完美抵消）", dW: -95.0, V_old: 10.47, V_new: -0.08, stdX: -70, stdY: 43.09, momX: -55, momY: -46.74 },
+                { step: 3, desc: "第三步：分道扬镳", dW: 86.18, V_old: -0.08, V_new: -5.00, stdX: -60, stdY: -39.09, momX: -30, momY: 1.5 }
+            ],
+            genFormula: (d, step) => `
+                <div style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <p><strong>🔴 普通GD计算：</strong></p>
+                    <p style="font-size:0.95em">$$ Y_{new} = Y_{old} - 0.6 \\cdot (${d.dW}) $$</p>
+                    <p><strong>🟢 动量法计算：</strong></p>
+                    <p style="font-size:0.95em">$$ V_{new} = 0.9 \\cdot (${d.V_old.toFixed(2)}) + 0.1 \\cdot (${d.dW}) = ${d.V_new.toFixed(2)} $$</p>
+                    <p style="font-size:0.95em">$$ Y_{new} = Y_{old} - 0.6 \\cdot (${d.V_new.toFixed(2)}) $$</p>
+                </div>`
+        },
+        2: {
+            title: "🐎 场景二：鞍点陷阱（停滞失灵）", focusAxis: "X",
+            terrainFunc: (x, y) => (x * x * x)/5000 - (y * y)/100, 
+            cameraPos: {x: -80, y: -100, z: 80}, targetPos: {x: -15, y: 0, z: 0},
+            steps: [
+                { step: 0, desc: "准备出发", stdX: -60, stdY: 0, momX: -60, momY: 0, dW: 0, V_old: 0, V_new: 0 },
+                { step: 1, desc: "第一步：加速冲刺", dW: 40.0, V_old: 0, V_new: 40.0, stdX: -30, stdY: 0, momX: -30, momY: 0 },
+                { step: 2, desc: "第二步：陷入鞍点 (梯度=0)", dW: 0.0, V_old: 40.0, V_new: 36.0, stdX: -30, stdY: 0, momX: 10, momY: 10 }
+            ],
+            genFormula: (d, step) => `
+                <div style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <p><strong>🔴 普通GD：</strong>当前梯度 $dW=0$</p>
+                    <p style="font-size:0.95em">$$ X_{new} = X_{old} - 0.6 \\cdot 0 = X_{old} $$ (<strong>停滞！</strong>)</p>
+                    <p><strong>🟢 动量法：</strong>保留惯性</p>
+                    <p style="font-size:0.95em">$$ V_{new} = 0.9 \\cdot (${d.V_old.toFixed(2)}) + 0 = ${d.V_new.toFixed(2)} $$</p>
+                </div>`
+        },
+        3: {
+            title: "🏜️ 场景三：平缓高原（龟速缓慢）", focusAxis: "X",
+            terrainFunc: (x, y) => x < 0 ? -(x)*1.5 + (y*y)*0.01 : (x)*0.05 + (y*y)*0.01,
+            cameraPos: {x: 0, y: -160, z: 90}, targetPos: {x: 20, y: 0, z: 0},
+            steps: [
+                { step: 0, desc: "准备出发", stdX: -40, stdY: 0, momX: -40, momY: 0, dW: 0, V_old: 0, V_new: 0 },
+                { step: 1, desc: "第一步：陡坡加速", dW: 100.0, V_old: 0, V_new: 100.0, stdX: -5, stdY: 0, momX: -5, momY: 0 },
+                { step: 2, desc: "第二步：遭遇平地 (梯度骤降)", dW: 2.0, V_old: 100.0, V_new: 90.2, stdX: 0, stdY: 0, momX: 35, momY: 0 }
+            ],
+            genFormula: (d, step) => `
+                <div style="background:#fff; padding:15px; border-radius:6px; border:1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                    <p><strong>🔴 普通GD：</strong>梯度骤降至 2.0</p>
+                    <p style="font-size:0.95em">$$ X_{new} = X_{old} - 0.6 \\cdot 2.0 $$ (<strong>龟速爬行</strong>)</p>
+                    <p><strong>🟢 动量法：</strong>惯性依然巨大</p>
+                    <p style="font-size:0.95em">$$ V_{new} = 0.9 \\cdot (${d.V_old.toFixed(2)}) + 0.1 \\cdot 2.0 = ${d.V_new.toFixed(2)} $$</p>
+                </div>`
+        }
+    };
+    
+    let activeScenId = 1; let currentStep = 0; let stepsData = allScenarios[activeScenId].steps;
+    
+    // 初始化 Three.js 场景，恢复暗色背景！
+    const container = document.getElementById('canvas-3d'); 
+    const scene = new THREE.Scene(); 
+    scene.background = new THREE.Color(0x1a1e23); // 恢复暗色背景
+    
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000); camera.up.set(0, 0, 1);
+    const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(container.clientWidth, container.clientHeight); container.appendChild(renderer.domElement);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    
+    // 光源参数恢复暗色模式下最佳的参数
+    const light = new THREE.DirectionalLight(0xffffff, 1.2); light.position.set(0, -50, 100); scene.add(light); 
+    scene.add(new THREE.AmbientLight(0x7f8fa6));
+    
+    let terrainMesh, stdLine, momLine; let stdPoints = [], momPoints = [];
+    const stdSphere = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), new THREE.MeshPhongMaterial({color: 0xe74c3c}));
+    const momSphere = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), new THREE.MeshPhongMaterial({color: 0x2ecc71}));
+    scene.add(stdSphere); scene.add(momSphere);
+    
+    function buildTerrain() { 
+        if(terrainMesh) scene.remove(terrainMesh); 
+        const geo = new THREE.PlaneGeometry(220, 140, 70, 50); const pos = geo.attributes.position; const terrainFunc = allScenarios[activeScenId].terrainFunc; 
+        for(let i=0; i<pos.count; i++) { const x = pos.getX(i); const y = pos.getY(i); pos.setZ(i, terrainFunc(x, y)); } 
+        geo.computeVertexNormals(); 
+        // 恢复暗色模式下的青色网格
+        const mat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, wireframe: true, transparent: true, opacity: 0.6 }); 
+        terrainMesh = new THREE.Mesh(geo, mat); scene.add(terrainMesh); 
+    }
+    
+    function initPositions() { 
+        const d = stepsData[0]; const tf = allScenarios[activeScenId].terrainFunc; 
+        stdSphere.position.set(d.stdX, d.stdY, tf(d.stdX, d.stdY) + 3); 
+        momSphere.position.set(d.momX, d.momY, tf(d.momX, d.momY) + 3); 
+        stdPoints = [stdSphere.position.clone()]; momPoints = [momSphere.position.clone()]; drawLines(); 
+    }
+    
+    let isAnimating = false; let animProgress = 1; let stdStart, stdEnd, momStart, momEnd;
+    
+    function animate() { 
+        requestAnimationFrame(animate); 
+        if (isAnimating && animProgress < 1) { 
+            animProgress += 0.025; if (animProgress > 1) animProgress = 1; 
+            const ease = 1 - Math.pow(1 - animProgress, 3); const tf = allScenarios[activeScenId].terrainFunc; 
+            stdSphere.position.lerpVectors(stdStart, stdEnd, ease); stdSphere.position.z = tf(stdSphere.position.x, stdSphere.position.y) + 3; 
+            momSphere.position.lerpVectors(momStart, momEnd, ease); momSphere.position.z = tf(momSphere.position.x, momSphere.position.y) + 3; 
+            if (animProgress === 1) { isAnimating = false; drawLines(); } 
+        } 
+        controls.update(); renderer.render(scene, camera); 
+    } animate();
+    
+    function drawLines() { 
+        if(stdLine) scene.remove(stdLine); if(momLine) scene.remove(momLine); 
+        const stdGeo = new THREE.BufferGeometry().setFromPoints(stdPoints); stdLine = new THREE.Line(stdGeo, new THREE.LineBasicMaterial({color: 0xe74c3c, linewidth: 2})); 
+        const momGeo = new THREE.BufferGeometry().setFromPoints(momPoints); momLine = new THREE.Line(momGeo, new THREE.LineBasicMaterial({color: 0x2ecc71, linewidth: 3})); 
+        scene.add(stdLine); scene.add(momLine); 
+    }
+    
+    function switchScenario(id) { 
+        if(isAnimating) return; 
+        activeScenId = id; stepsData = allScenarios[id].steps; 
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active')); 
+        document.getElementById(`tab-${id}`).classList.add('active'); 
+        document.getElementById('panel-title').innerText = allScenarios[id].title; 
+        const cam = allScenarios[id].cameraPos; const tgt = allScenarios[id].targetPos; 
+        camera.position.set(cam.x, cam.y, cam.z); controls.target.set(tgt.x, tgt.y, tgt.z); controls.update(); 
+        document.getElementById('table-header').innerHTML = `<th>步骤</th><th>当前梯度 ($dW$)</th><th><span class="red-text">红球</span> (普通GD)</th><th><span class="green-text">绿球惯性</span> ($V$)</th><th><span class="green-text">绿球</span> (动量GD)</th>`; 
+        buildTerrain(); resetSim(); 
+        if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetPromise([document.getElementById('table-header')]); } 
+    }
+    
+    function initTable() { 
+        const tbody = document.getElementById('dataTableBody'); tbody.innerHTML = ''; 
+        const axis = allScenarios[activeScenId].focusAxis; 
+        stepsData.forEach((d, i) => { 
+            const tr = document.createElement('tr'); tr.id = `row-${i}`; 
+            const focusStdPos = axis === "Y" ? d.stdY : d.stdX; const focusMomPos = axis === "Y" ? d.momY : d.momX; 
+            tr.innerHTML = `<td>第 ${i} 步</td><td>${i === 0 ? '-' : d.dW.toFixed(2)}</td><td class="red-text">${focusStdPos.toFixed(2)}</td><td class="green-text">${i === 0 ? '-' : d.V_new.toFixed(2)}</td><td class="green-text">${focusMomPos.toFixed(2)}</td>`; 
+            tbody.appendChild(tr); 
+        }); 
+        highlightRow(0); 
+    }
+    
+    function highlightRow(idx) { 
+        document.querySelectorAll('tr').forEach(r => r.classList.remove('highlight-row')); 
+        const target = document.getElementById(`row-${idx}`); if(target) target.classList.add('highlight-row'); 
+    }
+    
+    function nextStep() { 
+        if (isAnimating || currentStep >= stepsData.length - 1) return; 
+        currentStep++; document.getElementById('stepCounter').innerText = currentStep; highlightRow(currentStep); 
+        const d = stepsData[currentStep]; const tf = allScenarios[activeScenId].terrainFunc; 
+        stdStart = stdSphere.position.clone(); momStart = momSphere.position.clone(); 
+        stdEnd = new THREE.Vector3(d.stdX, d.stdY, tf(d.stdX, d.stdY) + 3); momEnd = new THREE.Vector3(d.momX, d.momY, tf(d.momX, d.momY) + 3); 
+        stdPoints.push(stdEnd); momPoints.push(momEnd); isAnimating = true; animProgress = 0; 
+        const panel = document.getElementById('math-explanation'); 
+        panel.innerHTML = `<strong>当前状态：</strong> ${d.desc}<hr>` + allScenarios[activeScenId].genFormula(d, currentStep); 
+        if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetPromise([panel]).catch(err => console.log('MathJax Err: ', err)); } 
+    }
+    
+    function resetSim() { 
+        currentStep = 0; document.getElementById('stepCounter').innerText = currentStep; 
+        document.getElementById('math-explanation').innerHTML = `<p style="color:#7f8c8d;">已重置。请点击“执行下一步”观察红绿小球的物理差异。</p>`; 
+        initPositions(); initTable(); isAnimating = false; 
+    }
+    
+    window.onload = () => { switchScenario(1); };
+</script>
+
+</body>
+</html>
